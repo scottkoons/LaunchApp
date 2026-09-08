@@ -448,8 +448,10 @@ export default function Launch({
         query ? filtered : visibleMonthlyTasks(filtered, visibleMonths),
         [
           day().slice(0, 7),
-          ...Object.keys(settings?.monthlyNotes || {}).filter((month) =>
-            settings?.monthlyNotes?.[month]?.trim(),
+          ...Object.keys(settings?.monthlyNotes || {}).filter(
+            (month) =>
+              month >= day().slice(0, 7) &&
+              settings?.monthlyNotes?.[month]?.trim(),
           ),
         ],
       )
