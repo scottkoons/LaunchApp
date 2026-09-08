@@ -1,50 +1,54 @@
-# Launch implementation
+# Launch implementation and operations
 
-Private, single-editor web app built from Scott’s agreed workflow. Brand: retro rocket; Space, Dark, and Light themes. Typography: Bitter + Barlow, locally served.
+Launch is Scott’s private task workspace: the familiar Electron-style monthly dashboard on desktop, with phone capture, personal/business separation, back burner, postponement and printable marketing reports. Space is the default theme; Light and Dark remain available. Main UI typography uses locally served DM Sans and DM Serif Display, with local Barlow/Bitter retained for secondary styles.
 
-## Included
+## Architecture
 
-- Account-scoped D1 records and R2 attachments, private Sites access and server-side authentication.
-- Offline outbox, local draft recovery, file retry, idempotent operations, and explicit conflict review; 15-second refresh while open.
-- Task list by month, flat list, calendar, manual reordering and column sorting; independent milestones; completion history and Trash.
-- Back burner and postponed tasks with original deadlines retained.
-- Weekly weekday selection, monthly and quarterly recurrence with month-end clamping, separate occurrence history, bounded future horizon, stop-future action.
-- Text/dictation/photo capture, privacy defaults, conversion to tasks and discussion items.
-- Reference board; companies, contacts and primary delivery contact; mailto handoff to the default email app.
-- Server-filtered marketing reports, independent ranges, PDF downloads, immutable snapshots and PDF files, calendar appendices.
-- Full ZIP backup/import including original files. Import adds missing records without replacing existing ones.
-- Installable PWA manifest, standalone mode, offline capture fallback, phone Capture/Today/Browse navigation.
+- React 19, TypeScript, vinext/Vite, Cloudflare Workers, D1 records and R2 original attachments; deployed through Sites.
+- Sites authenticates the user before forwarding identity headers. Production is owner-private. Every database and file lookup is scoped to that authenticated owner. Do not expose the Worker outside its Sites identity dispatcher.
+- IndexedDB holds the device cache, operation queue and pending file blobs. Transactional delta merges preserve saves from multiple tabs. Server operations use IDs and optimistic versions; conflicting fields require review. Sync runs while the app is open, on focus and on reconnect.
+- Repeating tasks retain their original anchor and separate occurrence history. Only planned months produce future instances; the dashboard applies its own rolling window. Calendar, flat list and report ranges can reach later plans.
+- New business tasks default into reports. Explicit exclusions and recurring-series defaults survive sync. Personal content is excluded unless the user explicitly selects the personal-task option for that report.
+- Printing generates a PDF locally, previews every page, then offers Print or Download. Report pages are portrait; calendars support one landscape month or two stacked portrait months. Saving a report online is optional and creates an immutable snapshot.
+- ZIP backup includes records and original attachments. Restore is additive: existing IDs are not overwritten. It is an import/recovery tool, not an automatic historical rollback.
 
-## Deliberate boundaries
+## Reproducible local checks
 
-- Capture uses a standard text field: Wispr Flow on desktop and the iPhone keyboard microphone for phone dictation. No in-app microphone or audio recorder.
-- Apple/Google calendar integration currently uses ICS downloads. No automatic external calendar sync or two-way editing.
-- Outlook compose handoff does not attach files automatically or confirm sending.
-- Background sync while the PWA is closed is not promised; leave it open to upload.
-- Mission Control SQLite migration is supported by `scripts/import-mission-control.py`. It reads the source without writes, takes a consistent WAL-aware snapshot, and creates a Launch backup ZIP with original attachments. Data stays outside the source repository. Stable IDs make retries additive; completion timestamps, report flags, dates, and legacy metadata are retained. Already-routed Telegram captures are archived. Known business routines use Business/report-off instead of the old Personal flag.
-- WebMCP capture action is feature detected; no supported live validation context was available.
+Use Node 22.13 or later and `npm ci` with the committed lockfile.
 
-## Sources
+```sh
+npm run check
+npm run test:pdf
+npm audit --audit-level=low
+npm run build
+```
 
-- Monthly dashboard sections and PDF preview share the same grouping; monthly notes appear directly after their month’s task table.
-- Fonts: https://github.com/google/fonts/tree/main/ofl/barlow and https://github.com/google/fonts/tree/main/ofl/bitter
+`check` runs strict TypeScript (including unused locals/parameters), full application/UI lint, formatting, dependency/dead-code analysis and model/store tests. `test:pdf` writes long-note/crowded-calendar fixtures under ignored `outputs/` and verifies orientation.
 
-## Local development
+For API integration checks, apply `drizzle/*.sql` to local D1 using `wrangler.local.json`, run `npm run dev`, then `npm run test:api` in another terminal. Tests default to `http://localhost:3000` and create local fixtures. **Never point them at production.** Local sign-in is supplied by the Sites development plugin.
 
-Run `npm install`, apply `drizzle/*.sql` to the local D1 binding using the provided `wrangler.local.json`, then `npm run dev`. The Sites plugin provides local sign-in at `/signin-with-chatgpt?return_to=/`. Production identity comes from the private Sites dispatcher.
+`npm run db:generate` validates migration generation. The scoped esbuild override patches an advisory in the legacy Drizzle development-tool chain; migration generation was verified with this override. Do not run `npm audit fix --force` without checking proposed breaking changes.
 
-Source tests: `npm test`. Type check: `npx tsc --noEmit`. Build: `npm run build`.
+## Release and recovery
 
-## Lint configuration
+1. Run the checks above; inspect browser workflows and the QA acceptance list.
+2. Commit the validated source, push it to the configured Sites source repository and build from that exact commit.
+3. Package with the Sites `package-site.sh` helper, save the version and deploy to the existing owner-private audience.
+4. Verify the live dashboard and a report preview. Keep the previous successful version available for a code rollback.
+5. A code rollback does not restore database history. Take a Launch backup before intentional bulk data changes. No schema or destructive production-data changes were required for the September 8 QA release.
 
-Vendored UI primitives are excluded from application lint. Image optimization rules are disabled because attachments are authenticated originals and the brand assets are pre-sized. Auth links intentionally use full document navigation. React Compiler checks are disabled because this application does not enable that compiler. Hook correctness, TypeScript checking, and accessibility checks remain enabled.
+The source ZIP excludes `.env*`, local databases, caches, uploaded documents and test output. It includes the source, lockfile, tests, migrations and this runbook. Runtime storage and identity remain hosted services.
 
-## Validation
+## Product boundaries and device acceptance
 
-- TypeScript and application lint pass.
-- Model/storage tests cover privacy, completion ranges, month-end and weekday recurrence, milestone urgency, conflict merging, ICS escaping, offline note/photo recovery, dashboard grouping, and imported recurrence boundaries.
-- Authenticated local API tests cover durable writes, retry idempotency, conflict responses, report exclusions, immutable report records, file roundtrips, anonymous access rejection, and origin checks.
-- Both PDF calendar layouts were generated with crowded days and long notes and inspected as rendered pages. Overflow is preserved in a labeled details appendix.
-- The production bundle builds with D1/R2 metadata and migration files. Local test records are not included in production data.
-- Browser interaction QA and physical phone dictation/camera/install testing have not been performed. These remain acceptance checks on the user’s actual devices.
-- Runtime dependencies were updated to address the high-severity advisories from the scaffold. Four moderate advisories remain in the development-only Drizzle migration-tool dependency chain; no forced downgrade was applied.
+- Phone dictation uses the iPhone keyboard microphone; desktop dictation can use Wispr Flow. No custom recording/transcription service is required.
+- The offline shell supports saved task viewing and note/photo capture. It must have been opened online once. Device storage can be cleared or evicted by the browser; unsynced work has not reached the server.
+- Closed-app/background upload, actual iPhone camera/keyboard behavior, installation and printer hardware need acceptance on Scott’s devices. Browser emulation cannot certify those capabilities.
+- Apple/Google calendar handoff is currently an ICS copy, not automatic two-way sync.
+- Outlook handoff opens a compose request. Attachments and final sending remain user-controlled.
+- WebMCP capture is feature-detected and optional; it was not exercised by this QA environment.
+- Very large histories and PDF previews still use device memory. The app suits a single user’s task/report workflow; it has not been load-tested as a multi-user service.
+
+## Migration
+
+`scripts/import-mission-control.py` reads the original SQLite database without modifying it, takes a consistent WAL-aware snapshot, and creates a Launch backup with available original attachments. Stable IDs make repeated imports additive. Original records remain in legacy metadata. The two identified business routines (reviews and DoorDash/UberEats) use Business/report-off rather than the old Personal flag. Keep migrated data outside the source repository.

@@ -15,7 +15,7 @@ type Cache = {
   uploads: { meta: FileMeta; blob: Blob }[];
 };
 const empty = (): Cache => ({ records: [], files: [], queue: [], uploads: [] });
-export async function openCache(account: string) {
+async function openCache(account: string) {
   return new Promise<IDBDatabase>((resolve, reject) => {
     const req = indexedDB.open('launch-' + account, 1);
     req.onupgradeneeded = () => {
@@ -35,16 +35,83 @@ async function readCache(account: string) {
     tx.oncomplete = () => db.close();
   });
 }
-async function writeCache(account: string, data: Cache) {
+// Apply only this writer's changes inside one IndexedDB transaction. Another
+// tab's queued work must survive a save made from an older in-memory snapshot.
+function mergeCache(current: Cache, base: Cache, next: Cache): Cache {
+  function merge<T extends object>(
+    old: T[],
+    before: T[],
+    after: T[],
+    id: (v: T) => string,
+  ): T[] {
+    const map = new Map(old.map((v) => [id(v), v]));
+    const prior = new Map(before.map((v) => [id(v), v]));
+    const present = new Set(after.map(id));
+    for (const v of before) if (!present.has(id(v))) map.delete(id(v));
+    for (const v of after) {
+      const previous = prior.get(id(v));
+      if (!previous) {
+        map.set(id(v), v);
+        continue;
+      }
+      const delta = Object.fromEntries(
+        Object.entries(v).filter(
+          ([key, value]) =>
+            JSON.stringify(value) !== JSON.stringify(previous[key as keyof T]),
+        ),
+      );
+      if (Object.keys(delta).length)
+        map.set(id(v), { ...(map.get(id(v)) || v), ...delta });
+    }
+    return [...map.values()];
+  }
+  const queue = merge(current.queue, base.queue, next.queue, (v) => v.id);
+  const records = merge(
+    current.records,
+    base.records,
+    next.records,
+    (v) => v.id,
+  );
+  // Pending edits take precedence over a remote snapshot fetched by another tab.
+  for (const op of queue) {
+    const index = records.findIndex((e) => e.id === op.entityId);
+    if (index >= 0) records[index] = { ...records[index], ...op.patch };
+  }
+  return {
+    records,
+    queue,
+    files: merge(current.files, base.files, next.files, (v) => v.id),
+    uploads: merge(
+      current.uploads,
+      base.uploads,
+      next.uploads,
+      (v) => v.meta.id,
+    ),
+  };
+}
+async function writeCache(account: string, base: Cache, data: Cache) {
   const db = await openCache(account);
-  return new Promise<void>((resolve, reject) => {
+  return new Promise<Cache>((resolve, reject) => {
     const tx = db.transaction('state', 'readwrite');
-    tx.objectStore('state').put(data, 'cache');
+    const state = tx.objectStore('state');
+    let merged: Cache;
+    const req = state.get('cache');
+    req.onsuccess = () => {
+      merged = mergeCache(req.result || empty(), base, data);
+      state.put(merged, 'cache');
+    };
     tx.oncomplete = () => {
       db.close();
-      resolve();
+      resolve(merged);
     };
-    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => {
+      db.close();
+      reject(tx.error || new Error('Device save failed'));
+    };
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error);
+    };
   });
 }
 export type StoreSnapshot = Cache & {
@@ -63,6 +130,8 @@ export class LaunchStore {
   lastSync = '';
   listeners = new Set<() => void>();
   saveChain = Promise.resolve();
+  private submitted: Cache = empty();
+  private syncPromise: Promise<void> | null = null;
   // Session history is independent of notification lifetime. Store only the
   // lifecycle fields so undo never rolls back subsequent notes or attachments.
   undoHistory: {
@@ -102,15 +171,23 @@ export class LaunchStore {
   }
   async persist() {
     const copy = structuredClone(this.data);
+    const base = this.submitted;
+    this.submitted = copy;
     this.saveChain = this.saveChain
       .catch(() => {})
-      .then(() => writeCache(this.account, copy));
+      .then(async () => {
+        const merged = await writeCache(this.account, base, copy);
+        this.data = mergeCache(merged, copy, this.data);
+        if (this.submitted === copy)
+          this.submitted = structuredClone(this.data);
+      });
     await this.saveChain;
     this.emit();
   }
   async init() {
     try {
       this.data = await readCache(this.account);
+      this.submitted = structuredClone(this.data);
       this.ready = true;
       localStorage.setItem('launch-account', this.account);
       this.emit();
@@ -217,8 +294,6 @@ export class LaunchStore {
         throw new Error(`${file.name} is over 20 MB.`);
     const ids: string[] = [];
     for (const file of files) {
-      if (file.size > 20 * 1024 * 1024)
-        throw new Error(`${file.name} is over 20 MB.`);
       const meta = {
         id: uid(),
         name: file.name,
@@ -264,12 +339,20 @@ export class LaunchStore {
     await this.persist();
     await this.sync();
   }
-  async sync() {
-    if (this.syncing || !this.ready || !navigator.onLine) return;
+  sync(): Promise<void> {
+    if (this.syncPromise) return this.syncPromise;
+    if (!this.ready || !navigator.onLine) return Promise.resolve();
+    this.syncPromise = this.performSync().finally(() => {
+      this.syncPromise = null;
+    });
+    return this.syncPromise;
+  }
+  private async performSync() {
     this.syncing = true;
     this.error = '';
     this.emit();
     try {
+      await this.persist();
       for (const item of this.data.uploads.slice()) {
         const form = new FormData();
         form.set('id', item.meta.id);

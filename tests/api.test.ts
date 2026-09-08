@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createEntity, uid, defaultReport, type Entity } from '../lib/model';
+import {
+  createEntity,
+  uid,
+  defaultReport,
+  makeReport,
+  type Entity,
+} from '../lib/model';
 const base = process.env.LAUNCH_TEST_URL || 'http://localhost:3000';
 let cookie = '';
 async function request(path: string, init: RequestInit = {}) {
@@ -276,4 +282,62 @@ void test('old report defaults are repaired once and a later explicit exclusion 
     }),
   });
   assert.equal(remove.status, 200);
+});
+
+void test('malformed operations are rejected and explicit personal report backups restore', async () => {
+  for (const body of [
+    null,
+    { id: 10 },
+    { id: uid(), entityId: uid(), kind: 'task', base: {}, patch: [] },
+  ]) {
+    const response = await request('/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    assert.equal(response.status, 400);
+  }
+  const personal = createEntity('task', 'personal', {
+    title: 'TEST: opted-in report backup',
+    final: '2026-09-15',
+  });
+  const snapshot = makeReport([personal], {
+    ...defaultReport(),
+    from: '2026-09-01',
+    to: '2026-09-30',
+    includePersonal: true,
+  });
+  const report = createEntity('meeting', 'business', {
+    title: 'TEST: personal report backup',
+    snapshot,
+  });
+  const restore = await request('/api/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ records: [report] }),
+  });
+  assert.equal(restore.status, 200, await restore.clone().text());
+  const denied = await request('/api/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      records: [
+        {
+          ...report,
+          id: uid(),
+          snapshot: {
+            ...snapshot,
+            options: { ...snapshot.options, includePersonal: false },
+          },
+        },
+      ],
+    }),
+  });
+  assert.equal(denied.status, 400);
+  const collision = await request('/api/reports', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: 12, options: defaultReport() }),
+  });
+  assert.equal(collision.status, 400);
 });

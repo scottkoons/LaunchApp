@@ -54,10 +54,7 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {
         "files_owner_id_pk": {
-          "columns": [
-            "owner",
-            "id"
-          ],
+          "columns": ["owner", "id"],
           "name": "files_owner_id_pk"
         }
       },
@@ -100,10 +97,7 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {
         "operations_owner_id_pk": {
-          "columns": [
-            "owner",
-            "id"
-          ],
+          "columns": ["owner", "id"],
           "name": "operations_owner_id_pk"
         }
       },
@@ -160,20 +154,14 @@
       "indexes": {
         "idx_records_owner_kind": {
           "name": "idx_records_owner_kind",
-          "columns": [
-            "owner",
-            "kind"
-          ],
+          "columns": ["owner", "kind"],
           "isUnique": false
         }
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {
         "records_owner_id_pk": {
-          "columns": [
-            "owner",
-            "id"
-          ],
+          "columns": ["owner", "id"],
           "name": "records_owner_id_pk"
         }
       },

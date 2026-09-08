@@ -1,0 +1,25 @@
+{
+  "entry": [
+    "app/page.tsx",
+    "app/layout.tsx",
+    "app/api/**/route.ts",
+    "next.config.ts",
+    "tests/**/*.ts",
+    "scripts/verify-import.ts",
+    "public/*.js"
+  ],
+  "project": [
+    "app/**/*.{ts,tsx}",
+    "components/**/*.{ts,tsx}",
+    "hooks/**/*.ts",
+    "lib/**/*.ts",
+    "db/**/*.ts",
+    "tests/**/*.ts",
+    "scripts/**/*.ts",
+    "*.{ts,mjs}",
+    "public/*.js",
+    "app/**/*.css"
+  ],
+  "ignoreDependencies": ["next", "cloudflare"],
+  "vite": false
+}

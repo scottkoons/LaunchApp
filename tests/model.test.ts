@@ -793,3 +793,58 @@ void test('report defaults repair imported business work and converted notes exa
   assert.equal(report.backburner.length, 1);
   assert.equal(report.tasks.length, 1);
 });
+
+void test('old recurring anchors keep producing current weekly, monthly and quarterly work', () => {
+  const task = createEntity('task', 'business', {
+    title: 'Long-running schedule',
+    final: '2010-01-31',
+    repeatAnchor: '2010-01-31',
+    repeatFrom: '2026-09-01',
+  });
+  assert.equal(
+    recurrenceDates(
+      { ...task, repeat: 'weekly', repeatDays: [1] },
+      '2026-09-30',
+    ).length,
+    4,
+  );
+  assert.deepEqual(
+    recurrenceDates({ ...task, repeat: 'monthly' }, '2026-10-31'),
+    ['2026-09-30', '2026-10-31'],
+  );
+  assert.deepEqual(
+    recurrenceDates({ ...task, repeat: 'quarterly' }, '2027-01-31'),
+    ['2026-10-31', '2027-01-31'],
+  );
+});
+
+void test('malformed recurring schedules, notes and backwards event times are rejected', () => {
+  const task = createEntity('task', 'business', { title: 'Validation' });
+  for (const patch of [
+    { repeatDays: [7] },
+    { repeatDays: [1.5] },
+    { repeatAnchor: '2026-02-30' },
+    { occurrence: 'not-a-date' },
+    { excludedDates: ['bad'] },
+    { monthlyNotes: { '2026-13': 'bad month' } },
+    { date: '2026-09-08', endDate: '2026-09-07' },
+    { date: '2026-09-08', time: '14:00', endTime: '13:00' },
+  ]) {
+    assert.throws(() => validateEntity({ ...task, ...patch }));
+  }
+});
+
+void test('report calendar includes multi-day events that start before its date range', () => {
+  const event = createEntity('event', 'business', {
+    title: 'Festival',
+    date: '2026-08-31',
+    endDate: '2026-09-02',
+    report: true,
+  });
+  const report = makeReport([event], {
+    ...defaultReport(),
+    from: '2026-09-01',
+    to: '2026-09-30',
+  });
+  assert.equal(report.events.length, 1);
+});

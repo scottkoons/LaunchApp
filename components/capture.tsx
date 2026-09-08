@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { ArrowUpRight, Camera, Inbox } from 'lucide-react';
 import { Attachments } from './launch-controls';
 import {
@@ -29,6 +29,25 @@ export function Capture({
     [ids, setIds] = useState<string[]>([]),
     [busy, setBusy] = useState(false),
     [loaded, setLoaded] = useState(false);
+  const saving = useRef(false);
+  const uploading = useRef(false);
+  const [filesBusy, setFilesBusy] = useState(false);
+  function fileBusy(value: boolean) {
+    uploading.current = value;
+    setFilesBusy(value);
+  }
+  async function addFiles(selected: File[]) {
+    if (saving.current || uploading.current) return;
+    fileBusy(true);
+    try {
+      const added = await store.addFiles(selected);
+      setIds((x) => [...x, ...added]);
+    } catch (e) {
+      notify((e as Error).message);
+    } finally {
+      fileBusy(false);
+    }
+  }
   const input = useRef<HTMLTextAreaElement>(null),
     photo = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -39,11 +58,22 @@ export function Capture({
     } catch {}
     setLoaded(true);
   }, [key]);
+  const draftStorageError = useEffectEvent(() =>
+    notify('Draft storage is full. Save this note before closing.'),
+  );
   useEffect(() => {
-    if (loaded) localStorage.setItem(key, JSON.stringify({ text, ids }));
+    if (loaded) {
+      try {
+        localStorage.setItem(key, JSON.stringify({ text, ids }));
+      } catch {
+        draftStorageError();
+      }
+    }
   }, [text, ids, key, loaded]);
   async function save() {
-    if (!text.trim() && !ids.length) return;
+    if (saving.current || uploading.current || (!text.trim() && !ids.length))
+      return;
+    saving.current = true;
     setBusy(true);
     try {
       await store.add(
@@ -62,6 +92,7 @@ export function Capture({
     } catch (e) {
       notify((e as Error).message);
     } finally {
+      saving.current = false;
       setBusy(false);
     }
   }
@@ -91,6 +122,7 @@ export function Capture({
         </p>
         <textarea
           ref={input}
+          disabled={busy || filesBusy}
           aria-label="Quick note"
           value={text}
           placeholder="What do you want to remember?"
@@ -102,10 +134,7 @@ export function Capture({
             const fs = Array.from(e.clipboardData.files);
             if (fs.length) {
               e.preventDefault();
-              void store
-                .addFiles(fs)
-                .then((added) => setIds((x) => [...x, ...added]))
-                .catch((err) => notify(err.message));
+              void addFiles(fs);
             }
           }}
         />
@@ -117,20 +146,21 @@ export function Capture({
             accept="image/*"
             capture="environment"
             onChange={(e) => {
-              void store
-                .addFiles(Array.from(e.target.files || []))
-                .then((added) => setIds((x) => [...x, ...added]))
-                .catch((err) => notify(err.message));
+              void addFiles(Array.from(e.target.files || []));
               e.target.value = '';
             }}
           />
-          <button className="button" onClick={() => photo.current?.click()}>
+          <button
+            className="button"
+            disabled={busy || filesBusy}
+            onClick={() => photo.current?.click()}
+          >
             <Camera />
             Photo
           </button>
           <button
             className="button primary"
-            disabled={busy || (!text.trim() && !ids.length)}
+            disabled={busy || filesBusy || (!text.trim() && !ids.length)}
             onClick={() => void save()}
           >
             {busy ? 'Saving…' : 'Save note'}
@@ -144,6 +174,8 @@ export function Capture({
               : 'Add files or a photo from your library'}
           </summary>
           <Attachments
+            readOnly={busy}
+            onBusyChange={fileBusy}
             ids={ids}
             store={store}
             files={files}

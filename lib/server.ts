@@ -73,7 +73,6 @@ export async function allRecords(user: string) {
     day(),
     list.find((e) => e.kind === 'settings' && !e.deletedAt)?.monthlyNotes,
   );
-  const until = months.at(-1)! + '-31';
   const ids = new Set(list.map((e) => e.id));
   for (const root of [...list].filter(
     (t) =>
@@ -89,20 +88,53 @@ export async function allRecords(user: string) {
         .filter((t) => t.id === root.id || t.seriesId === root.id)
         .map((t) => t.occurrence),
     );
-    for (const date of recurrenceDates(root, until)) {
-      if (!months.includes(date.slice(0, 7))) continue;
+    const dates = months.flatMap((month) =>
+      recurrenceDates(
+        {
+          ...root,
+          repeatFrom:
+            root.repeatFrom && root.repeatFrom > month + '-01'
+              ? root.repeatFrom
+              : month + '-01',
+        },
+        month + '-31',
+      ),
+    );
+    const pending: Entity[] = [];
+    for (const date of dates) {
       if (date === (root.occurrence || root.repeatAnchor)) continue;
       if (represented.has(date)) continue;
       const e = spawnOccurrence(root, date);
       if (ids.has(e.id)) continue;
-      await database()
-        .prepare(
-          'INSERT OR IGNORE INTO records(owner,id,kind,body,version,updated_at) VALUES(?,?,?,?,1,?)',
-        )
-        .bind(user, e.id, e.kind, JSON.stringify(e), e.updatedAt)
-        .run();
       ids.add(e.id);
-      list.push({ ...e, version: 1 });
+      pending.push(e);
+    }
+    // Bound D1 batches and eliminate one network round trip per occurrence.
+    for (let offset = 0; offset < pending.length; offset += 50) {
+      const batch = pending.slice(offset, offset + 50);
+      await database().batch(
+        batch.map((e) =>
+          database()
+            .prepare(
+              'INSERT OR IGNORE INTO records(owner,id,kind,body,version,updated_at) VALUES(?,?,?,?,1,?)',
+            )
+            .bind(user, e.id, e.kind, JSON.stringify(e), e.updatedAt),
+        ),
+      );
+    }
+    if (pending.length) {
+      // Read persisted rows: a concurrent tab may already have completed one.
+      const saved = await database()
+        .prepare(
+          'SELECT body,version FROM records WHERE owner=? AND id IN (SELECT value FROM json_each(?))',
+        )
+        .bind(user, JSON.stringify(pending.map((e) => e.id)))
+        .all<{ body: string; version: number }>();
+      list.push(
+        ...saved.results.map(
+          (r) => ({ ...JSON.parse(r.body), version: r.version }) as Entity,
+        ),
+      );
     }
   }
   return list;

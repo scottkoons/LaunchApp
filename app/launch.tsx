@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import {
   SidebarProvider,
   Sidebar,
@@ -85,7 +85,9 @@ import { Pick, Attachments } from '@/components/launch-controls';
 import { TaskEditor } from '@/components/task-editor';
 import { Capture } from '@/components/capture';
 import { Calendar } from '@/components/calendar';
-import { Reports } from '@/components/reports';
+const Reports = lazy(() =>
+  import('@/components/reports').then((m) => ({ default: m.Reports })),
+);
 import { noteInput, type ModelDocument } from '@/lib/browser-types';
 import { SettingsPanel } from '@/components/settings-panel';
 const NAV = [
@@ -783,7 +785,7 @@ export default function Launch({
         <main className={'page ' + (view === 'capture' ? 'capture-main' : '')}>
           {view === 'capture' ? (
             <Capture
-              key={scope}
+              key={`${store.account}:${scope}`}
               scope={scope}
               store={store}
               files={files}
@@ -1458,14 +1460,18 @@ export default function Launch({
                     label="Switch to Business"
                   />
                 ) : (
-                  <Reports
-                    openRequest={reportRequest}
-                    records={records}
-                    store={store}
-                    notify={notify}
-                    addAgenda={(date) => add('agenda', { date, report: true })}
-                    open={open}
-                  />
+                  <Suspense fallback={<output>Loading report tools…</output>}>
+                    <Reports
+                      openRequest={reportRequest}
+                      records={records}
+                      store={store}
+                      notify={notify}
+                      addAgenda={(date) =>
+                        add('agenda', { date, report: true })
+                      }
+                      open={open}
+                    />
+                  </Suspense>
                 ))}
               {view === 'settings' && (
                 <SettingsPanel
@@ -1567,7 +1573,7 @@ export default function Launch({
             </SheetDescription>
           </SheetHeader>
           <Capture
-            key={scope}
+            key={`${store.account}:${scope}`}
             scope={scope}
             store={store}
             files={files}

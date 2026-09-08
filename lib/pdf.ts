@@ -260,7 +260,12 @@ export function createPdf(s: ReportSnapshot) {
           label: string;
           status: keyof typeof palette;
         }>((t) => {
-          if (t.kind === 'event' && t.date === date)
+          if (
+            t.kind === 'event' &&
+            t.date &&
+            date >= t.date &&
+            date <= (t.endDate || t.date)
+          )
             return [{ label: t.title, status: 'future' as const }];
           if (t.kind !== 'task') return [];
           return (['draft', 'final', 'review', 'publication'] as const)

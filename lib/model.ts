@@ -205,7 +205,7 @@ export function milestones(t: Entity) {
 export function workDate(t: Entity) {
   return t.final || t.draft || t.review || '';
 }
-export function monthKeys(from: string, to: string) {
+function monthKeys(from: string, to: string) {
   const keys: string[] = [];
   for (
     let m = from.slice(0, 7) + '-01';
@@ -459,7 +459,7 @@ export function reportDateStatus(
     snapshot.soonDays ?? 2,
   );
 }
-export function inRange(value: string | undefined, from: string, to: string) {
+function inRange(value: string | undefined, from: string, to: string) {
   const d = value?.slice(0, 10);
   return !!d && d >= from && d <= to;
 }
@@ -580,7 +580,10 @@ export function makeReport(
     ),
     events: items.filter(
       (e) =>
-        (e.kind === 'event' && inRange(e.date, options.from, options.to)) ||
+        (e.kind === 'event' &&
+          !!e.date &&
+          e.date <= options.to &&
+          (e.endDate || e.date) >= options.from) ||
         (e.kind === 'task' && inRange(e.publication, options.from, options.to)),
     ),
     monthlyNotes: options.monthlyNotes ? settings?.monthlyNotes || {} : {},
@@ -592,31 +595,44 @@ export function recurrenceDates(t: Entity, until: string): string[] {
   if (!anchor || !t.repeat || t.repeat === 'none' || t.seriesStopped) return [];
   const out: string[] = [];
   if (t.repeatUntil && t.repeatUntil < until) until = t.repeatUntil;
+  const from = t.repeatFrom && t.repeatFrom > anchor ? t.repeatFrom : anchor;
+  if (from > until) return [];
   if (t.repeat === 'weekly') {
     const days = t.repeatDays?.length
       ? t.repeatDays
       : [parseDay(anchor).getDay()];
-    for (let d = anchor; d <= until; d = addDays(d, 1)) {
-      if (days.includes(parseDay(d).getDay())) out.push(d);
-      if (out.length >= 500) break;
+    // Iterate occurrences, not every day between a years-old anchor and today.
+    for (const weekday of new Set(
+      days.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6),
+    )) {
+      for (
+        let date = addDays(from, (weekday - parseDay(from).getDay() + 7) % 7);
+        date <= until;
+        date = addDays(date, 7)
+      )
+        out.push(date);
     }
+    out.sort();
   } else {
-    const a = parseDay(anchor);
-    for (let n = 0; n < 120; n++) {
-      const month = a.getMonth() + n * (t.repeat === 'quarterly' ? 3 : 1);
+    const a = parseDay(anchor),
+      start = parseDay(from);
+    const step = t.repeat === 'quarterly' ? 3 : 1;
+    const elapsed =
+      (start.getFullYear() - a.getFullYear()) * 12 +
+      start.getMonth() -
+      a.getMonth();
+    for (let n = Math.max(0, Math.floor(elapsed / step)); ; n++) {
+      const month = a.getMonth() + n * step;
       const last = new Date(a.getFullYear(), month + 1, 0).getDate();
-      const d = day(
+      const date = day(
         new Date(a.getFullYear(), month, Math.min(a.getDate(), last)),
       );
-      if (d > until) break;
-      out.push(d);
+      if (date > until) break;
+      if (date >= from) out.push(date);
     }
   }
-  return out.filter(
-    (date) =>
-      (!t.repeatFrom || date >= t.repeatFrom) &&
-      !t.excludedDates?.includes(date),
-  );
+  const excluded = new Set(t.excludedDates || []);
+  return out.filter((date) => !excluded.has(date));
 }
 // Keep the series default separate from an individual occurrence's report flag.
 // A new future rule replaces later rules; completed history is never bulk edited.
@@ -763,12 +779,56 @@ export function validateEntity(e: Entity) {
     'revisit',
     'repeatFrom',
     'repeatUntil',
+    'repeatAnchor',
+    'occurrence',
   ] as const)
     if (
       e[k] &&
       (!/^\d{4}-\d{2}-\d{2}$/.test(e[k]!) || day(parseDay(e[k]!)) !== e[k])
     )
       throw new Error('Invalid date');
+  if (
+    e.repeatDays !== undefined &&
+    (!Array.isArray(e.repeatDays) ||
+      e.repeatDays.length > 7 ||
+      e.repeatDays.some((d) => !Number.isInteger(d) || d < 0 || d > 6))
+  )
+    throw new Error('Choose valid weekdays for the repeat schedule.');
+  if (
+    e.excludedDates !== undefined &&
+    (!Array.isArray(e.excludedDates) ||
+      e.excludedDates.length > 10000 ||
+      e.excludedDates.some(
+        (d) =>
+          typeof d !== 'string' ||
+          !/^\d{4}-\d{2}-\d{2}$/.test(d) ||
+          day(parseDay(d)) !== d,
+      ))
+  )
+    throw new Error('Invalid excluded repeat dates');
+  if (
+    e.monthlyNotes !== undefined &&
+    (!e.monthlyNotes ||
+      Array.isArray(e.monthlyNotes) ||
+      typeof e.monthlyNotes !== 'object' ||
+      Object.entries(e.monthlyNotes).some(
+        ([month, notes]) =>
+          !/^\d{4}-(0[1-9]|1[0-2])$/.test(month) ||
+          typeof notes !== 'string' ||
+          notes.length > 100000,
+      ))
+  )
+    throw new Error('Invalid monthly notes');
+  if (e.date && e.endDate && e.endDate < e.date)
+    throw new Error('Event end date must be on or after its start date.');
+  if (
+    e.date &&
+    (!e.endDate || e.endDate === e.date) &&
+    e.time &&
+    e.endTime &&
+    e.endTime <= e.time
+  )
+    throw new Error('Event end time must be after its start time.');
   if (e.report === undefined)
     e.report = e.kind === 'task' && e.scope === 'business';
   if (typeof e.report !== 'boolean') throw new Error('Invalid report choice');
@@ -809,7 +869,7 @@ export function validateEntity(e: Entity) {
     throw new Error('Invalid status');
   return e;
 }
-export function escapeIcs(s: string) {
+function escapeIcs(s: string) {
   return s
     .replace(/\\/g, '\\\\')
     .replace(/\r?\n/g, '\\n')

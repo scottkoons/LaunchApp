@@ -33,11 +33,19 @@ export async function POST(request: Request) {
     if (raw.length > 250000) return json({ error: 'Record too large' }, 413);
     const op = JSON.parse(raw) as Operation;
     if (
+      !op ||
+      typeof op.id !== 'string' ||
       !op.id ||
+      op.id.length > 160 ||
+      typeof op.entityId !== 'string' ||
       !op.entityId ||
       !kinds.includes(op.kind) ||
       !op.patch ||
+      typeof op.patch !== 'object' ||
+      Array.isArray(op.patch) ||
       !op.base ||
+      typeof op.base !== 'object' ||
+      Array.isArray(op.base) ||
       op.entityId.length > 160
     )
       return json({ error: 'Invalid change' }, 400);

@@ -210,3 +210,115 @@ void test('undo protects newer lifecycle changes and does not undo twice concurr
   assert.equal(store.data.records[0].status, 'postponed');
   assert.equal(store.canUndo, false);
 });
+
+void test('two offline tabs retain independent notes, files, and disjoint edits', async () => {
+  Object.defineProperty(globalThis, 'navigator', {
+    value: { onLine: false },
+    configurable: true,
+  });
+  const account = 'tabs-' + crypto.randomUUID();
+  const a = new LaunchStore(account),
+    b = new LaunchStore(account);
+  await Promise.all([a.init(), b.init()]);
+  const first = createEntity('note', 'business', { title: 'First tab' });
+  const second = createEntity('note', 'business', { title: 'Second tab' });
+  await Promise.all([a.add(first), b.add(second)]);
+  await Promise.all([
+    a.addFiles([new File(['a'], 'a.txt')]),
+    b.addFiles([new File(['b'], 'b.txt')]),
+  ]);
+  const c = new LaunchStore(account),
+    d = new LaunchStore(account);
+  await Promise.all([c.init(), d.init()]);
+  assert.equal(c.data.records.length, 2);
+  assert.equal(c.data.queue.length, 2);
+  assert.equal(c.data.uploads.length, 2);
+  await Promise.all([
+    c.change(
+      c.data.records.find((e) => e.id === first.id)!,
+      { notes: 'New notes' },
+    ),
+    d.change(
+      d.data.records.find((e) => e.id === first.id)!,
+      { pinned: true },
+    ),
+  ]);
+  const restarted = new LaunchStore(account);
+  await restarted.init();
+  assert.equal(restarted.data.queue.length, 4);
+  assert.equal(
+    restarted.data.records.find((e) => e.id === first.id)?.notes,
+    'New notes',
+  );
+  assert.equal(
+    restarted.data.records.find((e) => e.id === first.id)?.pinned,
+    true,
+  );
+  // A tab that has not seen the other tab's writes adopts and syncs the shared queue.
+  const remote = new Map<string, Entity>();
+  Object.defineProperty(globalThis, 'navigator', {
+    value: { onLine: true },
+    configurable: true,
+  });
+  globalThis.fetch = async (_url, init = {}) => {
+    if (init.body instanceof FormData) {
+      const id = init.body.get('id') as string;
+      return Response.json({
+        id,
+        name: 'file',
+        type: 'text/plain',
+        size: 1,
+        createdAt: first.createdAt,
+      });
+    }
+    if (init.method === 'POST') {
+      const op = JSON.parse(init.body as string) as Operation;
+      const merged = mergePatch(remote.get(op.entityId), op);
+      assert.deepEqual(merged.conflicts, []);
+      remote.set(op.entityId, merged.entity!);
+      return Response.json({ entity: merged.entity });
+    }
+    return Response.json({ records: [...remote.values()], files: [] });
+  };
+  await a.sync();
+  assert.equal(remote.size, 2);
+  assert.equal(a.data.queue.length, 0);
+  const final = new LaunchStore(account);
+  await final.init();
+  assert.equal(final.data.queue.length, 0);
+  assert.equal(final.data.uploads.length, 0);
+  assert.equal(
+    final.data.records.find((e) => e.id === first.id)?.notes,
+    'New notes',
+  );
+});
+
+void test('concurrent sync callers await the same network pass', async () => {
+  Object.defineProperty(globalThis, 'navigator', {
+    value: { onLine: false },
+    configurable: true,
+  });
+  const store = new LaunchStore('inflight-' + crypto.randomUUID());
+  await store.init();
+  let release!: () => void;
+  const barrier = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let requests = 0;
+  globalThis.fetch = async () => {
+    requests++;
+    await barrier;
+    return Response.json({ records: [], files: [] });
+  };
+  Object.defineProperty(globalThis, 'navigator', {
+    value: { onLine: true },
+    configurable: true,
+  });
+  const first = store.sync(),
+    second = store.sync();
+  assert.equal(first, second);
+  release();
+  await Promise.all([first, second]);
+  assert.equal(requests, 1);
+  assert.equal(store.syncing, false);
+});

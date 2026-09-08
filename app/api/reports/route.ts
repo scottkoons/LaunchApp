@@ -20,6 +20,11 @@ export async function POST(request: Request) {
       id?: string;
       options: Record<string, unknown>;
     };
+    if (
+      input.id !== undefined &&
+      (typeof input.id !== 'string' || !input.id || input.id.length > 160)
+    )
+      throw new Error('Invalid report ID');
     const options = { ...defaultReport(), ...input.options };
     validateReportOptions(options);
     const snapshot = makeReport(await allRecords(user), options);
@@ -48,7 +53,12 @@ export async function POST(request: Request) {
       .prepare('SELECT body FROM records WHERE owner=? AND id=?')
       .bind(user, entity.id)
       .first<{ body: string }>();
-    return json({ entity: JSON.parse(row!.body) });
+    const saved = JSON.parse(row!.body);
+    if (saved.kind !== 'meeting')
+      throw new Error(
+        'This ID belongs to another record. Generate a new report.',
+      );
+    return json({ entity: saved });
   } catch (e) {
     return failure(e);
   }

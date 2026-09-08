@@ -70,6 +70,7 @@ export function Attachments({
   onChange,
   notify,
   readOnly = false,
+  onBusyChange,
 }: {
   ids: string[];
   store: LaunchStore;
@@ -77,6 +78,7 @@ export function Attachments({
   onChange: (ids: string[]) => void;
   notify: (s: string) => void;
   readOnly?: boolean;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const input = useRef<HTMLInputElement>(null),
     camera = useRef<HTMLInputElement>(null);
@@ -102,8 +104,15 @@ export function Attachments({
         if (url.startsWith('blob:')) URL.revokeObjectURL(url);
       });
   }, [idsKey, uploadKey, store]);
+  const adding = useRef(false);
   async function add(list: File[]) {
     if (!list.length) return;
+    if (adding.current) {
+      notify('Wait for these files to finish saving before adding more.');
+      return;
+    }
+    adding.current = true;
+    onBusyChange?.(true);
     setBusy(true);
     try {
       const added = await store.addFiles(list);
@@ -112,6 +121,8 @@ export function Attachments({
     } catch (e) {
       notify((e as Error).message);
     } finally {
+      adding.current = false;
+      onBusyChange?.(false);
       setBusy(false);
     }
   }
@@ -124,9 +135,7 @@ export function Attachments({
             className={'dropzone ' + (drag ? 'dragging' : '')}
             aria-label="Upload, paste, or drop attachments"
             onClick={() => input.current?.click()}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') input.current?.click();
-            }}
+            disabled={busy}
             onPaste={(e) => {
               const fs = Array.from(e.clipboardData.files);
               if (fs.length) {

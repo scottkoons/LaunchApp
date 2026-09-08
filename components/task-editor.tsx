@@ -43,6 +43,8 @@ export function TaskEditor({
 }) {
   const [draft, setDraft] = useState<Entity | null>(null),
     [saving, setSaving] = useState(false);
+  const [filesBusy, setFilesBusy] = useState(false);
+  const savingRef = useRef(false);
   const [reportApply, setReportApply] = useState('one');
   const base = useRef<Entity | null>(null);
   useEffect(() => {
@@ -68,7 +70,7 @@ export function TaskEditor({
     );
   }
   async function save(extra: Partial<Entity> = {}) {
-    if (!draft) return;
+    if (!draft || savingRef.current || filesBusy) return;
     const d = { ...draft, ...extra };
     if (d.routine && d.status === 'completed') d.finalDone = true;
     if (!d.title.trim()) {
@@ -84,6 +86,7 @@ export function TaskEditor({
       d.seriesId = d.id;
       d.occurrence = workDate(d);
     }
+    savingRef.current = true;
     setSaving(true);
     try {
       const existing = store.data.records.find((e) => e.id === d.id);
@@ -129,6 +132,7 @@ export function TaskEditor({
     } catch (e) {
       notify((e as Error).message);
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
@@ -719,6 +723,8 @@ export function TaskEditor({
           )}
           <div className="section-label">ATTACHMENTS</div>
           <Attachments
+            readOnly={saving}
+            onBusyChange={setFilesBusy}
             ids={draft.files}
             store={store}
             files={files}
@@ -757,7 +763,7 @@ export function TaskEditor({
             {records.some((e) => e.id === draft.id) && (
               <button
                 className="text-button danger"
-                disabled={saving}
+                disabled={saving || filesBusy}
                 onClick={() => void save({ deletedAt: now() })}
               >
                 <Trash2 />
@@ -770,7 +776,7 @@ export function TaskEditor({
           {isTask && draft.status !== 'completed' && (
             <button
               className="button"
-              disabled={saving}
+              disabled={saving || filesBusy}
               onClick={() =>
                 void save({ status: 'completed', completedAt: now() })
               }
@@ -781,7 +787,7 @@ export function TaskEditor({
           )}
           <button
             className="button primary"
-            disabled={saving}
+            disabled={saving || filesBusy}
             onClick={() => void save()}
           >
             {saving ? 'Saving…' : 'Save changes'}

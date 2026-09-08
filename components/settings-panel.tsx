@@ -70,7 +70,9 @@ export function SettingsPanel({
       );
       for (const f of store.data.files) {
         setBusy('Adding ' + f.name);
-        const r = await fetch('/api/files/' + f.id);
+        const r = await fetch('/api/files/' + f.id, {
+          signal: AbortSignal.timeout(60000),
+        });
         if (!r.ok) throw new Error('Could not download ' + f.name);
         zip.file('files/' + f.id, await r.arrayBuffer());
       }
@@ -113,7 +115,11 @@ export function SettingsPanel({
           new Blob([blob], { type: f.type || 'application/octet-stream' }),
           f.name,
         );
-        const r = await fetch('/api/files', { method: 'POST', body: form });
+        const r = await fetch('/api/files', {
+          method: 'POST',
+          body: form,
+          signal: AbortSignal.timeout(60000),
+        });
         if (!r.ok) throw new Error('Could not restore ' + f.name);
       }
       for (let i = 0; i < b.records.length; i += 100) {
@@ -124,6 +130,7 @@ export function SettingsPanel({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ records: b.records.slice(i, i + 100) }),
+          signal: AbortSignal.timeout(30000),
         });
         if (!r.ok)
           throw new Error(((await r.json()) as { error: string }).error);

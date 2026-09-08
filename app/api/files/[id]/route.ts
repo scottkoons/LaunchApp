@@ -14,7 +14,7 @@ export async function GET(
     const obj = await bucket().get(`${user}/${id}`);
     if (!obj) return json({ error: 'File not found' }, 404);
     const safeInline =
-      /^(image\/(png|jpeg|webp|gif)|application\/pdf|audio\/)/.test(
+      /^(image\/(png|jpeg|webp|gif)|application\/pdf|audio\/[a-z0-9.+-]+)$/i.test(
         meta.type,
       ) && !new URL(request.url).searchParams.has('download');
     return new Response(obj.body, {

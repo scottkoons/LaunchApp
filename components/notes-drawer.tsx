@@ -1,6 +1,6 @@
 'use client';
 /* oxlint-disable jsx-a11y/prefer-tag-over-role -- This is a focusable WAI-ARIA window-splitter control, not a static thematic hr. */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   PanelRightClose,
   PanelRightOpen,
@@ -36,6 +36,7 @@ export function NotesDrawer({
   const [text, setText] = useState('');
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
+  const saving = useRef(false);
   const draftKey = `launch-drawer-draft-${store.account}-${scope}`;
   useEffect(() => {
     setOpen(localStorage.getItem('launch-notes-drawer') === 'true');
@@ -57,7 +58,8 @@ export function NotesDrawer({
     localStorage.setItem('launch-notes-width', String(next));
   }
   async function save() {
-    if (!text.trim() || busy) return;
+    if (!text.trim() || saving.current) return;
+    saving.current = true;
     setBusy(true);
     try {
       await store.add(
@@ -72,6 +74,7 @@ export function NotesDrawer({
     } catch {
       notify('Could not save. Your note is still here.');
     } finally {
+      saving.current = false;
       setBusy(false);
     }
   }
@@ -148,6 +151,7 @@ export function NotesDrawer({
                   </label>
                   <textarea
                     id="drawer-note"
+                    disabled={busy}
                     rows={3}
                     value={text}
                     onChange={(event) => setText(event.target.value)}

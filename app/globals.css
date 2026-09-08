@@ -1,6 +1,6 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
-@import 'shadcn/tailwind.css';
+@import './ui-variants.css';
 @font-face {
   font-family: 'Barlow';
   font-style: normal;
@@ -122,7 +122,7 @@
   --sidebar: oklch(96% 0.006 253);
   --muted: oklch(94% 0.009 253);
   --muted-foreground: oklch(46% 0.025 253);
-  --primary: oklch(58% 0.16 52);
+  --primary: #9f4700;
   --primary-foreground: oklch(99% 0.003 60);
   --accent: oklch(94% 0.025 64);
   --border: oklch(86% 0.014 253);
@@ -2706,7 +2706,7 @@ details[open] > summary {
   --primary-foreground: #0f172a;
   --accent: #3c3938;
   --border: #334155;
-  --destructive: #ff416b;
+  --destructive: #ff6384;
   --green: #00cf96;
   --yellow: #ffc400;
   --blue: #25bdf3;
@@ -3153,7 +3153,7 @@ h3,
   --primary: #e8922d;
   --muted: #334155;
   --accent: rgba(232, 146, 45, 0.15);
-  --primary-foreground: #fff;
+  --primary-foreground: #0f172a;
   --green: #00c48c;
   --blue: #22b8ef;
 }

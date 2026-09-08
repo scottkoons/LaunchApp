@@ -1,1 +1,132 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#101c2d"><title>Launch · Offline capture</title><style>body{margin:0;background:#101c2d;color:#f1f4f8;font:17px/1.5 system-ui,sans-serif;padding:30px 22px}main{max-width:560px;margin:auto}header{display:flex;align-items:center;gap:10px;font:bold 26px Georgia,serif}header img{width:42px;height:42px}h1{font:32px/1.2 Georgia,serif;margin-top:45px}p,small{color:#a7b6c8}textarea{width:100%;box-sizing:border-box;min-height:150px;background:#18283a;border:1px solid #35475d;border-radius:9px;color:#f1f4f8;padding:16px;font:17px/1.5 system-ui}button,select{font:15px system-ui;border:1px solid #35475d;border-radius:7px;padding:12px 17px;background:#18283a;color:#f1f4f8;margin:12px 5px 12px 0;cursor:pointer}button.primary{background:#ff9d28;color:#172333;border:0}label{display:block;margin:20px 0 8px;font-size:14px}#status{padding:16px 0;color:#addec5}#tasks>p{border-top:1px solid #35475d;padding:15px 0;margin:0}#tasks small{display:block}a{color:#ffb24c}input[type=file]{max-width:100%;font-size:14px}</style></head><body><main><header><img src="/icons/icon-192.png" alt="">Launch</header><p>Offline · capture is still here.</p><h1>Keep the thought.</h1><p>Use your keyboard’s microphone to dictate, or type a quick note.</p><select id="scope" aria-label="Workspace"><option value="business">Business</option><option value="personal">Personal</option></select><textarea id="note" placeholder="What do you want to remember?" aria-label="Quick note"></textarea><label for="photo">Add a photo or file</label><input id="photo" type="file" multiple><div><button class="primary" id="save">Save on this device</button><button id="reconnect">Reconnect</button></div><div id="status" role="status"></div><h2>Saved tasks</h2><p><small>Last synced copy. Reconnect to update tasks and upload captures.</small></p><div id="tasks"></div></main><script src="/offline.js" defer></script></body></html>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#101c2d" />
+    <title>Launch · Offline capture</title>
+    <style>
+      body {
+        margin: 0;
+        background: #101c2d;
+        color: #f1f4f8;
+        font:
+          17px/1.5 system-ui,
+          sans-serif;
+        padding: 30px 22px;
+      }
+      main {
+        max-width: 560px;
+        margin: auto;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font:
+          bold 26px Georgia,
+          serif;
+      }
+      header img {
+        width: 42px;
+        height: 42px;
+      }
+      h1 {
+        font:
+          32px/1.2 Georgia,
+          serif;
+        margin-top: 45px;
+      }
+      p,
+      small {
+        color: #a7b6c8;
+      }
+      textarea {
+        width: 100%;
+        box-sizing: border-box;
+        min-height: 150px;
+        background: #18283a;
+        border: 1px solid #35475d;
+        border-radius: 9px;
+        color: #f1f4f8;
+        padding: 16px;
+        font: 17px/1.5 system-ui;
+      }
+      button,
+      select {
+        font: 15px system-ui;
+        border: 1px solid #35475d;
+        border-radius: 7px;
+        padding: 12px 17px;
+        background: #18283a;
+        color: #f1f4f8;
+        margin: 12px 5px 12px 0;
+        cursor: pointer;
+      }
+      button.primary {
+        background: #ff9d28;
+        color: #172333;
+        border: 0;
+      }
+      label {
+        display: block;
+        margin: 20px 0 8px;
+        font-size: 14px;
+      }
+      #status {
+        padding: 16px 0;
+        color: #addec5;
+      }
+      #tasks > p {
+        border-top: 1px solid #35475d;
+        padding: 15px 0;
+        margin: 0;
+      }
+      #tasks small {
+        display: block;
+      }
+      a {
+        color: #ffb24c;
+      }
+      input[type='file'] {
+        max-width: 100%;
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header><img src="/icons/icon-192.png" alt="" />Launch</header>
+      <p>Offline · capture is still here.</p>
+      <h1>Keep the thought.</h1>
+      <p>Use your keyboard’s microphone to dictate, or type a quick note.</p>
+      <select id="scope" aria-label="Workspace">
+        <option value="business">Business</option>
+        <option value="personal">Personal</option></select
+      ><textarea
+        id="note"
+        placeholder="What do you want to remember?"
+        aria-label="Quick note"
+      ></textarea
+      ><label for="photo">Add a photo or file</label
+      ><input id="photo" type="file" multiple />
+      <div>
+        <button class="primary" id="save">Save on this device</button
+        ><button id="reconnect">Reconnect</button>
+      </div>
+      <div id="status" role="status"></div>
+      <h2>Saved tasks</h2>
+      <p>
+        <small
+          >Last synced copy. Reconnect to update tasks and upload
+          captures.</small
+        >
+      </p>
+      <div id="tasks"></div>
+    </main>
+    <script src="/offline.js" defer></script>
+  </body>
+</html>

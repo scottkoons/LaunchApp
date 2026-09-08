@@ -2,6 +2,7 @@ import { owner, database, json, failure, originGuard } from '@/lib/server';
 import {
   validateEntity,
   reportEligible,
+  validateReportOptions,
   migrateLegacyRoutine,
   migrateReportDefaults,
   now,
@@ -21,6 +22,7 @@ export async function POST(request: Request) {
       validateEntity(e);
       if (!e.id || e.id.length > 160) throw new Error('Invalid record ID');
       if (e.kind === 'meeting' && e.snapshot) {
+        validateReportOptions(e.snapshot.options);
         for (const list of [
           e.snapshot.tasks,
           e.snapshot.completed,
@@ -29,7 +31,19 @@ export async function POST(request: Request) {
           e.snapshot.agenda,
           e.snapshot.events,
         ])
-          if (!Array.isArray(list) || list.some((x) => !reportEligible(x)))
+          if (
+            !Array.isArray(list) ||
+            list.some(
+              (x) =>
+                !reportEligible(x) &&
+                !(
+                  e.snapshot!.options.includePersonal === true &&
+                  x.scope === 'personal' &&
+                  !x.deletedAt &&
+                  x.kind === 'task'
+                ),
+            )
+          )
             throw new Error('A report contains excluded content.');
       }
       return e;
