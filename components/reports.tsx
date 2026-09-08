@@ -5,6 +5,7 @@ import {
   defaultReport,
   makeReport,
   reportMonths,
+  reportDateStatus,
   pretty,
   uid,
   type Entity,
@@ -61,7 +62,7 @@ export function Reports({
       );
       if (!savedPdf.ok)
         throw new Error(
-          'Report content saved. PDF upload failed; open Past meetings to retry.',
+          'Report content saved. PDF upload failed; open Saved reports to retry.',
         );
       pdf.save(`Launch-marketing-${options.meetingDate}.pdf`);
       await store.sync();
@@ -179,7 +180,7 @@ export function Reports({
             value={options.calendarLayout}
             onChange={(v) => set({ calendarLayout: v as 'one' | 'two' })}
             options={[
-              ['one', 'One month · landscape'],
+              ['one', 'One month · portrait'],
               ['two', 'Two months · portrait'],
             ]}
           />
@@ -193,8 +194,9 @@ export function Reports({
           <FileDown />
         </button>
         <p className="hint">
-          Personal items and report-muted business work are always excluded.
-          Saved reports keep their original content.
+          All PDF pages print in portrait. Personal items and report-muted
+          business work are always excluded. Saved reports keep their original
+          content.
         </p>
         {options.excluded.length > 0 && (
           <button className="text-button" onClick={() => set({ excluded: [] })}>
@@ -253,7 +255,7 @@ export function Reports({
           </details>
         </div>
         <div className="report-history">
-          <h3>Past meetings</h3>
+          <h3>Saved reports</h3>
           {histories.length ? (
             histories.map((m) => (
               <button
@@ -306,6 +308,12 @@ export function Reports({
           )}
         </p>
         <div className="paper-rule" />
+        <div className="report-legend" aria-label="Deadline status colors">
+          <span className="report-date overdue">Overdue</span>
+          <span className="report-date soon">Due soon</span>
+          <span className="report-date future">Upcoming</span>
+          <span className="report-date done">Done</span>
+        </div>
         {[
           ...reportMonths(preview).map((m) => [m.label, m.items, m.notes]),
           ['Completed', preview.completed],
@@ -334,14 +342,26 @@ export function Reports({
                         <small>Completed {t.completedAt?.slice(0, 10)}</small>
                       )}
                     </button>
-                    <span>
-                      {pretty(t.draft)}
-                      {t.draftDone ? ' ✓' : ''}
-                    </span>
-                    <span>
-                      {pretty(t.final)}
-                      {t.finalDone ? ' ✓' : ''}
-                    </span>
+                    {(['draft', 'final'] as const).map((field) => {
+                      const status = reportDateStatus(preview, t, field);
+                      return (
+                        <span key={field}>
+                          <span
+                            className={'report-date ' + status}
+                            title={
+                              status === 'soon'
+                                ? 'Due soon'
+                                : status === 'future'
+                                  ? 'Upcoming'
+                                  : status
+                            }
+                          >
+                            {pretty(t[field])}
+                            {status === 'done' ? ' · Done' : ''}
+                          </span>
+                        </span>
+                      );
+                    })}
                     <button
                       aria-label={`Exclude ${t.title} from this report`}
                       className="paper-exclude"

@@ -2663,3 +2663,33 @@ details[open] > summary {
   justify-content: center;
   padding: 12px 0;
 }
+
+.report-legend {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 12px 0 22px;
+}
+.report-date {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.report-date.overdue {
+  color: #b02334;
+  background: #fde9ec;
+}
+.report-date.soon {
+  color: #8f5800;
+  background: #fff3cc;
+}
+.report-date.future {
+  color: #2158b1;
+  background: #e8f0ff;
+}
+.report-date.done {
+  color: #117741;
+  background: #e2f5ea;
+}

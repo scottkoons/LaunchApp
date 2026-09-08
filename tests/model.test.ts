@@ -13,6 +13,7 @@ import {
   dashboardGroups,
   monthlyTaskGroups,
   reportMonths,
+  reportDateStatus,
   type Operation,
   type Entity,
 } from '../lib/model';
@@ -271,5 +272,35 @@ void test('invalid dates rejected and personal report flag normalized', () => {
       createEntity('task', 'personal', { title: 'Personal', report: true }),
     ).report,
     false,
+  );
+});
+
+void test('report deadline colors use the saved date and due-soon window', () => {
+  const task = createEntity('task', 'business', {
+    draft: '2026-09-07',
+    final: '2026-09-11',
+  });
+  const snapshot = {
+    ...makeReport([], defaultReport()),
+    statusDate: '2026-09-08',
+    soonDays: 3,
+  };
+  assert.equal(reportDateStatus(snapshot, task, 'draft'), 'overdue');
+  assert.equal(reportDateStatus(snapshot, task, 'final'), 'soon');
+  assert.equal(
+    reportDateStatus(snapshot, { ...task, final: '2026-09-15' }, 'final'),
+    'future',
+  );
+  assert.equal(
+    reportDateStatus(snapshot, { ...task, draftDone: true }, 'draft'),
+    'done',
+  );
+  assert.equal(
+    reportDateStatus(snapshot, { ...task, status: 'completed' }, 'final'),
+    'done',
+  );
+  assert.equal(
+    reportDateStatus(snapshot, { ...task, status: 'postponed' }, 'draft'),
+    'none',
   );
 });

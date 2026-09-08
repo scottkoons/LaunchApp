@@ -96,6 +96,8 @@ export type ReportOptions = {
   excluded: string[];
 };
 export type ReportSnapshot = {
+  statusDate?: string;
+  soonDays?: number;
   options: ReportOptions;
   businessName: string;
   createdAt: string;
@@ -261,6 +263,26 @@ export function dateStatus(
       ? 'soon'
       : 'future';
 }
+export function reportDateStatus(
+  snapshot: ReportSnapshot,
+  task: Entity,
+  field: 'draft' | 'final' | 'review' | 'publication',
+) {
+  if (!task[field] || task.status === 'postponed') return 'none';
+  const done =
+    task.status === 'completed' ||
+    (field === 'draft'
+      ? task.draftDone
+      : field === 'final'
+        ? task.finalDone
+        : false);
+  return dateStatus(
+    task[field],
+    done,
+    snapshot.statusDate || snapshot.createdAt.slice(0, 10),
+    snapshot.soonDays ?? 2,
+  );
+}
 export function inRange(value: string | undefined, from: string, to: string) {
   const d = value?.slice(0, 10);
   return !!d && d >= from && d <= to;
@@ -300,6 +322,8 @@ export function makeReport(
   const settings = records.find((e) => e.kind === 'settings');
   return {
     options,
+    statusDate: day(),
+    soonDays: settings?.soonDays ?? 2,
     businessName: settings?.businessName || 'Colorado Mountain Brewery',
     createdAt: now(),
     tasks: tasks.filter(

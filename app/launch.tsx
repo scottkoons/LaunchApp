@@ -43,7 +43,6 @@ import {
   ListTodo,
   Inbox,
   CalendarDays,
-  NotebookPen,
   Images,
   Users,
   CheckCheck,
@@ -101,7 +100,7 @@ const NAV = [
   ['dashboard', 'Dashboard', LayoutDashboard],
   ['tasks', 'All tasks', ListTodo],
   ['notes', 'Quick notes', Inbox],
-  ['meetings', 'Meetings & reports', NotebookPen],
+  ['meetings', 'Generate report', FileText],
   ['reference', 'Reference board', Images],
   ['contacts', 'Contacts', Users],
   ['completed', 'Completed', CheckCheck],
@@ -114,7 +113,7 @@ const NAV_GROUPS = [
     items: ['dashboard', 'tasks', 'completed', 'backburner', 'postponed'],
   },
   { label: 'Workspace', items: ['notes', 'reference', 'contacts'] },
-  { label: 'Meetings & exports', items: ['meetings'] },
+  { label: 'Exports', items: ['meetings'] },
 ];
 export default function Launch({
   account,
@@ -902,7 +901,7 @@ export default function Launch({
                       tasks: 'All your tasks.',
                       today: 'Today',
                       notes: 'A place for your thoughts.',
-                      meetings: 'Make the meeting count.',
+                      meetings: 'Generate report',
                       reference: 'Keep it close.',
                       contacts: 'Good people. All here.',
                       completed: 'Look what you’ve done.',
@@ -1530,7 +1529,7 @@ export default function Launch({
               {view === 'meetings' &&
                 (scope === 'personal' ? (
                   <Empty
-                    title="Meetings belong to Business."
+                    title="Marketing reports belong to Business."
                     text="Personal items never appear in marketing reports."
                     action={() => setScope('business')}
                     label="Switch to Business"

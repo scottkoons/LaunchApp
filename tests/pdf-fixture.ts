@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { createEntity, makeReport, defaultReport } from '../lib/model';
 import { createPdf } from '../lib/pdf';
@@ -39,14 +40,20 @@ const monthlySample = makeReport(
     createEntity('task', 'business', {
       title: 'Oktoberfest table tent',
       notes: 'Confirm the meal special at the Wednesday meeting.',
-      draft: '2026-09-10',
-      final: '2026-09-15',
+      draft: '2026-09-04',
+      final: '2026-09-09',
     }),
     createEntity('task', 'business', {
       title: 'October menu photography',
       notes: 'Photograph the new seasonal menu items.',
       draft: '2026-10-02',
       final: '2026-10-06',
+    }),
+    createEntity('task', 'business', {
+      title: 'Magazine artwork approved',
+      draft: '2026-09-07',
+      final: '2026-09-15',
+      draftDone: true,
     }),
     createEntity('settings', 'business', {
       monthlyNotes: {
@@ -70,5 +77,12 @@ for (const layout of ['one', 'two'] as const) {
     `outputs/report-${layout}.pdf`,
     Buffer.from(doc.output('arraybuffer')),
   );
-  console.log(layout, doc.getNumberOfPages());
+  for (let page = 1; page <= doc.getNumberOfPages(); page++) {
+    doc.setPage(page);
+    assert.ok(
+      doc.internal.pageSize.getHeight() > doc.internal.pageSize.getWidth(),
+      `Page ${page} must be portrait`,
+    );
+  }
+  console.log(layout, doc.getNumberOfPages(), 'portrait pages verified');
 }

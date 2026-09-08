@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
   monthLabel,
+  reportDateStatus,
   reportMonths,
   pretty,
   parseDay,
@@ -11,7 +12,26 @@ import {
   type ReportSnapshot,
 } from './model';
 export function createPdf(s: ReportSnapshot) {
-  const doc = new jsPDF({ unit: 'mm', format: 'letter' });
+  const doc = new jsPDF({
+    unit: 'mm',
+    format: 'letter',
+    orientation: 'portrait',
+  });
+  doc.setProperties({
+    title: 'Marketing Meeting',
+    author: s.businessName,
+    creator: 'Launch',
+  });
+  const palette = {
+    overdue: { ink: [176, 35, 52], fill: [253, 233, 236] },
+    soon: { ink: [143, 88, 0], fill: [255, 243, 204] },
+    future: { ink: [33, 88, 177], fill: [232, 240, 255] },
+    done: { ink: [17, 119, 65], fill: [226, 245, 234] },
+    none: { ink: [105, 112, 121], fill: [241, 243, 245] },
+  } satisfies Record<
+    string,
+    { ink: [number, number, number]; fill: [number, number, number] }
+  >;
   const width = () => doc.internal.pageSize.getWidth();
   let y = 22;
   const title = (text: string) => {
@@ -23,37 +43,78 @@ export function createPdf(s: ReportSnapshot) {
     doc.setTextColor(22, 36, 52);
     doc.setFontSize(18);
     doc.text(text, 16, y);
-    y += 8;
+    doc.setDrawColor(207, 212, 218);
+    doc.setLineWidth(0.2);
+    doc.line(16, y + 2, width() - 16, y + 2);
+    y += 6;
   };
   const table = (heading: string, rows: Entity[]) => {
     if (!rows.length) return;
     title(heading);
     autoTable(doc, {
       startY: y,
-      head: [['Task', 'Notes', 'Draft', 'Final']],
+      head: [['TASK NAME', 'NOTES', 'DRAFT', 'FINAL']],
       body: rows.map((t) => [
         t.title,
         t.reportNote || t.notes,
-        t.draft ? pretty(t.draft) + (t.draftDone ? ' · Done' : '') : '—',
-        t.final ? pretty(t.final) + (t.finalDone ? ' · Done' : '') : '—',
+        t.draft ? pretty(t.draft) : '-',
+        t.final ? pretty(t.final) : '-',
       ]),
       margin: { left: 16, right: 16, top: 20, bottom: 20 },
       styles: {
         font: 'helvetica',
         fontSize: 9,
-        cellPadding: 3,
+        cellPadding: 2.5,
+        valign: 'middle',
         overflow: 'linebreak',
         textColor: [34, 45, 57],
       },
-      headStyles: { fillColor: [26, 42, 60], textColor: [255, 255, 255] },
-      alternateRowStyles: { fillColor: [245, 247, 249] },
+      headStyles: {
+        fillColor: [244, 245, 247],
+        textColor: [90, 96, 103],
+        fontStyle: 'normal',
+        fontSize: 8,
+      },
+      alternateRowStyles: { fillColor: [249, 250, 251] },
       columnStyles: {
-        0: { cellWidth: 48 },
-        2: { cellWidth: 24 },
-        3: { cellWidth: 24 },
+        0: { cellWidth: 68 },
+        2: { cellWidth: 27 },
+        3: { cellWidth: 27 },
       },
       rowPageBreak: 'avoid',
-      didDrawPage: () => {},
+      willDrawCell: (data) => {
+        if (data.section === 'body' && data.column.index >= 2)
+          data.cell.text = [];
+      },
+      didDrawCell: (data) => {
+        if (data.section !== 'body' || data.column.index < 2) return;
+        const task = rows[data.row.index];
+        const field = data.column.index === 2 ? 'draft' : 'final';
+        const date = task[field];
+        if (!date) {
+          doc.setTextColor(105, 112, 121);
+          doc.text(
+            '-',
+            data.cell.x + 2.5,
+            data.cell.y + data.cell.height / 2 + 1,
+          );
+          return;
+        }
+        const status = reportDateStatus(s, task, field),
+          color = palette[status];
+        const x = data.cell.x + 1.5,
+          z = data.cell.y + data.cell.height / 2 - 2.6;
+        doc.setFillColor(...color.fill);
+        doc.roundedRect(x, z, data.cell.width - 3, 5.5, 2.75, 2.75, 'F');
+        doc.setTextColor(...color.ink);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        doc.text(
+          pretty(date) + (status === 'done' ? ' · Done' : ''),
+          x + 2,
+          z + 3.7,
+        );
+      },
     });
     y =
       (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable
@@ -73,12 +134,26 @@ export function createPdf(s: ReportSnapshot) {
     );
     doc.addPage();
   }
-  title('Marketing review');
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
   doc.setTextColor(85, 95, 105);
   doc.text(`${s.businessName}  |  Meeting: ${s.options.meetingDate}`, 16, y);
-  y += 12;
+  y += 6;
+  const legend = [
+    ['overdue', 'Overdue'],
+    ['soon', 'Due soon'],
+    ['future', 'Upcoming'],
+    ['done', 'Done'],
+  ] as const;
+  legend.forEach(([key, label], i) => {
+    const x = 16 + i * 33;
+    doc.setFillColor(...palette[key].fill);
+    doc.roundedRect(x, y - 3, 30, 5.5, 2, 2, 'F');
+    doc.setTextColor(...palette[key].ink);
+    doc.setFontSize(8);
+    doc.text(label, x + 2, y + 0.7);
+  });
+  y += 13;
   for (const month of reportMonths(s)) {
     if (month.items.length) table(month.label, month.items);
     else {
@@ -141,8 +216,7 @@ export function createPdf(s: ReportSnapshot) {
       ms.push(m);
     for (let i = 0; i < ms.length; i++) {
       const two = s.options.calendarLayout === 'two';
-      if (!two || i % 2 === 0)
-        doc.addPage('letter', two ? 'portrait' : 'landscape');
+      if (!two || i % 2 === 0) doc.addPage('letter', 'portrait');
       const top = two ? (i % 2 === 0 ? 22 : 145) : 23;
       const month = ms[i];
       doc.setFont('times', 'bold');
@@ -151,7 +225,7 @@ export function createPdf(s: ReportSnapshot) {
       doc.text(monthLabel(month), 16, top);
       const start = addDays(month, -parseDay(month).getDay());
       const cellWidth = (width() - 32) / 7;
-      const cellHeight = two ? 14 : 23;
+      const cellHeight = two ? 14 : 32;
       const base = top + 13;
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
@@ -174,26 +248,31 @@ export function createPdf(s: ReportSnapshot) {
         doc.setFontSize(8);
         doc.setTextColor(85, 95, 105);
         doc.text(String(parseDay(date).getDate()), x + 2, z + 4);
-        const labels = tasks.flatMap((t) =>
-          t.kind === 'event' && t.date === date
-            ? [t.title]
-            : t.kind === 'task'
-              ? [
-                  ...(t.draft === date
-                    ? [`Draft: ${t.title}${t.draftDone ? ' (done)' : ''}`]
-                    : []),
-                  ...(t.final === date
-                    ? [`Final: ${t.title}${t.finalDone ? ' (done)' : ''}`]
-                    : []),
-                  ...(t.review === date ? [`Review: ${t.title}`] : []),
-                  ...(t.publication === date ? [t.title] : []),
-                ]
-              : [],
-        );
+        const labels = tasks.flatMap<{
+          label: string;
+          status: keyof typeof palette;
+        }>((t) => {
+          if (t.kind === 'event' && t.date === date)
+            return [{ label: t.title, status: 'future' as const }];
+          if (t.kind !== 'task') return [];
+          return (['draft', 'final', 'review', 'publication'] as const)
+            .filter((field) => t[field] === date)
+            .map((field) => {
+              const status = reportDateStatus(s, t, field);
+              const prefix =
+                field === 'publication'
+                  ? ''
+                  : field[0].toUpperCase() + field.slice(1) + ': ';
+              return {
+                label: prefix + t.title + (status === 'done' ? ' (done)' : ''),
+                status,
+              };
+            });
+        });
         let lineY = z + 8;
         let overflowCount = 0;
         doc.setFontSize(two ? 7 : 8);
-        for (const label of labels) {
+        for (const { label, status } of labels) {
           const lines = doc.splitTextToSize(label, cellWidth - 4) as string[];
           if (two || lineY + lines.length * 3 > z + cellHeight - 5) {
             overflow.push(`${date}: ${label}`);
@@ -201,7 +280,18 @@ export function createPdf(s: ReportSnapshot) {
             continue;
           }
           doc.setFontSize(two ? 6 : 7);
-          doc.setTextColor(22, 36, 52);
+          const color = palette[status];
+          doc.setFillColor(...color.fill);
+          doc.roundedRect(
+            x + 1,
+            lineY - 2.5,
+            cellWidth - 2,
+            lines.length * 3 + 0.5,
+            0.8,
+            0.8,
+            'F',
+          );
+          doc.setTextColor(...color.ink);
           doc.text(lines, x + 2, lineY);
           lineY += lines.length * 3;
         }
