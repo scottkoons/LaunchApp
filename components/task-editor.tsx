@@ -403,6 +403,26 @@ export function TaskEditor({
               )}
             </div>
           )}
+          {isEvent && (
+            <div className="two-col">
+              <label className="field">
+                Start time (optional)
+                <input
+                  type="time"
+                  value={draft.time || ''}
+                  onChange={(e) => change({ time: e.target.value })}
+                />
+              </label>
+              <label className="field">
+                End time (optional)
+                <input
+                  type="time"
+                  value={draft.endTime || ''}
+                  onChange={(e) => change({ endTime: e.target.value })}
+                />
+              </label>
+            </div>
+          )}
           {isContact && (
             <>
               <label className="field">

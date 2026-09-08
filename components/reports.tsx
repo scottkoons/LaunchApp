@@ -201,6 +201,57 @@ export function Reports({
           </button>
         )}
         <div className="report-history">
+          <h3>Discussion items</h3>
+          <p className="hint">
+            Open an item to choose its meeting date or add a decision.
+          </p>
+          {records
+            .filter(
+              (e) =>
+                e.kind === 'agenda' &&
+                e.scope === 'business' &&
+                !e.deletedAt &&
+                !e.archived,
+            )
+            .map((a) => (
+              <button
+                className="history-row"
+                key={a.id}
+                onClick={() => open(a)}
+              >
+                <span>
+                  {a.title}
+                  <small>
+                    {a.date ? pretty(a.date) : 'Choose a meeting date'}
+                  </small>
+                </span>
+              </button>
+            ))}
+          <details>
+            <summary>Previously discussed</summary>
+            {records
+              .filter(
+                (e) =>
+                  e.kind === 'agenda' &&
+                  e.scope === 'business' &&
+                  !e.deletedAt &&
+                  e.archived,
+              )
+              .map((a) => (
+                <button
+                  className="history-row"
+                  key={a.id}
+                  onClick={() => open(a)}
+                >
+                  <span>
+                    {a.title}
+                    <small>{pretty(a.date)}</small>
+                  </span>
+                </button>
+              ))}
+          </details>
+        </div>
+        <div className="report-history">
           <h3>Past meetings</h3>
           {histories.length ? (
             histories.map((m) => (

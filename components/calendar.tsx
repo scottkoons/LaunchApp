@@ -172,7 +172,7 @@ export function Calendar({
                     {key === 'publication'
                       ? 'Live'
                       : key === 'event'
-                        ? 'Event'
+                        ? e.time || 'Event'
                         : key}
                   </small>
                   {e.title}

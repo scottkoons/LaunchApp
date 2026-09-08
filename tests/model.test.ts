@@ -10,9 +10,62 @@ import {
   urgency,
   calendarIcs,
   validateEntity,
+  dashboardGroups,
   type Operation,
   type Entity,
 } from '../lib/model';
+void test('dashboard groups use the next unfinished date and count a task only once', () => {
+  const task = (id: string, extra: Partial<Entity>) =>
+    createEntity('task', 'business', { id, title: id, ...extra });
+  const groups = dashboardGroups(
+    [
+      task('late-draft', { draft: '2026-09-04', final: '2026-09-08' }),
+      task('today', {
+        draft: '2026-09-07',
+        draftDone: true,
+        final: '2026-09-08',
+      }),
+      task('next', { final: '2026-09-15' }),
+      task('later', { final: '2026-09-16' }),
+      task('done', { final: '2026-09-07', status: 'completed' }),
+      task('paused', { final: '2026-09-07', status: 'postponed' }),
+      task('idea', {}),
+    ],
+    '2026-09-08',
+  );
+  assert.deepEqual(
+    groups.map((g) => g.items.map((t) => t.id)),
+    [['late-draft'], ['today'], ['next']],
+  );
+});
+void test('imported repeat schedules respect historical cutoff, skipped dates, and end date', () => {
+  const root = createEntity('task', 'business', {
+    title: 'Weekly routine',
+    repeat: 'weekly',
+    repeatDays: [1],
+    repeatAnchor: '2026-04-27',
+    repeatFrom: '2026-09-08',
+    repeatUntil: '2026-09-30',
+    excludedDates: ['2026-09-21'],
+  });
+  assert.deepEqual(recurrenceDates(root, '2026-12-31'), [
+    '2026-09-14',
+    '2026-09-28',
+  ]);
+});
+void test('timed calendar events retain their original local start and end in ICS', () => {
+  const event = createEntity('event', 'business', {
+    title: 'Photoshoot',
+    date: '2026-06-08',
+    endDate: '2026-06-08',
+    time: '09:00',
+    endTime: '11:00',
+  });
+  const ics = calendarIcs([event], 'business');
+  assert.ok(ics.includes('DTSTART:20260608T090000'));
+  assert.ok(ics.includes('DTEND:20260608T110000'));
+  assert.ok(!ics.includes('VALUE=DATE'));
+});
 void test('personal and report-muted work never enter report sections or calendars', () => {
   const o = {
     ...defaultReport(),

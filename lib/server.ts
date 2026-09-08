@@ -48,13 +48,20 @@ export async function allRecords(user: string) {
   for (const root of [...list].filter(
     (t) =>
       t.kind === 'task' &&
+      !t.deletedAt &&
       t.repeat &&
       t.repeat !== 'none' &&
       !t.seriesStopped &&
       (!t.seriesId || t.seriesId === t.id),
   )) {
+    const represented = new Set(
+      list
+        .filter((t) => t.id === root.id || t.seriesId === root.id)
+        .map((t) => t.occurrence),
+    );
     for (const date of recurrenceDates(root, until)) {
       if (date === (root.occurrence || root.repeatAnchor)) continue;
+      if (represented.has(date)) continue;
       const e = spawnOccurrence(root, date);
       if (ids.has(e.id)) continue;
       await database()

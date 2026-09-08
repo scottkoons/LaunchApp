@@ -100,6 +100,7 @@ export function SettingsPanel({
       )
         throw new Error('This backup format is not supported.');
       for (const f of b.files as FileMeta[]) {
+        setBusy('Importing ' + f.name + '…');
         const item = zip.file('files/' + f.id);
         if (!item) throw new Error('Backup is missing ' + f.name);
         const blob = await item.async('blob');
@@ -107,11 +108,18 @@ export function SettingsPanel({
           throw new Error(f.name + ' is over the file limit.');
         const form = new FormData();
         form.set('id', f.id);
-        form.set('file', blob, f.name);
+        form.set(
+          'file',
+          new Blob([blob], { type: f.type || 'application/octet-stream' }),
+          f.name,
+        );
         const r = await fetch('/api/files', { method: 'POST', body: form });
         if (!r.ok) throw new Error('Could not restore ' + f.name);
       }
       for (let i = 0; i < b.records.length; i += 100) {
+        setBusy(
+          `Importing records ${i + 1}–${Math.min(i + 100, b.records.length)}…`,
+        );
         const r = await fetch('/api/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

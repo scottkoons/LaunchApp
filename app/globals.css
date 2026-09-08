@@ -628,6 +628,120 @@ kbd {
 .task-group {
   margin-top: 22px;
 }
+.nav-count.amber {
+  color: var(--yellow);
+  background: color-mix(in oklab, var(--yellow) 12%, transparent);
+  margin-left: 0;
+}
+.summary {
+  flex-wrap: wrap;
+}
+.status-dot.blue {
+  background: var(--blue);
+}
+.dashboard-group {
+  margin-top: 28px;
+}
+.dashboard-group .task-table td {
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+.dashboard-group .section-heading {
+  margin-bottom: 12px;
+}
+.dashboard-overdue .section-heading h2 {
+  color: var(--destructive);
+}
+.dashboard-today .section-heading h2 {
+  color: var(--primary);
+}
+.day-calendar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  padding: 15px 0 22px;
+  align-items: center;
+}
+.day-calendar > span {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+.day-calendar button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+.day-calendar button b {
+  color: var(--primary);
+  font-weight: 500;
+}
+.day-calendar svg,
+.dashboard-bottom svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.dashboard-bottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+  margin-top: 44px;
+  padding-top: 28px;
+  border-top: 1px solid var(--border);
+}
+.dashboard-bottom > section {
+  min-width: 0;
+}
+.dashboard-bottom .section-heading {
+  justify-content: space-between;
+  align-items: baseline;
+}
+.dashboard-bottom h2 {
+  font-size: 21px;
+}
+.dashboard-bottom .text-button {
+  font-size: 13px;
+}
+.dashboard-preview {
+  display: flex;
+  gap: 12px;
+  text-align: left;
+  align-items: flex-start;
+  width: 100%;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+.dashboard-preview > svg {
+  margin-top: 4px;
+  color: var(--muted-foreground);
+}
+.dashboard-preview span {
+  overflow-wrap: anywhere;
+  font-size: 15px;
+}
+.dashboard-preview small {
+  display: block;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  margin-top: 4px;
+}
+.dashboard-preview:hover span {
+  color: var(--primary);
+}
+@media (max-width: 767px) {
+  .dashboard-bottom {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .dashboard-group {
+    margin-top: 18px;
+  }
+}
 .section-heading {
   display: flex;
   align-items: center;

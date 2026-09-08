@@ -34,6 +34,9 @@ export type Entity = {
   repeat?: 'none' | 'weekly' | 'monthly' | 'quarterly';
   repeatDays?: number[];
   repeatAnchor?: string;
+  repeatFrom?: string;
+  repeatUntil?: string;
+  excludedDates?: string[];
   seriesId?: string;
   occurrence?: string;
   seriesStopped?: boolean;
@@ -57,6 +60,7 @@ export type Entity = {
   reportDefault?: boolean;
   snapshot?: ReportSnapshot;
   monthlyNotes?: Record<string, string>;
+  legacy?: Record<string, unknown>;
 };
 export type FileMeta = {
   id: string;
@@ -175,6 +179,30 @@ export function urgency(t: Entity, today = day(), soon = 2) {
   if (!d) return 'none';
   return d < today ? 'overdue' : d <= addDays(today, soon) ? 'soon' : 'future';
 }
+export function dashboardGroups(tasks: Entity[], today = day()) {
+  const active = tasks.filter(
+    (t) => t.kind === 'task' && !t.deletedAt && t.status === 'active',
+  );
+  return [
+    {
+      key: 'overdue',
+      label: 'Overdue',
+      items: active.filter((t) => nextDate(t) && nextDate(t) < today),
+    },
+    {
+      key: 'today',
+      label: 'Due today',
+      items: active.filter((t) => nextDate(t) === today),
+    },
+    {
+      key: 'next',
+      label: 'Next 7 days',
+      items: active.filter(
+        (t) => nextDate(t) > today && nextDate(t) <= addDays(today, 7),
+      ),
+    },
+  ];
+}
 export function dateStatus(
   date?: string,
   done?: boolean,
@@ -267,6 +295,7 @@ export function recurrenceDates(t: Entity, until: string): string[] {
   const anchor = t.repeatAnchor || workDate(t);
   if (!anchor || !t.repeat || t.repeat === 'none' || t.seriesStopped) return [];
   const out: string[] = [];
+  if (t.repeatUntil && t.repeatUntil < until) until = t.repeatUntil;
   if (t.repeat === 'weekly') {
     const days = t.repeatDays?.length
       ? t.repeatDays
@@ -287,7 +316,11 @@ export function recurrenceDates(t: Entity, until: string): string[] {
       out.push(d);
     }
   }
-  return out;
+  return out.filter(
+    (date) =>
+      (!t.repeatFrom || date >= t.repeatFrom) &&
+      !t.excludedDates?.includes(date),
+  );
 }
 export function spawnOccurrence(t: Entity, date: string): Entity {
   const anchor = t.repeatAnchor || workDate(t);
@@ -376,6 +409,8 @@ export function validateEntity(e: Entity) {
     'date',
     'endDate',
     'revisit',
+    'repeatFrom',
+    'repeatUntil',
   ] as const)
     if (
       e[k] &&
@@ -383,6 +418,9 @@ export function validateEntity(e: Entity) {
     )
       throw new Error('Invalid date');
   if (e.scope === 'personal') e.report = false;
+  for (const value of [e.time, e.endTime])
+    if (value && !/^([01]\d|2[0-3]):[0-5]\d$/.test(value))
+      throw new Error('Invalid time');
   if (
     e.repeat &&
     !['none', 'weekly', 'monthly', 'quarterly'].includes(e.repeat)
@@ -422,14 +460,29 @@ export function calendarIcs(records: Entity[], scope: Scope) {
           : [];
     for (const m of entries) {
       if (!m.date) continue;
+      // Source calendar times have no timezone. Preserve them as local floating
+      // times rather than silently assigning UTC or turning them into all-day events.
+      const timed = e.kind === 'event' && e.time;
+      const dateLines = timed
+        ? [
+            `DTSTART:${m.date.replace(/-/g, '')}T${e.time!.replace(':', '')}00`,
+            ...(e.endTime
+              ? [
+                  `DTEND:${(e.endDate || m.date).replace(/-/g, '')}T${e.endTime.replace(':', '')}00`,
+                ]
+              : ['DURATION:PT1H']),
+          ]
+        : [
+            `DTSTART;VALUE=DATE:${m.date.replace(/-/g, '')}`,
+            `DTEND;VALUE=DATE:${addDays(e.kind === 'event' ? e.endDate || m.date : m.date, 1).replace(/-/g, '')}`,
+          ];
       lines.push(
         'BEGIN:VEVENT',
         `UID:${e.id}-${m.key}@launch`,
         `DTSTAMP:${now()
           .replace(/[-:]/g, '')
           .replace(/\.\d{3}/, '')}`,
-        `DTSTART;VALUE=DATE:${m.date.replace(/-/g, '')}`,
-        `DTEND;VALUE=DATE:${addDays(e.kind === 'event' ? e.endDate || m.date : m.date, 1).replace(/-/g, '')}`,
+        ...dateLines,
         `SUMMARY:${escapeIcs((m.key === 'event' ? '' : m.key[0].toUpperCase() + m.key.slice(1) + ': ') + e.title)}`,
         `DESCRIPTION:${escapeIcs(e.notes)}`,
         'END:VEVENT',

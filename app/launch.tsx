@@ -37,6 +37,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   LayoutDashboard,
+  ListTodo,
   Inbox,
   CalendarDays,
   NotebookPen,
@@ -80,6 +81,7 @@ import {
   nextDate,
   monthLabel,
   urgency,
+  dashboardGroups,
   dateStatus,
   type Entity,
   type Scope,
@@ -92,7 +94,8 @@ import { Reports } from '@/components/reports';
 import { noteInput, type ModelDocument } from '@/lib/browser-types';
 import { SettingsPanel } from '@/components/settings-panel';
 const NAV = [
-  ['tasks', 'Tasks', LayoutDashboard],
+  ['dashboard', 'Dashboard', LayoutDashboard],
+  ['tasks', 'All tasks', ListTodo],
   ['notes', 'Quick notes', Inbox],
   ['meetings', 'Meetings', NotebookPen],
   ['reference', 'Reference board', Images],
@@ -110,11 +113,11 @@ export default function Launch({
 }) {
   const data = useLaunchStore(account),
     { store, records, files, ready } = data;
-  const [view, setView] = useState('tasks'),
+  const [view, setView] = useState('dashboard'),
     [scope, setScope] = useState<Scope>('business'),
     [theme, setTheme] = useState('space'),
     [mode, setMode] = useState('grouped'),
-    [sort, setSort] = useState('manual'),
+    [sort, setSort] = useState('next'),
     [direction, setDirection] = useState(1),
     [query, setQuery] = useState(''),
     [filter, setFilter] = useState('all'),
@@ -229,8 +232,21 @@ export default function Launch({
   const upcoming = active.filter(
     (t) => urgency(t, day(), soon) === 'soon',
   ).length;
+  const todayCount = active.filter((t) => nextDate(t) === day()).length;
+  const isDashboard = view === 'dashboard' || view === 'today';
+  const todayEvents = scoped
+    .filter(
+      (e) =>
+        (e.kind === 'event' &&
+          e.date &&
+          e.date <= day() &&
+          (e.endDate || e.date) >= day()) ||
+        (e.kind === 'task' && e.publication === day()),
+    )
+    .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
   const notes = scoped.filter((e) => e.kind === 'note' && !e.archived);
   const isTaskView = [
+    'dashboard',
     'tasks',
     'completed',
     'backburner',
@@ -339,8 +355,11 @@ export default function Launch({
     for (let n = 0; n < list.length; n++)
       if (list[n].order !== n) await store.change(list[n], { order: n });
   }
-  const groups =
-    mode === 'grouped' && view === 'tasks'
+  const groups = isDashboard
+    ? dashboardGroups(filtered).filter(
+        (g) => g.items.length > 0 && (view !== 'today' || g.key !== 'next'),
+      )
+    : mode === 'grouped' && view === 'tasks'
       ? [...new Set(filtered.map((t) => workDate(t).slice(0, 7)))]
           .sort()
           .map((m) => ({
@@ -376,7 +395,13 @@ export default function Launch({
     ) : (
       <>
         {groups.map((group) => (
-          <section className="task-group" key={group.key}>
+          <section
+            className={
+              'task-group ' +
+              (isDashboard ? 'dashboard-group dashboard-' + group.key : '')
+            }
+            key={group.key}
+          >
             <div className="section-heading">
               <h2>{group.label}</h2>
               <span className="count">{group.items.length}</span>
@@ -638,8 +663,20 @@ export default function Launch({
         ))}
         {!groups.length && (
           <Empty
-            title="Make room for what’s next."
-            text="Start with a task. Dates and details can come later."
+            title={
+              isDashboard
+                ? query
+                  ? 'No matching tasks.'
+                  : 'Your day has some breathing room.'
+                : 'Make room for what’s next.'
+            }
+            text={
+              isDashboard
+                ? query
+                  ? 'Try another search, or open All tasks to look further ahead.'
+                  : 'No unfinished deadlines in this window. Your future plans and Back burner ideas are still here.'
+                : 'Start with a task. Dates and details can come later.'
+            }
             action={() => add('task')}
             label="Add your first task"
           />
@@ -668,8 +705,11 @@ export default function Launch({
                   {v === 'notes' && notes.length > 0 && (
                     <b className="nav-count">{notes.length}</b>
                   )}
-                  {v === 'tasks' && overdue > 0 && (
+                  {v === 'dashboard' && overdue > 0 && (
                     <b className="nav-count red">{overdue}</b>
+                  )}
+                  {v === 'dashboard' && upcoming > 0 && (
+                    <b className="nav-count amber">{upcoming}</b>
                   )}
                 </NavItem>
               </SidebarMenuItem>
@@ -775,7 +815,7 @@ export default function Launch({
               <div className="page-heading">
                 <div>
                   <p className="eyebrow">
-                    {view === 'tasks' || view === 'today'
+                    {view === 'tasks' || isDashboard
                       ? new Date().toLocaleDateString('en-US', {
                           weekday: 'long',
                           month: 'long',
@@ -787,7 +827,8 @@ export default function Launch({
                   </p>
                   <h1>
                     {{
-                      tasks: 'Your day, in view.',
+                      dashboard: 'Your day, in view.',
+                      tasks: 'All your tasks.',
                       today: 'Today',
                       notes: 'A place for your thoughts.',
                       meetings: 'Make the meeting count.',
@@ -835,6 +876,7 @@ export default function Launch({
                       className={filter === 'overdue' ? 'selected' : ''}
                       onClick={() => {
                         setView('tasks');
+                        setMode('flat');
                         setFilter(filter === 'overdue' ? 'all' : 'overdue');
                       }}
                     >
@@ -842,9 +884,20 @@ export default function Launch({
                       <strong>{overdue}</strong>Overdue
                     </button>
                     <button
+                      className={filter === 'today' ? 'selected' : ''}
+                      onClick={() => {
+                        setView('today');
+                        setFilter('all');
+                      }}
+                    >
+                      <span className="status-dot blue" />
+                      <strong>{todayCount}</strong>Due today
+                    </button>
+                    <button
                       className={filter === 'soon' ? 'selected' : ''}
                       onClick={() => {
                         setView('tasks');
+                        setMode('flat');
                         setFilter(filter === 'soon' ? 'all' : 'soon');
                       }}
                     >
@@ -857,7 +910,10 @@ export default function Launch({
                         setFilter('all');
                       }}
                     >
-                      <strong>{active.length}</strong>Active tasks
+                      <strong>
+                        {active.filter((t) => workDate(t)).length}
+                      </strong>
+                      Scheduled
                     </button>
                     {notes.length > 0 && (
                       <button
@@ -870,6 +926,26 @@ export default function Launch({
                       </button>
                     )}
                   </div>
+                  {isDashboard && todayEvents.length > 0 && (
+                    <section
+                      className="day-calendar"
+                      aria-label="On the calendar today"
+                    >
+                      <span>
+                        <CalendarDays /> On the calendar
+                      </span>
+                      {todayEvents.map((e) => (
+                        <button key={e.id} onClick={() => open(e)}>
+                          <b>
+                            {e.time ||
+                              (e.kind === 'task' ? 'Publication' : 'All day')}
+                          </b>
+                          {e.title}
+                          <ArrowUpRight />
+                        </button>
+                      ))}
+                    </section>
+                  )}
                   <div className="toolbar">
                     {view === 'tasks' ? (
                       <Tabs
@@ -903,11 +979,15 @@ export default function Launch({
                       </div>
                     ) : (
                       <p className="hint">
-                        {view === 'backburner'
-                          ? 'No deadlines needed. Add dates to bring an idea into your task list.'
-                          : view === 'postponed'
-                            ? 'Original deadlines are kept. Review them before resuming.'
-                            : 'Overdue tasks and today’s unfinished deadlines.'}
+                        {isDashboard
+                          ? view === 'today'
+                            ? 'Overdue work and today’s unfinished deadlines.'
+                            : 'What needs attention, followed by what’s coming next.'
+                          : view === 'backburner'
+                            ? 'No deadlines needed. Add dates to bring an idea into your task list.'
+                            : view === 'postponed'
+                              ? 'Original deadlines are kept. Review them before resuming.'
+                              : 'Overdue tasks and today’s unfinished deadlines.'}
                       </p>
                     )}
                     <div className="list-tools">
@@ -941,6 +1021,106 @@ export default function Launch({
                     <p className="loading">Opening your workspace…</p>
                   ) : (
                     showTasks()
+                  )}
+                  {isDashboard && ready && (
+                    <div className="dashboard-bottom">
+                      <section>
+                        <div className="section-heading">
+                          <h2>Quick notes</h2>
+                          <button
+                            className="text-button"
+                            onClick={() => navigate('notes')}
+                          >
+                            View all <ArrowUpRight />
+                          </button>
+                        </div>
+                        {notes
+                          .slice()
+                          .sort((a, b) =>
+                            b.createdAt.localeCompare(a.createdAt),
+                          )
+                          .slice(0, 3)
+                          .map((n) => (
+                            <button
+                              className="dashboard-preview"
+                              key={n.id}
+                              onClick={() => open(n)}
+                            >
+                              <Inbox />
+                              <span>
+                                {n.title}
+                                <small>{pretty(n.createdAt)}</small>
+                              </span>
+                            </button>
+                          ))}
+                        <button
+                          className="text-button"
+                          onClick={() => setCaptureOpen(true)}
+                        >
+                          <Plus /> Capture a thought
+                        </button>
+                      </section>
+                      <section>
+                        <div className="section-heading">
+                          <h2>On your radar</h2>
+                          <button
+                            className="text-button"
+                            onClick={() => navigate('backburner')}
+                          >
+                            Back burner <ArrowUpRight />
+                          </button>
+                        </div>
+                        {active
+                          .filter((t) => !workDate(t))
+                          .sort(
+                            (a, b) =>
+                              Number(!!b.important) - Number(!!a.important) ||
+                              (a.order || 0) - (b.order || 0),
+                          )
+                          .slice(0, 3)
+                          .map((t) => (
+                            <button
+                              className="dashboard-preview"
+                              key={t.id}
+                              onClick={() => open(t)}
+                            >
+                              <Orbit />
+                              <span>
+                                {t.title}
+                                <small>No deadline yet</small>
+                              </span>
+                            </button>
+                          ))}
+                        {tasks
+                          .filter(
+                            (t) =>
+                              t.status === 'postponed' &&
+                              t.revisit &&
+                              t.revisit <= day(),
+                          )
+                          .map((t) => (
+                            <button
+                              className="dashboard-preview"
+                              key={t.id}
+                              onClick={() => open(t)}
+                            >
+                              <Pause />
+                              <span>
+                                {t.title}
+                                <small>
+                                  Ready to revisit · {pretty(t.revisit)}
+                                </small>
+                              </span>
+                            </button>
+                          ))}
+                        <button
+                          className="text-button"
+                          onClick={() => navigate('tasks')}
+                        >
+                          Open full task list <ArrowUpRight />
+                        </button>
+                      </section>
+                    </div>
                   )}
                 </>
               )}
