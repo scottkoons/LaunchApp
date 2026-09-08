@@ -141,6 +141,52 @@ export default function Launch({
     [refYear, setRefYear] = useState('all');
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reordering = useRef(false);
+  const [completing, setCompleting] = useState<Record<string, Entity>>({});
+  const completionTimers = useRef(
+    new Map<string, ReturnType<typeof setTimeout>>(),
+  );
+  const undoRef = useRef<() => void>(() => {});
+  function stopCompletion(id: string) {
+    clearTimeout(completionTimers.current.get(id));
+    completionTimers.current.delete(id);
+    setCompleting((items) => {
+      const next = { ...items };
+      delete next[id];
+      return next;
+    });
+  }
+  function animateCompletion(task: Entity) {
+    if (completionTimers.current.has(task.id)) return;
+    setCompleting((items) => ({ ...items, [task.id]: task }));
+    completionTimers.current.set(
+      task.id,
+      setTimeout(() => stopCompletion(task.id), 1200),
+    );
+  }
+  async function undoLast() {
+    try {
+      const restored = await store.undoLast();
+      if (restored) {
+        stopCompletion(restored.id);
+        notify(
+          `Undone · ${restored.title}`,
+          store.canUndo ? () => void undoLast() : undefined,
+        );
+      }
+    } catch (error) {
+      notify((error as Error).message);
+    }
+  }
+  useEffect(() => {
+    undoRef.current = () => void undoLast();
+  });
+  useEffect(() => {
+    const timers = completionTimers.current;
+    return () => {
+      timers.forEach(clearTimeout);
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
   useEffect(() => {
     if (ready) localStorage.setItem('launch-task-sort', sort);
   }, [sort, ready]);
@@ -185,9 +231,27 @@ export default function Launch({
   }
   useEffect(() => {
     const handle = (e: KeyboardEvent) => {
-      const editing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(
-        (e.target as HTMLElement).tagName,
-      );
+      const editing = e
+        .composedPath()
+        .some(
+          (target) =>
+            target instanceof HTMLElement &&
+            (target.matches('input, textarea, select, [role="textbox"]') ||
+              target.isContentEditable),
+        );
+      if (e.isComposing) return;
+      if (
+        !editing &&
+        (e.metaKey || e.ctrlKey) &&
+        !e.shiftKey &&
+        !e.altKey &&
+        e.key.toLowerCase() === 'z' &&
+        (store.canUndo || store.undoing)
+      ) {
+        e.preventDefault();
+        if (!e.repeat) undoRef.current();
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         searchRef.current?.focus();
@@ -199,7 +263,7 @@ export default function Launch({
     };
     window.addEventListener('keydown', handle);
     return () => window.removeEventListener('keydown', handle);
-  }, []);
+  }, [store]);
   useEffect(() => {
     const ctx = (document as ModelDocument).modelContext;
     if (!ctx?.registerTool || !ready) return;
@@ -290,21 +354,15 @@ export default function Launch({
     );
   }
   async function complete(t: Entity) {
-    const old = { status: t.status, completedAt: t.completedAt };
-    await store.change(t, { status: 'completed', completedAt: now() });
-    notify(
-      'Completed. Nice work.',
-      () =>
-        void store.change(
-          {
-            ...t,
-            status: 'completed',
-            completedAt: store.data.records.find((e) => e.id === t.id)
-              ?.completedAt,
-          },
-          old,
-        ),
-    );
+    if (completionTimers.current.has(t.id)) return;
+    animateCompletion(t);
+    try {
+      await store.change(t, { status: 'completed', completedAt: now() });
+      notify('Task completed.', () => void undoLast());
+    } catch (error) {
+      stopCompletion(t.id);
+      notify((error as Error).message);
+    }
   }
   async function milestone(t: Entity, key: 'draft' | 'final') {
     const field = key === 'draft' ? 'draftDone' : 'finalDone';
@@ -313,16 +371,15 @@ export default function Launch({
       !t[field]
         ? `${key === 'draft' ? 'Draft' : 'Final'} marked finished.`
         : 'Milestone reopened.',
+      () => void undoLast(),
     );
   }
   async function trash(e: Entity) {
     await store.change(e, { deletedAt: now() });
-    notify('Moved to Trash.', () => {
-      const current = store.data.records.find((x) => x.id === e.id);
-      if (current) void store.change(current, { deletedAt: null });
-    });
+    notify('Moved to Trash.', () => void undoLast());
   }
   const filtered = tasks
+    .map((task) => (view === 'completed' ? task : completing[task.id] || task))
     .filter((t) =>
       view === 'completed'
         ? t.status === 'completed' &&
@@ -456,6 +513,7 @@ export default function Launch({
               <TaskTable
                 tasks={group.items}
                 completed={view === 'completed'}
+                completing={completing}
                 soon={soon}
                 sort={sort}
                 direction={direction}
@@ -1407,7 +1465,17 @@ export default function Launch({
         records={records}
         files={files}
         notify={notify}
-        onSaved={() => {}}
+        onSaved={(saved) => {
+          if (saved.deletedAt && !editor?.deletedAt)
+            notify('Moved to Trash.', () => void undoLast());
+          else if (
+            saved.status === 'completed' &&
+            editor?.status !== 'completed'
+          ) {
+            if (editor) animateCompletion(editor);
+            notify('Task completed.', () => void undoLast());
+          }
+        }}
       />
       <Sheet open={captureOpen} onOpenChange={setCaptureOpen}>
         <SheetContent className="capture-sheet">
@@ -1513,9 +1581,10 @@ export default function Launch({
           {toast.undo && (
             <button
               onClick={() => {
-                toast.undo?.();
                 setToast(null);
+                toast.undo?.();
               }}
+              title="Undo last action · Command-Z / Ctrl-Z"
             >
               Undo
             </button>

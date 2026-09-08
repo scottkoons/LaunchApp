@@ -38,6 +38,7 @@ import { day, dateStatus, pretty, type Entity } from '@/lib/model';
 type Props = {
   tasks: Entity[];
   completed: boolean;
+  completing: Record<string, Entity>;
   soon: number;
   sort: string;
   direction: number;
@@ -193,6 +194,7 @@ export function TaskTable(props: Props) {
 function TaskRow({
   task,
   completed,
+  completing,
   soon,
   busy,
   onOpen,
@@ -200,6 +202,7 @@ function TaskRow({
   onMilestone,
   onPatch,
 }: Props & { task: Entity; busy: boolean }) {
+  const finishing = !!completing[task.id] && !completed;
   const {
     setNodeRef,
     attributes,
@@ -207,7 +210,7 @@ function TaskRow({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: task.id, disabled: completed || busy });
+  } = useSortable({ id: task.id, disabled: completed || busy || finishing });
   const pill = (key: 'draft' | 'final') => {
     const done = task[key === 'draft' ? 'draftDone' : 'finalDone'];
     return task[key] ? (
@@ -238,6 +241,7 @@ function TaskRow({
         'classic-task-grid classic-task-row' +
         (task.important ? ' is-important' : '') +
         (task.pinned ? ' is-pinned' : '') +
+        (finishing ? ' is-completing' : '') +
         (isDragging ? ' is-dragging' : '')
       }
       style={{
@@ -272,7 +276,7 @@ function TaskRow({
             <Flag />
           </button>
           <button className="classic-title" onClick={() => onOpen(task)}>
-            {task.title}
+            <span className="task-title-text">{task.title}</span>
           </button>
           {!task.report && task.scope === 'business' && (
             <span
@@ -316,6 +320,7 @@ function TaskRow({
       <div className="classic-date">{pill('final')}</div>
       <button
         className="classic-action"
+        disabled={finishing}
         aria-label={`${completed ? 'Reopen' : 'Complete'} ${task.title}`}
         title={
           completed
@@ -328,7 +333,7 @@ function TaskRow({
             : onComplete(task)
         }
       >
-        {completed ? <Undo2 /> : <CircleCheck />}
+        {completed ? <Undo2 /> : finishing ? <Check /> : <CircleCheck />}
       </button>
       <button
         className={

@@ -63,6 +63,17 @@ export class LaunchStore {
   lastSync = '';
   listeners = new Set<() => void>();
   saveChain = Promise.resolve();
+  // Session history is independent of notification lifetime. Store only the
+  // lifecycle fields so undo never rolls back subsequent notes or attachments.
+  undoHistory: {
+    entityId: string;
+    before: Partial<Entity>;
+    after: Partial<Entity>;
+  }[] = [];
+  undoing = false;
+  get canUndo() {
+    return this.undoHistory.length > 0;
+  }
   constructor(account: string) {
     this.account = account;
   }
@@ -111,12 +122,38 @@ export class LaunchStore {
       this.emit();
     }
   }
-  async change(entity: Entity, patch: Partial<Entity>) {
+  async change(entity: Entity, patch: Partial<Entity>, remember = true) {
     const base: Partial<Entity> = {};
     for (const key of Object.keys(patch) as (keyof Entity)[])
       Object.assign(base, { [key]: entity[key] });
     const latest = this.data.records.find((e) => e.id === entity.id) || entity;
     const next = validateEntity({ ...latest, ...patch, updatedAt: now() });
+    if (remember) {
+      const keys: (keyof Entity)[] = ['deletedAt', 'draftDone', 'finalDone'];
+      if (latest.status === 'completed' || next.status === 'completed')
+        keys.push('status', 'completedAt');
+      const before: Partial<Entity> = {},
+        after: Partial<Entity> = {};
+      const defaults = {
+        deletedAt: null,
+        draftDone: false,
+        finalDone: false,
+        completedAt: '',
+        status: 'active',
+      };
+      for (const key of keys) {
+        if (key in patch && latest[key] !== next[key]) {
+          Object.assign(before, {
+            [key]: latest[key] ?? defaults[key as keyof typeof defaults],
+          });
+          Object.assign(after, { [key]: next[key] });
+        }
+      }
+      if (Object.keys(before).length) {
+        this.undoHistory.push({ entityId: entity.id, before, after });
+        if (this.undoHistory.length > 50) this.undoHistory.shift();
+      }
+    }
     this.data.records = this.data.records
       .filter((e) => e.id !== next.id)
       .concat(next);
@@ -131,6 +168,33 @@ export class LaunchStore {
     await this.persist();
     void this.sync();
     return next;
+  }
+  async undoLast() {
+    if (this.undoing) return null;
+    const action = this.undoHistory.at(-1);
+    if (!action) return null;
+    const current = this.data.records.find((e) => e.id === action.entityId);
+    if (
+      !current ||
+      Object.entries(action.after).some(
+        ([key, value]) =>
+          JSON.stringify(current[key as keyof Entity]) !==
+          JSON.stringify(value),
+      )
+    ) {
+      this.undoHistory.pop();
+      throw new Error(
+        'This item has changed since that action. Open it to review its latest state.',
+      );
+    }
+    this.undoing = true;
+    this.undoHistory.pop();
+    try {
+      const restored = await this.change(current, action.before, false);
+      return restored;
+    } finally {
+      this.undoing = false;
+    }
   }
   async add(entity: Entity) {
     validateEntity(entity);

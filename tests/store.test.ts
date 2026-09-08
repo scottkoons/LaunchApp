@@ -125,3 +125,88 @@ void test('offline note and photo survive restart, sync once, and retain conflic
   assert.equal(restarted.data.queue.length, 0);
   assert.equal(remote[0].notes, 'Retain this during a timeout');
 });
+
+void test('completion and deletion undo in order without reverting later edits', async () => {
+  Object.defineProperty(globalThis, 'navigator', {
+    value: { onLine: false },
+    configurable: true,
+  });
+  const store = new LaunchStore('undo-lifecycle');
+  const first = createEntity('task', 'business', {
+    title: 'Magazine ad',
+    files: ['artwork'],
+    order: 17,
+    pinned: true,
+  });
+  const second = createEntity('task', 'business', { title: 'Menu update' });
+  await store.add(first);
+  await store.add(second);
+  const completing = store.change(first, {
+    status: 'completed',
+    completedAt: '2026-09-08T12:00:00Z',
+  });
+  // Undo also works before the completion's storage write has finished.
+  const undone = await store.undoLast();
+  await completing;
+  assert.equal(undone?.status, 'active');
+  assert.equal(undone?.completedAt, '');
+  assert.equal(store.canUndo, false);
+  await store.change(undone!, {
+    status: 'completed',
+    completedAt: '2026-09-08T12:00:00Z',
+  });
+  await store.change(second, { deletedAt: '2026-09-08T13:00:00Z' });
+  assert.equal((await store.undoLast())?.id, second.id);
+  assert.equal(
+    store.data.records.find((e) => e.id === second.id)?.deletedAt,
+    null,
+  );
+  const completed = store.data.records.find((e) => e.id === first.id)!;
+  await store.change(completed, { notes: 'Keep this newer meeting note.' });
+  const restored = await store.undoLast();
+  assert.equal(restored?.status, 'active');
+  assert.equal(restored?.notes, 'Keep this newer meeting note.');
+  assert.deepEqual(restored?.files, ['artwork']);
+  assert.equal(restored?.order, 17);
+  assert.equal(restored?.pinned, true);
+  assert.equal(await store.undoLast(), null);
+  assert.equal(store.canUndo, false);
+  // Restore operations persist and queue just like other offline edits.
+  const reloaded = new LaunchStore('undo-lifecycle');
+  await reloaded.init();
+  assert.equal(
+    reloaded.data.records.find((e) => e.id === first.id)?.status,
+    'active',
+  );
+  assert.equal(
+    reloaded.data.records.find((e) => e.id === second.id)?.deletedAt,
+    null,
+  );
+  assert.equal(reloaded.data.queue.at(-1)?.patch.status, 'active');
+});
+
+void test('undo protects newer lifecycle changes and does not undo twice concurrently', async () => {
+  Object.defineProperty(globalThis, 'navigator', {
+    value: { onLine: false },
+    configurable: true,
+  });
+  const store = new LaunchStore('undo-protection');
+  const task = createEntity('task', 'business', { title: 'Review artwork' });
+  await store.add(task);
+  await store.change(task, { draftDone: true });
+  const [restored, ignored] = await Promise.all([
+    store.undoLast(),
+    store.undoLast(),
+  ]);
+  assert.equal(restored?.draftDone, false);
+  assert.equal(ignored, null);
+  await store.change(restored!, {
+    status: 'completed',
+    completedAt: '2026-09-08T12:00:00Z',
+  });
+  // Simulate an incoming sync change after the recorded action.
+  store.data.records[0] = { ...store.data.records[0], status: 'postponed' };
+  await assert.rejects(store.undoLast(), /changed since that action/);
+  assert.equal(store.data.records[0].status, 'postponed');
+  assert.equal(store.canUndo, false);
+});

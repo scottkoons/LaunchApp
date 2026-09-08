@@ -603,6 +603,7 @@ export function TaskEditor({
             {records.some((e) => e.id === draft.id) && (
               <button
                 className="text-button danger"
+                disabled={saving}
                 onClick={() => void save({ deletedAt: now() })}
               >
                 <Trash2 />
@@ -615,6 +616,7 @@ export function TaskEditor({
           {isTask && draft.status !== 'completed' && (
             <button
               className="button"
+              disabled={saving}
               onClick={() =>
                 void save({ status: 'completed', completedAt: now() })
               }
