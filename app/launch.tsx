@@ -14,14 +14,7 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableHead,
-  TableRow,
-  TableCell,
-} from '@/components/ui/table';
+
 import {
   Sheet,
   SheetContent,
@@ -35,7 +28,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { Checkbox } from '@/components/ui/checkbox';
+import { TaskTable } from '@/components/task-table';
+import { NotesDrawer } from '@/components/notes-drawer';
 import {
   PanelLeftClose,
   PanelLeftOpen,
@@ -57,19 +51,11 @@ import {
   CloudOff,
   RefreshCw,
   Check,
-  Flag,
-  Pin,
-  FileX,
-  Repeat2,
-  GripVertical,
-  ArrowUp,
-  ArrowDown,
   Undo2,
   Trash2,
   Sun,
   Moon,
   Rocket,
-  ArrowUpDown,
   X,
   Send,
   FileText,
@@ -88,7 +74,6 @@ import {
   monthlyTaskGroups,
   compareTasks,
   manualOrderChanges,
-  dateStatus,
   type Entity,
   type Scope,
 } from '@/lib/model';
@@ -102,6 +87,9 @@ import { SettingsPanel } from '@/components/settings-panel';
 const NAV = [
   ['dashboard', 'Dashboard', LayoutDashboard],
   ['tasks', 'All tasks', ListTodo],
+  ['grouped', 'Grouped', LayoutDashboard],
+  ['flat', 'Flat', ListTodo],
+  ['calendar', 'Calendar', CalendarDays],
   ['notes', 'Quick notes', Inbox],
   ['meetings', 'Generate report', FileText],
   ['reference', 'Reference board', Images],
@@ -112,9 +100,10 @@ const NAV = [
 ] as const;
 const NAV_GROUPS = [
   {
-    label: 'Views',
-    items: ['dashboard', 'tasks', 'completed', 'backburner', 'postponed'],
+    label: 'Tasks',
+    items: ['dashboard', 'completed', 'backburner', 'postponed'],
   },
+  { label: 'Views', items: ['grouped', 'flat', 'calendar'] },
   { label: 'Workspace', items: ['notes', 'reference', 'contacts'] },
   { label: 'Exports', items: ['meetings'] },
 ];
@@ -147,7 +136,7 @@ export default function Launch({
     [syncOpen, setSyncOpen] = useState(false),
     [completedFrom, setCompletedFrom] = useState(''),
     [completedTo, setCompletedTo] = useState(day()),
-    [dragId, setDragId] = useState(''),
+    [columnRatio, setColumnRatio] = useState(0.55),
     [noteTab, setNoteTab] = useState('inbox'),
     [refYear, setRefYear] = useState('all');
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -165,6 +154,8 @@ export default function Launch({
   }
   useEffect(() => {
     setSidebarOpen(localStorage.getItem('launch-sidebar-open') !== 'false');
+    const savedRatio = Number(localStorage.getItem('launch-column-ratio'));
+    if (savedRatio >= 0.1 && savedRatio <= 0.9) setColumnRatio(savedRatio);
     setSort(localStorage.getItem('launch-task-sort') || 'next');
     const t = localStorage.getItem('launch-theme') || 'space';
     setTheme(t);
@@ -185,7 +176,10 @@ export default function Launch({
   }
   function navigate(v: string) {
     if (v === 'meetings') setReportRequest((n) => n + 1);
-    setView(v);
+    if (['grouped', 'flat', 'calendar'].includes(v)) {
+      setView('tasks');
+      setMode(v);
+    } else setView(v);
     setQuery('');
     setFilter('all');
   }
@@ -383,13 +377,7 @@ export default function Launch({
       notify('Could not save the new order. Please try again.');
     } finally {
       reordering.current = false;
-      setDragId('');
     }
-  }
-  function moveTask(t: Entity, group: Entity[], delta: number) {
-    const peers = group.filter((item) => !!item.pinned === !!t.pinned);
-    const target = peers[peers.findIndex((item) => item.id === t.id) + delta];
-    if (target) void reorder(t.id, target.id, group);
   }
   const groups = isMonthly
     ? monthlyTaskGroups(filtered, [
@@ -450,7 +438,14 @@ export default function Launch({
               {isMonthly && (
                 <button
                   className="text-button add-in-month"
-                  onClick={() => add('task', { final: group.key + '-15' })}
+                  onClick={() =>
+                    add('task', {
+                      draft:
+                        group.key === day().slice(0, 7)
+                          ? day()
+                          : group.key + '-01',
+                    })
+                  }
                 >
                   <Plus />
                   Add task
@@ -458,297 +453,24 @@ export default function Launch({
               )}
             </div>
             {group.items.length ? (
-              <Table className="task-table">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="drag-cell">
-                      <span className="sr-only">Drag to reorder</span>
-                    </TableHead>
-                    <TableHead className="check-cell">
-                      <span className="sr-only">Complete</span>
-                    </TableHead>
-                    <TableHead>
-                      <button onClick={() => sortBy('title')}>
-                        Task name
-                        <ArrowUpDown />
-                      </button>
-                    </TableHead>
-                    <TableHead className="notes-cell">
-                      <button onClick={() => sortBy('notes')}>
-                        Notes
-                        <ArrowUpDown />
-                      </button>
-                    </TableHead>
-                    <TableHead className="date-cell">
-                      <button onClick={() => sortBy('draft')}>
-                        Draft
-                        <ArrowUpDown />
-                      </button>
-                    </TableHead>
-                    <TableHead className="date-cell">
-                      <button onClick={() => sortBy('final')}>
-                        Final
-                        <ArrowUpDown />
-                      </button>
-                    </TableHead>
-                    <TableHead className="row-tools">
-                      <span className="sr-only">Flag and pin</span>
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {group.items.map((t) => (
-                    <TableRow
-                      key={t.id}
-                      className={
-                        (t.pinned ? 'pinned-task ' : '') +
-                        (dragId === t.id ? 'dragging-task' : '')
-                      }
-                      onDragOver={(e) => {
-                        if (group.items.some((item) => item.id === dragId)) {
-                          e.preventDefault();
-                          e.dataTransfer.dropEffect = 'move';
-                        }
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        void reorder(dragId, t.id, group.items);
-                      }}
-                    >
-                      <TableCell className="drag-cell">
-                        {view !== 'completed' && (
-                          <button
-                            type="button"
-                            className="drag-handle"
-                            draggable
-                            aria-label={`Move ${t.title}. Drag, or use up and down arrow keys.`}
-                            title="Drag to reorder · Arrow keys to move"
-                            onDragStart={(e) => {
-                              setDragId(t.id);
-                              e.dataTransfer.effectAllowed = 'move';
-                              e.dataTransfer.setData('text/plain', t.id);
-                            }}
-                            onDragEnd={() => setDragId('')}
-                            onKeyDown={(e) => {
-                              if (
-                                e.key === 'ArrowUp' ||
-                                e.key === 'ArrowDown'
-                              ) {
-                                e.preventDefault();
-                                moveTask(
-                                  t,
-                                  group.items,
-                                  e.key === 'ArrowUp' ? -1 : 1,
-                                );
-                              }
-                            }}
-                          >
-                            <GripVertical />
-                          </button>
-                        )}
-                      </TableCell>
-                      <TableCell className="check-cell">
-                        {view === 'completed' ? (
-                          <button
-                            className="icon-button green"
-                            aria-label={`Reopen ${t.title}`}
-                            onClick={() =>
-                              void store.change(t, {
-                                status: 'active',
-                                completedAt: '',
-                              })
-                            }
-                          >
-                            <Undo2 />
-                          </button>
-                        ) : (
-                          <Checkbox
-                            className="complete-check"
-                            checked={false}
-                            aria-label={`Complete ${t.title}`}
-                            onCheckedChange={() => void complete(t)}
-                          />
-                        )}
-                      </TableCell>
-                      <TableCell className="title-cell">
-                        <button className="task-title" onClick={() => open(t)}>
-                          {t.important && <Flag className="orange" />}
-                          {t.title}
-                        </button>
-                        <div className="row-meta">
-                          {!t.report && scope === 'business' && (
-                            <span>
-                              <FileX />
-                              Report off
-                            </span>
-                          )}
-                          {t.repeat && t.repeat !== 'none' && (
-                            <span>
-                              <Repeat2 />
-                              Repeats
-                            </span>
-                          )}
-                          {t.files.length > 0 && (
-                            <span>
-                              <FileText />
-                              {t.files.length}
-                            </span>
-                          )}
-                          {view === 'completed' && (
-                            <span>{pretty(t.completedAt)}</span>
-                          )}
-                          {view === 'postponed' && t.revisit && (
-                            <span>Revisit {pretty(t.revisit)}</span>
-                          )}
-                        </div>
-                        <button className="mobile-note" onClick={() => open(t)}>
-                          {t.notes}
-                        </button>
-                        <div className="mobile-dates">
-                          {(['draft', 'final'] as const).map(
-                            (k) =>
-                              t[k] && (
-                                <button
-                                  key={k}
-                                  className={
-                                    'date-badge ' +
-                                    dateStatus(
-                                      t[k],
-                                      t[
-                                        k === 'draft'
-                                          ? 'draftDone'
-                                          : 'finalDone'
-                                      ],
-                                      day(),
-                                      soon,
-                                    )
-                                  }
-                                  onClick={() => void milestone(t, k)}
-                                >
-                                  {t[
-                                    k === 'draft' ? 'draftDone' : 'finalDone'
-                                  ] && <Check />}
-                                  {k === 'draft' ? 'Draft' : 'Final'} ·{' '}
-                                  {pretty(t[k])}
-                                </button>
-                              ),
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="notes-cell">
-                        <button className="task-note" onClick={() => open(t)}>
-                          {t.notes || 'Add a note…'}
-                        </button>
-                      </TableCell>
-                      {(['draft', 'final'] as const).map((k) => (
-                        <TableCell className="date-cell" key={k}>
-                          {t[k] ? (
-                            <button
-                              className={
-                                'date-badge ' +
-                                dateStatus(
-                                  t[k],
-                                  t[k === 'draft' ? 'draftDone' : 'finalDone'],
-                                  day(),
-                                  soon,
-                                )
-                              }
-                              title={`Mark ${k} ${t[k === 'draft' ? 'draftDone' : 'finalDone'] ? 'unfinished' : 'finished'}`}
-                              onClick={() => void milestone(t, k)}
-                            >
-                              {t[k === 'draft' ? 'draftDone' : 'finalDone'] ? (
-                                <Check />
-                              ) : dateStatus(t[k], false, day(), soon) ===
-                                'overdue' ? (
-                                <span>!</span>
-                              ) : null}
-                              {pretty(t[k])}
-                            </button>
-                          ) : (
-                            <button
-                              className="missing-date"
-                              aria-label={`Add ${k} date to ${t.title}`}
-                              onClick={() => open(t)}
-                            >
-                              —
-                            </button>
-                          )}
-                        </TableCell>
-                      ))}
-                      <TableCell className="row-tools">
-                        <div className="task-actions">
-                          <button
-                            className={
-                              'icon-button task-flag ' +
-                              (t.important ? 'is-selected' : '')
-                            }
-                            aria-label={`${t.important ? 'Unflag' : 'Flag'} ${t.title} as important`}
-                            title={
-                              t.important
-                                ? 'Remove important flag'
-                                : 'Mark important'
-                            }
-                            aria-pressed={!!t.important}
-                            onClick={() =>
-                              void store.change(t, { important: !t.important })
-                            }
-                          >
-                            <Flag />
-                          </button>
-                          <button
-                            className={
-                              'icon-button task-pin ' +
-                              (t.pinned ? 'is-selected' : '')
-                            }
-                            aria-label={`${t.pinned ? 'Unpin' : 'Pin'} ${t.title}`}
-                            title={
-                              t.pinned
-                                ? 'Unpin task'
-                                : 'Pin above other tasks when sorting'
-                            }
-                            aria-pressed={!!t.pinned}
-                            onClick={() =>
-                              void store.change(t, { pinned: !t.pinned })
-                            }
-                          >
-                            <Pin />
-                          </button>
-                        </div>
-                        {view !== 'completed' && (
-                          <div className="task-move-buttons">
-                            <button
-                              aria-label={`Move ${t.title} up`}
-                              title="Move up"
-                              disabled={
-                                group.items.filter(
-                                  (item) => !!item.pinned === !!t.pinned,
-                                )[0]?.id === t.id
-                              }
-                              onClick={() => moveTask(t, group.items, -1)}
-                            >
-                              <ArrowUp />
-                            </button>
-                            <button
-                              aria-label={`Move ${t.title} down`}
-                              title="Move down"
-                              disabled={
-                                group.items
-                                  .filter(
-                                    (item) => !!item.pinned === !!t.pinned,
-                                  )
-                                  .at(-1)?.id === t.id
-                              }
-                              onClick={() => moveTask(t, group.items, 1)}
-                            >
-                              <ArrowDown />
-                            </button>
-                          </div>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <TaskTable
+                tasks={group.items}
+                completed={view === 'completed'}
+                soon={soon}
+                sort={sort}
+                direction={direction}
+                ratio={columnRatio}
+                setRatio={(ratio) => {
+                  setColumnRatio(ratio);
+                  localStorage.setItem('launch-column-ratio', String(ratio));
+                }}
+                onSort={sortBy}
+                onOpen={open}
+                onComplete={(task) => void complete(task)}
+                onMilestone={(task, key) => void milestone(task, key)}
+                onPatch={(task, patch) => void store.change(task, patch)}
+                onReorder={reorder}
+              />
             ) : isMonthly ? (
               <p className="month-empty">
                 {query
@@ -854,7 +576,9 @@ export default function Launch({
                       <SidebarMenuItem key={v}>
                         <NavItem
                           label={accessibleLabel}
-                          active={view === v}
+                          active={
+                            view === v || (view === 'tasks' && mode === v)
+                          }
                           onClick={() => navigate(v)}
                         >
                           <Icon />
@@ -941,6 +665,7 @@ export default function Launch({
           </div>
           <div className="topbar-right">
             <button
+              aria-label={'Sync status: ' + data.status}
               className={'sync-pill ' + (data.error ? 'warning' : '')}
               onClick={() => {
                 setSyncOpen(true);
@@ -993,17 +718,17 @@ export default function Launch({
                   </p>
                   <h1>
                     {{
-                      dashboard: 'Your day, in view.',
-                      tasks: 'All your tasks.',
+                      dashboard: 'Dashboard',
+                      tasks: 'All tasks',
                       today: 'Today',
-                      notes: 'A place for your thoughts.',
+                      notes: 'Quick notes',
                       meetings: 'Generate report',
-                      reference: 'Keep it close.',
-                      contacts: 'Good people. All here.',
-                      completed: 'Look what you’ve done.',
-                      backburner: 'Room for the bigger ideas.',
-                      postponed: 'On hold. Not forgotten.',
-                      settings: 'Make Launch yours.',
+                      reference: 'Reference board',
+                      contacts: 'Contacts',
+                      completed: 'Completed',
+                      backburner: 'Back burner',
+                      postponed: 'Postponed',
+                      settings: 'Settings',
                     }[view] || 'Launch'}
                   </h1>
                 </div>
@@ -1202,42 +927,6 @@ export default function Launch({
                   )}
                   {isDashboard && ready && (
                     <div className="dashboard-bottom">
-                      <section>
-                        <div className="section-heading">
-                          <h2>Quick notes</h2>
-                          <button
-                            className="text-button"
-                            onClick={() => navigate('notes')}
-                          >
-                            View all <ArrowUpRight />
-                          </button>
-                        </div>
-                        {notes
-                          .slice()
-                          .sort((a, b) =>
-                            b.createdAt.localeCompare(a.createdAt),
-                          )
-                          .slice(0, 3)
-                          .map((n) => (
-                            <button
-                              className="dashboard-preview"
-                              key={n.id}
-                              onClick={() => open(n)}
-                            >
-                              <Inbox />
-                              <span>
-                                {n.title}
-                                <small>{pretty(n.createdAt)}</small>
-                              </span>
-                            </button>
-                          ))}
-                        <button
-                          className="text-button"
-                          onClick={() => setCaptureOpen(true)}
-                        >
-                          <Plus /> Capture a thought
-                        </button>
-                      </section>
                       <section>
                         <div className="section-heading">
                           <h2>On your radar</h2>
@@ -1626,7 +1315,7 @@ export default function Launch({
                 (scope === 'personal' ? (
                   <Empty
                     title="Marketing reports belong to Business."
-                    text="Personal items never appear in marketing reports."
+                    text="Personal items are excluded unless you explicitly include them in report options."
                     action={() => setScope('business')}
                     label="Switch to Business"
                   />
@@ -1661,6 +1350,32 @@ export default function Launch({
           </button>
         </footer>
       </div>
+      <NotesDrawer
+        key={scope}
+        scope={scope}
+        records={live}
+        store={store}
+        onOpen={open}
+        onCapture={(text) => {
+          if (text.trim()) {
+            const key = `launch-capture-${account}-${scope}`;
+            let draft: { text?: string; ids?: string[] } = {};
+            try {
+              draft = JSON.parse(localStorage.getItem(key) || '{}');
+            } catch {}
+            localStorage.setItem(
+              key,
+              JSON.stringify({
+                ...draft,
+                text: [draft.text, text.trim()].filter(Boolean).join('\n\n'),
+              }),
+            );
+          }
+          setCaptureOpen(true);
+        }}
+        onAgenda={() => add('agenda', { date: day(), report: true })}
+        notify={notify}
+      />
       <nav className="mobile-bottom" aria-label="Phone navigation">
         <button
           className={view === 'capture' ? 'active' : ''}

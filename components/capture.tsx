@@ -75,12 +75,11 @@ export function Capture({
   return (
     <div className="capture-page">
       <div className="capture-intro">
-        <p className="eyebrow">CATCH IT NOW. SORT IT LATER.</p>
-        <h1>
-          A little note.
-          <br />A clearer head.
-        </h1>
-        <p>No title, date, or organizing required.</p>
+        <p className="eyebrow">
+          {scope === 'personal' ? 'PERSONAL' : 'BUSINESS'}
+        </p>
+        <h1>Quick capture</h1>
+        <p>Type a note, use your keyboard’s microphone, or add a photo.</p>
       </div>
       <div className="capture-composer">
         <p className="capture-help desktop-dictation">
