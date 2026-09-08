@@ -3744,3 +3744,15 @@ h3,
     animation: none;
   }
 }
+
+.classic-task-row.is-routine .classic-title-line {
+  padding-left: 14px;
+}
+.classic-task-row.is-routine .classic-title,
+.classic-task-row.is-routine .classic-notes,
+.classic-task-row.is-routine .classic-mobile-note {
+  color: var(--muted-foreground);
+}
+.classic-task-row.is-routine .classic-title:hover {
+  color: var(--foreground);
+}

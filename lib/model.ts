@@ -28,6 +28,7 @@ export type Entity = {
   publication?: string;
   draftDone?: boolean;
   finalDone?: boolean;
+  routine?: boolean;
   completedAt?: string;
   revisit?: string;
   reportNote?: string;
@@ -243,6 +244,64 @@ export function monthlyTaskGroups(
       ),
     }));
 }
+// Like Electron, generated instances never open another month by themselves.
+// Keep the current month and overdue work visible, even without other work.
+export function planningMonths(
+  tasks: Entity[],
+  today = day(),
+  notes: Record<string, string> = {},
+) {
+  return [
+    ...new Set([
+      today.slice(0, 7),
+      ...tasks
+        .filter(
+          (t) =>
+            !t.deletedAt &&
+            t.status !== 'postponed' &&
+            (!t.seriesId || t.seriesId === t.id),
+        )
+        .map((t) => (workDate(t) || t.publication || '').slice(0, 7)),
+      ...Object.keys(notes).filter((month) => notes[month]?.trim()),
+    ]),
+  ]
+    .filter(Boolean)
+    .sort();
+}
+export function visibleMonthlyTasks(
+  tasks: Entity[],
+  months: string[],
+  today = day(),
+) {
+  return tasks.filter((t) => {
+    const month = (workDate(t) || t.publication || '').slice(0, 7);
+    return month <= today.slice(0, 7) || months.includes(month);
+  });
+}
+// One-time migration of the two routines identified in Scott's original import.
+// Retain the original dates in legacy.record; never infer routine mode for other
+// report-muted tasks, which can still need draft/final review.
+export function migrateLegacyRoutine(e: Entity): Entity {
+  if (
+    e.kind !== 'task' ||
+    e.routine !== undefined ||
+    e.legacy?.source !== 'mission-control' ||
+    !['respond to reviews', 'enter doordash & ubereats transactions'].includes(
+      e.title.trim().toLowerCase(),
+    )
+  )
+    return e;
+  return {
+    ...e,
+    routine: true,
+    report: false,
+    draft: '',
+    final: e.draft || e.final || '',
+    draftDone: false,
+    finalDone: e.status === 'completed',
+    review: '',
+  };
+}
 export function reportMonths(snapshot: ReportSnapshot) {
   return monthlyTaskGroups(
     snapshot.tasks,
@@ -409,6 +468,7 @@ export function makeReport(
             e.kind === 'task' &&
             e.scope === 'personal' &&
             !e.deletedAt)) &&
+        !e.routine &&
         !options.excluded.includes(e.id),
     )
     .sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -582,6 +642,17 @@ export function validateEntity(e: Entity) {
     )
       throw new Error('Invalid date');
   if (e.scope === 'personal') e.report = false;
+  if (e.kind === 'task' && e.draft && e.final && e.final < e.draft)
+    throw new Error('Final due date must be on or after the draft due date.');
+  if (e.routine !== undefined && typeof e.routine !== 'boolean')
+    throw new Error('Invalid task type');
+  if (e.kind === 'task' && e.routine) {
+    if (e.draft || e.review)
+      throw new Error(
+        'Simple to-dos use one final due date. Clear the draft and review dates.',
+      );
+    e.report = false;
+  }
   for (const value of [e.time, e.endTime])
     if (value && !/^([01]\d|2[0-3]):[0-5]\d$/.test(value))
       throw new Error('Invalid time');

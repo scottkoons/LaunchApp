@@ -36,6 +36,25 @@ void test('authenticated persistence, idempotency, conflicts, reporting, files, 
   assert.ok(cookie);
   const anonymous = await fetch(base + '/api/sync');
   assert.equal(anonymous.status, 401);
+  const invalid = createEntity('task', 'business', {
+    title: 'Invalid deadline test',
+    draft: '2026-09-15',
+    final: '2026-09-14',
+  });
+  const rejected = await request('/api/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      id: uid(),
+      entityId: invalid.id,
+      kind: 'task',
+      patch: invalid,
+      base: {},
+      createdAt: invalid.createdAt,
+    }),
+  });
+  assert.equal(rejected.status, 400);
+  assert.match(await rejected.text(), /on or after the draft/);
   const e = createEntity('task', 'business', {
     title: 'TEST: reportable ad',
     draft: '2026-09-10',
@@ -141,4 +160,58 @@ void test('authenticated persistence, idempotency, conflicts, reporting, files, 
     all.records.some((r: Entity) => r.id === e.id && r.notes === 'Updated'),
   );
   // Test records only exist in local development storage.
+});
+
+void test('future planned work reveals recurring occurrences with one final date', async () => {
+  const routine = createEntity('task', 'business', {
+    title: 'TEST: routine schedule',
+    routine: true,
+    report: true,
+    final: '2026-09-08',
+    repeat: 'weekly',
+    repeatAnchor: '2026-09-08',
+    repeatFrom: '2026-09-08',
+  });
+  const saved = await add(routine);
+  assert.equal(saved.entity.report, false);
+  const ad = createEntity('task', 'business', {
+    title: 'TEST: February launch',
+    final: '2027-02-10',
+  });
+  await add(ad);
+  const all = (await (await request('/api/sync')).json()) as {
+    records: Entity[];
+  };
+  const repeats = all.records.filter(
+    (t) => t.seriesId === routine.id && t.final?.startsWith('2027-02'),
+  );
+  assert.ok(repeats.length >= 4);
+  assert.ok(
+    repeats.every((t) => t.routine && !t.draft && !t.report && !t.finalDone),
+  );
+  const again = (await (await request('/api/sync')).json()) as {
+    records: Entity[];
+  };
+  assert.equal(
+    again.records.filter(
+      (t) => t.seriesId === routine.id && t.final?.startsWith('2027-02'),
+    ).length,
+    repeats.length,
+  );
+  for (const task of again.records.filter(
+    (t) => t.id === ad.id || t.id === routine.id || t.seriesId === routine.id,
+  )) {
+    const deleted = await request('/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: uid(),
+        entityId: task.id,
+        kind: 'task',
+        patch: { deletedAt: new Date().toISOString() },
+        base: { deletedAt: task.deletedAt },
+      }),
+    });
+    assert.equal(deleted.status, 200);
+  }
 });

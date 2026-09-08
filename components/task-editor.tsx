@@ -65,6 +65,7 @@ export function TaskEditor({
   async function save(extra: Partial<Entity> = {}) {
     if (!draft) return;
     const d = { ...draft, ...extra };
+    if (d.routine && d.status === 'completed') d.finalDone = true;
     if (!d.title.trim()) {
       notify('Give this item a name.');
       return;
@@ -176,6 +177,7 @@ export function TaskEditor({
                 />
               </label>
               {draft.scope === 'business' &&
+                !draft.routine &&
                 ['task', 'agenda', 'event'].includes(draft.kind) && (
                   <Toggle
                     checked={draft.report}
@@ -197,48 +199,95 @@ export function TaskEditor({
           {isTask && (
             <>
               <div className="section-label">DEADLINES</div>
+              <Toggle
+                checked={!!draft.routine}
+                onChange={(routine) =>
+                  change({
+                    routine,
+                    ...(routine
+                      ? {
+                          final: draft.draft || draft.final || '',
+                          draft: '',
+                          review: '',
+                          draftDone: false,
+                          finalDone: draft.status === 'completed',
+                          report: false,
+                        }
+                      : {}),
+                  })
+                }
+              >
+                Simple to-do · one due date, no review
+              </Toggle>
+              {draft.routine && (
+                <p className="hint">
+                  Excluded from marketing reports. Click its due-date pill to
+                  complete it in one step.
+                </p>
+              )}
               <div className="two-col">
-                {(['draft', 'final'] as const).map((key) => (
+                {(draft.routine
+                  ? (['final'] as const)
+                  : (['draft', 'final'] as const)
+                ).map((key) => (
                   <div key={key}>
                     <label className="field">
-                      {key === 'draft' ? 'Draft due' : 'Final due'}
+                      {key === 'draft'
+                        ? 'Draft due'
+                        : draft.routine
+                          ? 'Due date'
+                          : 'Final due'}
                       <input
                         type="date"
                         value={draft[key] || ''}
+                        min={
+                          key === 'final' ? draft.draft || undefined : undefined
+                        }
+                        max={
+                          key === 'draft' ? draft.final || undefined : undefined
+                        }
                         onChange={(e) => change({ [key]: e.target.value })}
                       />
                     </label>
-                    <Toggle
-                      checked={
-                        !!draft[key === 'draft' ? 'draftDone' : 'finalDone']
-                      }
-                      onChange={(done) =>
-                        change({
-                          [key === 'draft' ? 'draftDone' : 'finalDone']: done,
-                        })
-                      }
-                    >
-                      {key === 'draft' ? 'Draft finished' : 'Final finished'}
-                    </Toggle>
+                    {!draft.routine && (
+                      <Toggle
+                        checked={
+                          !!draft[key === 'draft' ? 'draftDone' : 'finalDone']
+                        }
+                        onChange={(done) =>
+                          change({
+                            [key === 'draft' ? 'draftDone' : 'finalDone']: done,
+                          })
+                        }
+                      >
+                        {key === 'draft' ? 'Draft finished' : 'Final finished'}
+                      </Toggle>
+                    )}
                   </div>
                 ))}
               </div>
               {draft.draft && draft.final && draft.final < draft.draft && (
                 <p className="inline-warning">
-                  The final date is before the draft. Check these before saving.
+                  Final due date must be on or after the draft due date.
                 </p>
               )}
               <details>
-                <summary>Meeting, publication & repeat</summary>
+                <summary>
+                  {draft.routine
+                    ? 'Publication & repeat'
+                    : 'Meeting, publication & repeat'}
+                </summary>
                 <div className="two-col">
-                  <label className="field">
-                    Meeting / review
-                    <input
-                      type="date"
-                      value={draft.review || ''}
-                      onChange={(e) => change({ review: e.target.value })}
-                    />
-                  </label>
+                  {!draft.routine && (
+                    <label className="field">
+                      Meeting / review
+                      <input
+                        type="date"
+                        value={draft.review || ''}
+                        onChange={(e) => change({ review: e.target.value })}
+                      />
+                    </label>
+                  )}
                   <label className="field">
                     Publication / event
                     <input

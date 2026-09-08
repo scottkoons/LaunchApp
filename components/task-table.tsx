@@ -212,22 +212,45 @@ function TaskRow({
     isDragging,
   } = useSortable({ id: task.id, disabled: completed || busy || finishing });
   const pill = (key: 'draft' | 'final') => {
-    const done = task[key === 'draft' ? 'draftDone' : 'finalDone'];
+    if (task.routine && key === 'draft') return null;
+    const done =
+      (task.routine && finishing) ||
+      task[key === 'draft' ? 'draftDone' : 'finalDone'];
     return task[key] ? (
       <button
         className={'date-badge ' + dateStatus(task[key], done, day(), soon)}
-        aria-label={`${task.title}: ${key} ${pretty(task[key])}, ${done ? 'done' : dateStatus(task[key], done, day(), soon)}. Mark ${done ? 'unfinished' : 'finished'}`}
-        title={`Mark ${key} ${done ? 'unfinished' : 'finished'}`}
-        onClick={() => onMilestone(task, key)}
+        aria-label={
+          task.routine
+            ? `${completed ? 'Reopen' : 'Complete'} ${task.title}, due ${pretty(task[key])}`
+            : `${task.title}: ${key} ${pretty(task[key])}, ${done ? 'done' : dateStatus(task[key], done, day(), soon)}. Mark ${done ? 'unfinished' : 'finished'}`
+        }
+        title={
+          task.routine
+            ? 'Complete to-do · Command-Z to undo'
+            : `Mark ${key} ${done ? 'unfinished' : 'finished'}`
+        }
+        onClick={() =>
+          task.routine
+            ? completed
+              ? onPatch(task, {
+                  status: 'active',
+                  completedAt: '',
+                  finalDone: false,
+                })
+              : onComplete(task)
+            : onMilestone(task, key)
+        }
       >
         {done && <Check />}
-        <span className="mobile-pill-label">{key} · </span>
+        <span className="mobile-pill-label">
+          {task.routine ? 'Due' : key} ·{' '}
+        </span>
         {pretty(task[key])}
       </button>
     ) : (
       <button
         className="missing-date"
-        aria-label={`Add ${key} date to ${task.title}`}
+        aria-label={`Add ${task.routine ? 'due' : key} date to ${task.title}`}
         onClick={() => onOpen(task)}
       >
         —
@@ -241,6 +264,7 @@ function TaskRow({
         'classic-task-grid classic-task-row' +
         (task.important ? ' is-important' : '') +
         (task.pinned ? ' is-pinned' : '') +
+        (task.routine ? ' is-routine' : '') +
         (finishing ? ' is-completing' : '') +
         (isDragging ? ' is-dragging' : '')
       }
@@ -318,23 +342,27 @@ function TaskRow({
       </button>
       <div className="classic-date">{pill('draft')}</div>
       <div className="classic-date">{pill('final')}</div>
-      <button
-        className="classic-action"
-        disabled={finishing}
-        aria-label={`${completed ? 'Reopen' : 'Complete'} ${task.title}`}
-        title={
-          completed
-            ? 'Return to your task list'
-            : 'Complete task and remove from dashboard'
-        }
-        onClick={() =>
-          completed
-            ? onPatch(task, { status: 'active', completedAt: '' })
-            : onComplete(task)
-        }
-      >
-        {completed ? <Undo2 /> : finishing ? <Check /> : <CircleCheck />}
-      </button>
+      {task.routine && task.final ? (
+        <span />
+      ) : (
+        <button
+          className="classic-action"
+          disabled={finishing}
+          aria-label={`${completed ? 'Reopen' : 'Complete'} ${task.title}`}
+          title={
+            completed
+              ? 'Return to your task list'
+              : 'Complete task and remove from dashboard'
+          }
+          onClick={() =>
+            completed
+              ? onPatch(task, { status: 'active', completedAt: '' })
+              : onComplete(task)
+          }
+        >
+          {completed ? <Undo2 /> : finishing ? <Check /> : <CircleCheck />}
+        </button>
+      )}
       <button
         className={
           'classic-action classic-pin ' + (task.pinned ? 'is-selected' : '')

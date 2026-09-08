@@ -13,6 +13,9 @@ import {
   validateEntity,
   dashboardGroups,
   monthlyTaskGroups,
+  planningMonths,
+  visibleMonthlyTasks,
+  migrateLegacyRoutine,
   reportMonths,
   reportDateStatus,
   compareTasks,
@@ -425,5 +428,96 @@ void test('PDF options reject invalid, reversed and excessive ranges before gene
   );
   assert.throws(() =>
     validateReportOptions({ ...opts, from: '2020-01-01', to: '2026-09-01' }),
+  );
+});
+
+void test('final date cannot precede draft, but same-day and single dates work', () => {
+  const task = createEntity('task', 'business', {
+    title: 'Ad',
+    draft: '2026-09-10',
+    final: '2026-09-09',
+  });
+  assert.throws(() => validateEntity(task), /on or after/);
+  assert.equal(
+    validateEntity({ ...task, final: task.draft }).final,
+    task.draft,
+  );
+  assert.equal(validateEntity({ ...task, draft: '' }).final, '2026-09-09');
+});
+
+void test('legacy routines keep their weekly work day, original data, and report exclusion', () => {
+  const old = createEntity('task', 'business', {
+    title: 'Enter DoorDash & UberEats Transactions',
+    draft: '2026-09-14',
+    final: '2026-09-13',
+    repeat: 'weekly',
+    repeatAnchor: '2026-09-14',
+    legacy: {
+      source: 'mission-control',
+      record: { draft_due: '2026-09-14', final_due: '2026-09-13' },
+    },
+  });
+  const routine = migrateLegacyRoutine(old);
+  assert.equal(validateEntity(routine).final, '2026-09-14');
+  assert.equal(routine.draft, '');
+  assert.equal(routine.report, false);
+  assert.equal(routine.routine, true);
+  assert.deepEqual(routine.legacy, old.legacy);
+  assert.equal(old.final, '2026-09-13');
+  assert.equal(migrateLegacyRoutine(routine), routine);
+  assert.equal(migrateLegacyRoutine({ ...old, routine: false }).routine, false);
+  const next = spawnOccurrence(routine, '2026-09-21');
+  assert.equal(next.final, '2026-09-21');
+  assert.equal(next.draft, '');
+  assert.equal(next.routine, true);
+  assert.equal(
+    makeReport([{ ...routine, report: true }], {
+      ...defaultReport(),
+      from: '2026-09-01',
+      to: '2026-09-30',
+    }).tasks.length,
+    0,
+  );
+  assert.throws(
+    () => validateEntity({ ...routine, draft: '2026-09-14' }),
+    /one final due date/,
+  );
+  assert.equal(validateEntity({ ...routine, report: true }).report, false);
+});
+
+void test('recurring instances do not open future months; planned work, notes and rollover do', () => {
+  const root = createEntity('task', 'business', {
+    title: 'Reviews',
+    routine: true,
+    final: '2026-09-08',
+    repeat: 'weekly',
+    repeatAnchor: '2026-09-08',
+  });
+  const repeats = ['2026-09-15', '2026-10-06', '2026-11-03', '2026-12-01'].map(
+    (date) => spawnOccurrence(root, date),
+  );
+  const ad = createEntity('task', 'business', {
+    title: 'October ad',
+    final: '2026-10-15',
+  });
+  const tasks = [root, ...repeats, ad];
+  const months = planningMonths(tasks, '2026-09-08');
+  assert.deepEqual(months, ['2026-09', '2026-10']);
+  assert.equal(visibleMonthlyTasks(tasks, months, '2026-09-08').length, 4);
+  assert.equal(tasks.length, 6); // visibility never deletes future instances
+  const withNotes = planningMonths(tasks, '2026-09-08', {
+    '2026-12': 'Holiday planning',
+  });
+  assert.ok(withNotes.includes('2026-12'));
+  const rolled = planningMonths(tasks, '2026-11-01');
+  assert.ok(
+    visibleMonthlyTasks(tasks, rolled, '2026-11-01').some(
+      (t) => t.final === '2026-11-03',
+    ),
+  );
+  assert.ok(
+    visibleMonthlyTasks(tasks, rolled, '2026-11-01').some(
+      (t) => t.final === '2026-09-15',
+    ),
   );
 });

@@ -72,6 +72,8 @@ import {
   urgency,
   dashboardGroups,
   monthlyTaskGroups,
+  planningMonths,
+  visibleMonthlyTasks,
   compareTasks,
   manualOrderChanges,
   type Entity,
@@ -305,6 +307,7 @@ export default function Launch({
   const live = records.filter((e) => !e.deletedAt);
   const scoped = live.filter((e) => e.scope === scope);
   const tasks = scoped.filter((e) => e.kind === 'task');
+  const visibleMonths = planningMonths(tasks, day(), settings?.monthlyNotes);
   const active = tasks.filter(
     (t) => t.status !== 'completed' && t.status !== 'postponed',
   );
@@ -357,7 +360,11 @@ export default function Launch({
     if (completionTimers.current.has(t.id)) return;
     animateCompletion(t);
     try {
-      await store.change(t, { status: 'completed', completedAt: now() });
+      await store.change(t, {
+        status: 'completed',
+        completedAt: now(),
+        ...(t.routine ? { finalDone: true } : {}),
+      });
       notify('Task completed.', () => void undoLast());
     } catch (error) {
       stopCompletion(t.id);
@@ -437,12 +444,15 @@ export default function Launch({
     }
   }
   const groups = isMonthly
-    ? monthlyTaskGroups(filtered, [
-        day().slice(0, 7),
-        day(
-          new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1),
-        ).slice(0, 7),
-      ])
+    ? monthlyTaskGroups(
+        query ? filtered : visibleMonthlyTasks(filtered, visibleMonths),
+        [
+          day().slice(0, 7),
+          ...Object.keys(settings?.monthlyNotes || {}).filter((month) =>
+            settings?.monthlyNotes?.[month]?.trim(),
+          ),
+        ],
+      )
     : isDashboard
       ? dashboardGroups(filtered).filter(
           (g) => g.items.length > 0 && (view !== 'today' || g.key !== 'next'),
@@ -860,7 +870,11 @@ export default function Launch({
                       }}
                     >
                       <strong>
-                        {active.filter((t) => workDate(t)).length}
+                        {
+                          visibleMonthlyTasks(active, visibleMonths).filter(
+                            (t) => workDate(t),
+                          ).length
+                        }
                       </strong>
                       Scheduled
                     </button>

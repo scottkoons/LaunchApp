@@ -1,6 +1,13 @@
 import { env } from 'cloudflare:workers';
 import { getChatGPTUser } from '@/app/chatgpt-auth';
-import { day, recurrenceDates, spawnOccurrence, type Entity } from './model';
+import {
+  day,
+  recurrenceDates,
+  spawnOccurrence,
+  planningMonths,
+  migrateLegacyRoutine,
+  type Entity,
+} from './model';
 export function database() {
   return env.DB as D1Database;
 }
@@ -41,9 +48,31 @@ export async function allRecords(user: string) {
   const list = rows.results.map(
     (r) => ({ ...JSON.parse(r.body), version: r.version }) as Entity,
   );
-  const until = day(
-    new Date(new Date().getFullYear(), new Date().getMonth() + 4, 0),
+  const migrations = list.flatMap((original, index) => {
+    const migrated = migrateLegacyRoutine(original);
+    return migrated === original ? [] : [{ original, migrated, index }];
+  });
+  if (migrations.length) {
+    const results = await database().batch(
+      migrations.map(({ original, migrated }) =>
+        database()
+          .prepare(
+            'UPDATE records SET body=?,version=version+1 WHERE owner=? AND id=? AND version=?',
+          )
+          .bind(JSON.stringify(migrated), user, original.id, original.version),
+      ),
+    );
+    migrations.forEach(({ migrated, original, index }, i) => {
+      if (results[i].meta.changes)
+        list[index] = { ...migrated, version: (original.version || 0) + 1 };
+    });
+  }
+  const months = planningMonths(
+    list.filter((e) => e.kind === 'task'),
+    day(),
+    list.find((e) => e.kind === 'settings' && !e.deletedAt)?.monthlyNotes,
   );
+  const until = months.at(-1)! + '-31';
   const ids = new Set(list.map((e) => e.id));
   for (const root of [...list].filter(
     (t) =>
@@ -60,6 +89,7 @@ export async function allRecords(user: string) {
         .map((t) => t.occurrence),
     );
     for (const date of recurrenceDates(root, until)) {
+      if (!months.includes(date.slice(0, 7))) continue;
       if (date === (root.occurrence || root.repeatAnchor)) continue;
       if (represented.has(date)) continue;
       const e = spawnOccurrence(root, date);

@@ -1,5 +1,11 @@
 import { owner, database, json, failure, originGuard } from '@/lib/server';
-import { validateEntity, reportEligible, now, type Entity } from '@/lib/model';
+import {
+  validateEntity,
+  reportEligible,
+  migrateLegacyRoutine,
+  now,
+  type Entity,
+} from '@/lib/model';
 export async function POST(request: Request) {
   try {
     originGuard(request);
@@ -9,7 +15,8 @@ export async function POST(request: Request) {
     const input = JSON.parse(raw);
     if (!Array.isArray(input.records) || input.records.length > 100)
       throw new Error('Import up to 100 records per batch');
-    const entities = input.records.map((e: Entity) => {
+    const entities = input.records.map((original: Entity) => {
+      const e = migrateLegacyRoutine(original);
       validateEntity(e);
       if (!e.id || e.id.length > 160) throw new Error('Invalid record ID');
       if (e.kind === 'meeting' && e.snapshot) {
