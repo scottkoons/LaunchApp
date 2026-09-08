@@ -16,6 +16,7 @@ import {
   dashboardGroups,
   monthlyTaskGroups,
   planningMonths,
+  dashboardMonths,
   visibleMonthlyTasks,
   migrateLegacyRoutine,
   reportMonths,
@@ -656,4 +657,82 @@ void test('future report choices update generated repeats, preserve history, and
       }),
     /Invalid recurring/,
   );
+});
+
+void test('dashboard hides distant plans and empty months without changing stored tasks or report months', () => {
+  const reviews = createEntity('task', 'business', {
+    title: 'Reviews',
+    final: '2026-09-08',
+    repeat: 'weekly',
+  });
+  const octoberRepeat = spawnOccurrence(reviews, '2026-10-06');
+  const april = createEntity('task', 'business', {
+    title: 'Order extra mugs',
+    final: '2027-04-06',
+  });
+  const tasks = [
+    reviews,
+    octoberRepeat,
+    april,
+    spawnOccurrence(reviews, '2027-04-06'),
+  ];
+  const notes = { '2027-04': 'Order extra mugs next year' };
+  const months = dashboardMonths(tasks, '2026-09-08', notes, 2);
+  const visible = visibleMonthlyTasks(tasks, months, '2026-09-08');
+  assert.deepEqual(
+    monthlyTaskGroups(visible).map((g) => g.key),
+    ['2026-09'],
+  );
+  assert.ok(planningMonths(tasks, '2026-09-08', notes).includes('2027-04'));
+  assert.equal(tasks.length, 4);
+  assert.equal(
+    monthlyTaskGroups(
+      [],
+      dashboardMonths([], '2026-09-08').filter(
+        (m) => (notes as Record<string, string>)[m],
+      ),
+    ).length,
+    0,
+  );
+  const snapshot = makeReport(tasks, {
+    ...defaultReport(),
+    from: '2027-04-01',
+    to: '2027-04-30',
+  });
+  assert.ok(snapshot.tasks.some((t) => t.id === april.id));
+  assert.ok(dashboardMonths(tasks, '2027-02-01', notes, 2).includes('2027-04'));
+});
+
+void test('dashboard rolling window honors settings, overdue work, notes and year boundaries', () => {
+  const task = (final: string) =>
+    createEntity('task', 'business', { title: final, final });
+  const tasks = [
+    task('2026-08-01'),
+    task('2026-09-30'),
+    task('2026-10-01'),
+    task('2026-11-30'),
+    task('2026-12-01'),
+  ];
+  assert.deepEqual(
+    visibleMonthlyTasks(
+      tasks,
+      dashboardMonths(tasks, '2026-09-08', {}, 2),
+      '2026-09-08',
+    ).map((t) => t.final),
+    ['2026-08-01', '2026-09-30', '2026-10-01', '2026-11-30'],
+  );
+  assert.deepEqual(
+    visibleMonthlyTasks(
+      tasks,
+      dashboardMonths(tasks, '2026-09-08', {}, 0),
+      '2026-09-08',
+    ).map((t) => t.final),
+    ['2026-08-01', '2026-09-30'],
+  );
+  const notes = { '2027-01': 'January meeting', '2027-02': 'Later meeting' };
+  const months = dashboardMonths([], '2026-11-30', notes, 2);
+  assert.ok(months.includes('2027-01'));
+  assert.ok(!months.includes('2027-02'));
+  const completed = { ...task('2026-10-01'), status: 'completed' as const };
+  assert.ok(!dashboardMonths([completed], '2026-09-08').includes('2026-10'));
 });

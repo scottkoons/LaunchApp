@@ -173,6 +173,29 @@ export function SettingsPanel({
         </label>
         <label className="setting-row">
           <span>
+            Months ahead on dashboard
+            <small>
+              Show the current month plus this many months ahead. Empty months
+              stay hidden; overdue work stays visible. Future reminders remain
+              in the flat list and calendar.
+            </small>
+          </span>
+          <Pick
+            label="Months ahead on dashboard"
+            value={String(settings?.monthsAhead ?? 2)}
+            onChange={(value) => void update({ monthsAhead: Number(value) })}
+            options={[
+              ['0', 'Current month only'],
+              ['1', '1 month ahead'],
+              ['2', '2 months ahead'],
+              ['3', '3 months ahead'],
+              ['6', '6 months ahead'],
+              ['12', '12 months ahead'],
+            ]}
+          />
+        </label>
+        <label className="setting-row">
+          <span>
             Due soon warning
             <small>
               Count each task once using its next unfinished deadline.

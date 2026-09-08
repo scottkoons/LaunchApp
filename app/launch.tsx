@@ -72,7 +72,7 @@ import {
   urgency,
   dashboardGroups,
   monthlyTaskGroups,
-  planningMonths,
+  dashboardMonths,
   visibleMonthlyTasks,
   completedDateRange,
   type CompletedPeriod,
@@ -310,7 +310,12 @@ export default function Launch({
   const live = records.filter((e) => !e.deletedAt);
   const scoped = live.filter((e) => e.scope === scope);
   const tasks = scoped.filter((e) => e.kind === 'task');
-  const visibleMonths = planningMonths(tasks, day(), settings?.monthlyNotes);
+  const visibleMonths = dashboardMonths(
+    tasks,
+    day(),
+    scope === 'business' ? settings?.monthlyNotes : {},
+    settings?.monthsAhead ?? 2,
+  );
   const completedRange =
     completedPeriod === 'custom'
       ? { from: completedFrom, to: completedTo }
@@ -460,17 +465,18 @@ export default function Launch({
   const groups = isMonthly
     ? monthlyTaskGroups(
         query ? filtered : visibleMonthlyTasks(filtered, visibleMonths),
-        [
-          day().slice(0, 7),
-          ...Object.keys(settings?.monthlyNotes || {}).filter(
-            (month) =>
-              month >= day().slice(0, 7) &&
-              settings?.monthlyNotes?.[month]?.trim(),
-          ),
-        ],
+        query || scope !== 'business'
+          ? []
+          : visibleMonths.filter(
+              (month) =>
+                month >= day().slice(0, 7) &&
+                settings?.monthlyNotes?.[month]?.trim(),
+            ),
       )
     : isDashboard
-      ? dashboardGroups(filtered).filter(
+      ? dashboardGroups(
+          query ? filtered : visibleMonthlyTasks(filtered, visibleMonths),
+        ).filter(
           (g) => g.items.length > 0 && (view !== 'today' || g.key !== 'next'),
         )
       : [

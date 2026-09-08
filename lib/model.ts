@@ -300,6 +300,28 @@ export function planningMonths(
     .filter(Boolean)
     .sort();
 }
+// Dashboard visibility is a rolling window, independent of stored future plans
+// and the months available to calendars and reports.
+export function dashboardMonths(
+  tasks: Entity[],
+  today = day(),
+  notes: Record<string, string> = {},
+  monthsAhead = 2,
+) {
+  const date = parseDay(today);
+  const ahead =
+    Number.isInteger(monthsAhead) && monthsAhead >= 0 && monthsAhead <= 12
+      ? monthsAhead
+      : 2;
+  const lastMonth = day(
+    new Date(date.getFullYear(), date.getMonth() + ahead, 1),
+  ).slice(0, 7);
+  return planningMonths(
+    tasks.filter((t) => t.status !== 'completed'),
+    today,
+    notes,
+  ).filter((month) => month <= lastMonth);
+}
 export function visibleMonthlyTasks(
   tasks: Entity[],
   months: string[],
