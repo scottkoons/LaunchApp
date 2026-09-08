@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { Mic, Square, ArrowUpRight, Camera, Type, Inbox } from 'lucide-react';
+import { ArrowUpRight, Camera, Inbox } from 'lucide-react';
 import { Attachments } from './launch-controls';
 import {
   createEntity,
@@ -9,7 +9,6 @@ import {
   type Entity,
 } from '@/lib/model';
 import type { LaunchStore } from '@/lib/client-store';
-import type { Recognition, SpeechWindow } from '@/lib/browser-types';
 export function Capture({
   scope,
   store,
@@ -28,16 +27,10 @@ export function Capture({
   const key = `launch-capture-${store.account}-${scope}`;
   const [text, setText] = useState(''),
     [ids, setIds] = useState<string[]>([]),
-    [listening, setListening] = useState(false),
-    [interim, setInterim] = useState(''),
-    [supported, setSupported] = useState(false),
     [busy, setBusy] = useState(false),
     [loaded, setLoaded] = useState(false);
-  const ref = useRef<Recognition | null>(null),
-    input = useRef<HTMLTextAreaElement>(null),
+  const input = useRef<HTMLTextAreaElement>(null),
     photo = useRef<HTMLInputElement>(null);
-  const textRef = useRef(text);
-  textRef.current = text;
   useEffect(() => {
     try {
       const draft = JSON.parse(localStorage.getItem(key) || '{}');
@@ -45,70 +38,12 @@ export function Capture({
       setIds(draft.ids || []);
     } catch {}
     setLoaded(true);
-    setSupported(
-      !!(
-        (window as SpeechWindow).SpeechRecognition ||
-        (window as SpeechWindow).webkitSpeechRecognition
-      ),
-    );
-    return () => {
-      ref.current?.stop();
-    };
   }, [key]);
   useEffect(() => {
     if (loaded) localStorage.setItem(key, JSON.stringify({ text, ids }));
   }, [text, ids, key, loaded]);
-  function dictate() {
-    if (listening) {
-      ref.current?.stop();
-      return;
-    }
-    const Speech =
-      (window as SpeechWindow).SpeechRecognition ||
-      (window as SpeechWindow).webkitSpeechRecognition;
-    if (!Speech) {
-      input.current?.focus();
-      notify('Use the microphone on your phone keyboard to dictate a note.');
-      return;
-    }
-    const r: Recognition = new Speech();
-    r.continuous = true;
-    r.interimResults = true;
-    r.lang = 'en-US';
-    r.onresult = (e) => {
-      let final = '',
-        partial = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) final += e.results[i][0].transcript + ' ';
-        else partial += e.results[i][0].transcript;
-      }
-      if (final) setText((t) => (t + ' ' + final).trim());
-      setInterim(partial);
-    };
-    r.onerror = (e) => {
-      setListening(false);
-      setInterim('');
-      notify(
-        e.error === 'not-allowed'
-          ? 'Microphone permission is needed. You can also use keyboard dictation.'
-          : 'Dictation stopped. Your written words are kept; you can continue typing.',
-      );
-    };
-    r.onend = () => {
-      setListening(false);
-      setInterim('');
-    };
-    ref.current = r;
-    try {
-      r.start();
-      setListening(true);
-    } catch {
-      notify('Use your keyboard microphone to dictate.');
-    }
-  }
   async function save() {
     if (!text.trim() && !ids.length) return;
-    ref.current?.stop();
     setBusy(true);
     try {
       await store.add(
@@ -148,19 +83,12 @@ export function Capture({
         <p>No title, date, or organizing required.</p>
       </div>
       <div className="capture-composer">
-        <button
-          className={'microphone ' + (listening ? 'listening' : '')}
-          onClick={dictate}
-          aria-label={listening ? 'Stop dictation' : 'Dictate a note'}
-        >
-          {listening ? <Square /> : <Mic />}
-        </button>
-        <p className="mic-label">
-          {listening
-            ? 'Listening… tap to stop'
-            : supported
-              ? 'Tap to speak'
-              : 'Speak with your keyboard'}
+        <p className="capture-help desktop-dictation">
+          Type a note or dictate with Wispr Flow.
+        </p>
+        <p className="capture-help phone-dictation">
+          Tap below, then use the microphone on your iPhone keyboard to speak
+          your note.
         </p>
         <textarea
           ref={input}
@@ -182,11 +110,6 @@ export function Capture({
             }
           }}
         />
-        {interim && (
-          <p className="interim" aria-live="polite">
-            {interim}
-          </p>
-        )}
         <div className="capture-actions">
           <input
             hidden
@@ -206,13 +129,9 @@ export function Capture({
             <Camera />
             Photo
           </button>
-          <button className="button" onClick={() => input.current?.focus()}>
-            <Type />
-            Type
-          </button>
           <button
             className="button primary"
-            disabled={busy || listening || (!text.trim() && !ids.length)}
+            disabled={busy || (!text.trim() && !ids.length)}
             onClick={() => void save()}
           >
             {busy ? 'Saving…' : 'Save note'}
@@ -234,9 +153,7 @@ export function Capture({
           />
         </details>
         <p className="hint">
-          {listening
-            ? 'Words appear here as you speak. Save when you’re finished.'
-            : 'Private notes stay out of reports until you add them to a meeting.'}
+          Private notes stay out of reports until you add them to a meeting.
         </p>
       </div>
       <section className="recent-captures">

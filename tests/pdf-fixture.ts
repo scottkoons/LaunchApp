@@ -34,6 +34,35 @@ const options = {
   agendaTo: '2026-09-09',
 };
 mkdirSync('outputs', { recursive: true });
+const monthlySample = makeReport(
+  [
+    createEntity('task', 'business', {
+      title: 'Oktoberfest table tent',
+      notes: 'Confirm the meal special at the Wednesday meeting.',
+      draft: '2026-09-10',
+      final: '2026-09-15',
+    }),
+    createEntity('task', 'business', {
+      title: 'October menu photography',
+      notes: 'Photograph the new seasonal menu items.',
+      draft: '2026-10-02',
+      final: '2026-10-06',
+    }),
+    createEntity('settings', 'business', {
+      monthlyNotes: {
+        '2026-09':
+          'Confirm Oktoberfest signage and the final meal selection.\nTeam feedback: use the updated event logo on all printed pieces.',
+        '2026-10':
+          'Plan the fall menu launch and review the first week of guest feedback.',
+      },
+    }),
+  ],
+  { ...options, calendar: false },
+);
+writeFileSync(
+  'outputs/monthly-report-review.pdf',
+  Buffer.from(createPdf(monthlySample).output('arraybuffer')),
+);
 for (const layout of ['one', 'two'] as const) {
   const r = makeReport(tasks, { ...options, calendarLayout: layout });
   const doc = createPdf(r);

@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
   monthLabel,
+  reportMonths,
   pretty,
   parseDay,
   day,
@@ -78,32 +79,29 @@ export function createPdf(s: ReportSnapshot) {
   doc.setTextColor(85, 95, 105);
   doc.text(`${s.businessName}  |  Meeting: ${s.options.meetingDate}`, 16, y);
   y += 12;
-  const months = [
-    ...new Set(
-      s.tasks.map((t) =>
-        (
-          t.final ||
-          t.draft ||
-          t.review ||
-          t.publication ||
-          s.options.from
-        ).slice(0, 7),
-      ),
-    ),
-  ].sort();
-  for (const m of months)
-    table(
-      monthLabel(m),
-      s.tasks.filter((t) =>
-        (
-          t.final ||
-          t.draft ||
-          t.review ||
-          t.publication ||
-          s.options.from
-        ).startsWith(m),
-      ),
-    );
+  for (const month of reportMonths(s)) {
+    if (month.items.length) table(month.label, month.items);
+    else {
+      title(month.label);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.text('No scheduled report items in this month.', 16, y);
+      y += 10;
+    }
+    if (month.notes.trim()) {
+      title('Notes for ' + month.label);
+      autoTable(doc, {
+        startY: y,
+        body: [[month.notes]],
+        theme: 'plain',
+        styles: { fontSize: 10, cellPadding: 3, overflow: 'linebreak' },
+        margin: { left: 16, right: 16, top: 20, bottom: 20 },
+      });
+      y =
+        (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable
+          .finalY + 12;
+    }
+  }
   table(
     `Completed · ${pretty(s.options.completedFrom)} – ${pretty(s.options.completedTo)}`,
     s.completed.map((t) => ({
@@ -125,25 +123,6 @@ export function createPdf(s: ReportSnapshot) {
       headStyles: { fillColor: [26, 42, 60] },
       margin: { left: 16, right: 16, top: 20, bottom: 20 },
       rowPageBreak: 'avoid',
-    });
-    y =
-      (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable
-        .finalY + 12;
-  }
-  for (const [m, notes] of Object.entries(s.monthlyNotes)) {
-    if (
-      !notes ||
-      m < s.options.from.slice(0, 7) ||
-      m > s.options.to.slice(0, 7)
-    )
-      continue;
-    title(monthLabel(m) + ' · Notes');
-    autoTable(doc, {
-      startY: y,
-      body: [[notes]],
-      theme: 'plain',
-      styles: { fontSize: 10, overflow: 'linebreak' },
-      margin: { left: 16, right: 16, bottom: 20 },
     });
     y =
       (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable

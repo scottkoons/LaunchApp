@@ -4,6 +4,7 @@ import { FileDown, Plus, CalendarDays, Download } from 'lucide-react';
 import {
   defaultReport,
   makeReport,
+  reportMonths,
   pretty,
   uid,
   type Entity,
@@ -306,11 +307,11 @@ export function Reports({
         </p>
         <div className="paper-rule" />
         {[
-          ['Upcoming work', preview.tasks],
+          ...reportMonths(preview).map((m) => [m.label, m.items, m.notes]),
           ['Completed', preview.completed],
           ['Back burner', preview.backburner],
           ['Postponed', preview.postponed],
-        ].map(([title, items]) => (
+        ].map(([title, items, monthNotes]) => (
           <section className="paper-section" key={title as string}>
             <h3>
               {title as string}
@@ -355,6 +356,12 @@ export function Reports({
               </div>
             ) : (
               <p className="paper-empty">No items in this range.</p>
+            )}
+            {!!monthNotes && (
+              <div className="paper-month-notes">
+                <h4>Notes for this month</h4>
+                <p>{monthNotes as string}</p>
+              </div>
             )}
           </section>
         ))}

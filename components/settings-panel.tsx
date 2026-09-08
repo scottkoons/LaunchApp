@@ -222,8 +222,8 @@ export function SettingsPanel({
           <span>
             Quick dictation
             <small>
-              Speak straight into a note where supported, or use your phone
-              keyboard’s microphone. No audio library to manage.
+              Use Wispr Flow in the desktop text box. On iPhone, tap the note
+              field and use the keyboard microphone to turn speech into text.
             </small>
           </span>
           <Check />

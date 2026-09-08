@@ -48,7 +48,7 @@ import {
   Pause,
   Settings as SettingsIcon,
   Plus,
-  Mic,
+  NotebookPen as CaptureIcon,
   ArrowUpRight,
   Search,
   CloudCheck,
@@ -82,6 +82,7 @@ import {
   monthLabel,
   urgency,
   dashboardGroups,
+  monthlyTaskGroups,
   dateStatus,
   type Entity,
   type Scope,
@@ -117,6 +118,7 @@ export default function Launch({
     [scope, setScope] = useState<Scope>('business'),
     [theme, setTheme] = useState('space'),
     [mode, setMode] = useState('grouped'),
+    [dashboardMode, setDashboardMode] = useState('grouped'),
     [sort, setSort] = useState('next'),
     [direction, setDirection] = useState(1),
     [query, setQuery] = useState(''),
@@ -234,6 +236,9 @@ export default function Launch({
   ).length;
   const todayCount = active.filter((t) => nextDate(t) === day()).length;
   const isDashboard = view === 'dashboard' || view === 'today';
+  const isMonthly =
+    (view === 'dashboard' && dashboardMode === 'grouped') ||
+    (view === 'tasks' && mode === 'grouped');
   const todayEvents = scoped
     .filter(
       (e) =>
@@ -355,18 +360,17 @@ export default function Launch({
     for (let n = 0; n < list.length; n++)
       if (list[n].order !== n) await store.change(list[n], { order: n });
   }
-  const groups = isDashboard
-    ? dashboardGroups(filtered).filter(
-        (g) => g.items.length > 0 && (view !== 'today' || g.key !== 'next'),
-      )
-    : mode === 'grouped' && view === 'tasks'
-      ? [...new Set(filtered.map((t) => workDate(t).slice(0, 7)))]
-          .sort()
-          .map((m) => ({
-            label: monthLabel(m),
-            key: m,
-            items: filtered.filter((t) => workDate(t).startsWith(m)),
-          }))
+  const groups = isMonthly
+    ? monthlyTaskGroups(filtered, [
+        day().slice(0, 7),
+        day(
+          new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1),
+        ).slice(0, 7),
+      ])
+    : isDashboard
+      ? dashboardGroups(filtered).filter(
+          (g) => g.items.length > 0 && (view !== 'today' || g.key !== 'next'),
+        )
       : [
           {
             label:
@@ -398,14 +402,21 @@ export default function Launch({
           <section
             className={
               'task-group ' +
-              (isDashboard ? 'dashboard-group dashboard-' + group.key : '')
+              (isMonthly
+                ? 'month-group'
+                : isDashboard
+                  ? 'dashboard-group dashboard-' + group.key
+                  : '')
             }
             key={group.key}
           >
             <div className="section-heading">
-              <h2>{group.label}</h2>
+              <div>
+                {isMonthly && <p className="eyebrow">MONTH</p>}
+                <h2>{group.label}</h2>
+              </div>
               <span className="count">{group.items.length}</span>
-              {view === 'tasks' && (
+              {isMonthly && (
                 <button
                   className="text-button add-in-month"
                   onClick={() => add('task', { final: group.key + '-15' })}
@@ -630,6 +641,12 @@ export default function Launch({
                   ))}
                 </TableBody>
               </Table>
+            ) : isMonthly ? (
+              <p className="month-empty">
+                {query
+                  ? 'No matching tasks in this month.'
+                  : 'No scheduled tasks yet. Add a task or leave notes below.'}
+              </p>
             ) : (
               <Empty
                 title={
@@ -652,7 +669,7 @@ export default function Launch({
                 label="Add a task"
               />
             )}
-            {view === 'tasks' && scope === 'business' && (
+            {isMonthly && scope === 'business' && (
               <MonthlyNote
                 month={group.key}
                 settings={settings}
@@ -794,7 +811,7 @@ export default function Launch({
               onClick={() => setCaptureOpen(true)}
               className="button quick-button"
             >
-              <Mic />
+              <CaptureIcon />
               Quick note<kbd>N</kbd>
             </button>
           </div>
@@ -947,7 +964,19 @@ export default function Launch({
                     </section>
                   )}
                   <div className="toolbar">
-                    {view === 'tasks' ? (
+                    {view === 'dashboard' ? (
+                      <Tabs
+                        value={dashboardMode}
+                        onValueChange={setDashboardMode}
+                      >
+                        <TabsList aria-label="Dashboard view">
+                          <TabsTrigger value="grouped">By month</TabsTrigger>
+                          <TabsTrigger value="focus">
+                            Today & upcoming
+                          </TabsTrigger>
+                        </TabsList>
+                      </Tabs>
+                    ) : view === 'tasks' ? (
                       <Tabs
                         value={mode}
                         onValueChange={(v) => setMode(String(v))}
@@ -1487,7 +1516,7 @@ export default function Launch({
           className={view === 'capture' ? 'active' : ''}
           onClick={() => navigate('capture')}
         >
-          <Mic />
+          <CaptureIcon />
           Capture
         </button>
         <button
@@ -1695,29 +1724,91 @@ function MonthlyNote({
   store: ReturnType<typeof useLaunchStore>['store'];
 }) {
   const noteValue = settings?.monthlyNotes?.[month] || '';
+  const key = `launch-month-note-${store.account}-${month}`;
   const [text, setText] = useState(noteValue);
-  useEffect(() => setText(noteValue), [noteValue]);
-  async function save() {
+  const [message, setMessage] = useState('');
+  const dirty = useRef(false),
+    baseline = useRef(noteValue),
+    latest = useRef(noteValue);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const draft = localStorage.getItem(key);
+    if (draft !== null) {
+      setText(draft);
+      latest.current = draft;
+      dirty.current = draft !== baseline.current;
+    }
+  }, [key]);
+  useEffect(() => {
+    if (!dirty.current) {
+      setText(noteValue);
+      latest.current = noteValue;
+      baseline.current = noteValue;
+    }
+  }, [noteValue]);
+  async function save(value: string) {
+    if (timer.current) clearTimeout(timer.current);
+    if (!dirty.current) return;
     const current =
-      store.data.records.find((e) => e.kind === 'settings') ||
+      store.data.records.find((e) => e.kind === 'settings' && !e.deletedAt) ||
       createEntity('settings', 'business', { title: 'Launch preferences' });
-    const monthlyNotes = { ...current.monthlyNotes, [month]: text };
-    if (store.data.records.some((e) => e.id === current.id))
-      await store.change(current, { monthlyNotes });
-    else await store.add({ ...current, monthlyNotes });
+    const monthlyNotes = { ...current.monthlyNotes, [month]: value };
+    try {
+      if (store.data.records.some((e) => e.id === current.id))
+        await store.change(
+          {
+            ...current,
+            monthlyNotes: {
+              ...current.monthlyNotes,
+              [month]: baseline.current,
+            },
+          },
+          { monthlyNotes },
+        );
+      else await store.add({ ...current, monthlyNotes });
+      baseline.current = value;
+      if (latest.current === value) {
+        dirty.current = false;
+        localStorage.removeItem(key);
+        setMessage('Saved on this device · sync status above');
+      }
+    } catch {
+      setMessage('Draft kept on this device. Leave the field to retry.');
+    }
   }
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
   return (
-    <details className="monthly-note">
-      <summary>Notes for {monthLabel(month)}</summary>
+    <section className="monthly-note">
+      <label className="eyebrow" htmlFor={'month-notes-' + month}>
+        Notes for this month
+      </label>
       <textarea
+        id={'month-notes-' + month}
         aria-label={`Notes for ${monthLabel(month)}`}
         value={text}
-        placeholder="Meeting context or plans for this month…"
-        onChange={(e) => setText(e.target.value)}
-        onBlur={() => void save()}
+        placeholder="Meeting notes, decisions, or anything to remember for this month…"
+        onChange={(e) => {
+          const value = e.target.value;
+          setText(value);
+          latest.current = value;
+          dirty.current = true;
+          localStorage.setItem(key, value);
+          setMessage('Saving…');
+          if (timer.current) clearTimeout(timer.current);
+          timer.current = setTimeout(() => void save(value), 600);
+        }}
+        onBlur={() => void save(text)}
       />
-      <p className="hint">Business monthly notes may be included in reports.</p>
-    </details>
+      <p className="hint" aria-live="polite">
+        {message ||
+          'Included with this month in reports when monthly notes are enabled.'}
+      </p>
+    </section>
   );
 }
 function ReferenceCard({

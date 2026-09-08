@@ -164,6 +164,50 @@ export function milestones(t: Entity) {
 export function workDate(t: Entity) {
   return t.final || t.draft || t.review || '';
 }
+export function monthKeys(from: string, to: string) {
+  const keys: string[] = [];
+  for (
+    let m = from.slice(0, 7) + '-01';
+    m <= to;
+    m = day(new Date(parseDay(m).getFullYear(), parseDay(m).getMonth() + 1, 1))
+  ) {
+    keys.push(m.slice(0, 7));
+    if (keys.length >= 120) break;
+  }
+  return keys;
+}
+export function monthlyTaskGroups(
+  tasks: Entity[],
+  includeMonths: string[] = [],
+) {
+  return [
+    ...new Set([
+      ...includeMonths,
+      ...tasks
+        .map((t) => (workDate(t) || t.publication || '').slice(0, 7))
+        .filter(Boolean),
+    ]),
+  ]
+    .sort()
+    .map((month) => ({
+      key: month,
+      label: monthLabel(month),
+      items: tasks.filter((t) =>
+        (workDate(t) || t.publication || '').startsWith(month),
+      ),
+    }));
+}
+export function reportMonths(snapshot: ReportSnapshot) {
+  return monthlyTaskGroups(
+    snapshot.tasks,
+    monthKeys(snapshot.options.from, snapshot.options.to),
+  ).map((g) => ({
+    ...g,
+    notes: snapshot.options.monthlyNotes
+      ? snapshot.monthlyNotes[g.key] || ''
+      : '',
+  }));
+}
 export function nextDate(t: Entity) {
   return (
     milestones(t)

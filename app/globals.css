@@ -868,9 +868,9 @@ kbd {
   align-items: center;
   justify-content: center;
   gap: 5px;
-  border-radius: 5px;
+  border-radius: 999px;
   border: 1px solid currentColor;
-  padding: 3px 8px;
+  padding: 4px 11px;
   font-size: 13px;
   line-height: 1.4;
   white-space: nowrap;
@@ -958,6 +958,77 @@ kbd {
   margin-top: 12px;
   color: var(--muted-foreground);
   font-size: 13px;
+}
+.month-group {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--card);
+}
+.month-group > .section-heading {
+  padding: 22px 24px;
+  margin: 0;
+  border-bottom: 1px solid var(--border);
+}
+.month-group .section-heading .eyebrow {
+  margin-bottom: 6px;
+}
+.month-group .task-table .check-cell {
+  padding-left: 14px;
+  width: 42px;
+}
+.month-group .task-table .row-tools {
+  padding-right: 12px;
+  width: 40px;
+}
+.month-group .monthly-note {
+  border-top: 1px solid var(--border);
+  padding: 22px 24px;
+  margin: 0;
+}
+.monthly-note label {
+  display: block;
+  margin-bottom: 12px;
+}
+.month-empty {
+  color: var(--muted-foreground);
+  padding: 30px 24px;
+  font-size: 14px;
+}
+.paper-month-notes {
+  margin-top: 16px;
+  padding: 12px 0;
+  border-top: 1px solid #dce1e6;
+}
+.paper-month-notes h4 {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.paper-month-notes p {
+  white-space: pre-wrap;
+  font-size: 13px;
+}
+.capture-help {
+  color: var(--muted-foreground);
+  font-size: 14px;
+  margin-bottom: 18px;
+  text-align: left;
+}
+.phone-dictation {
+  display: none;
+}
+@media (max-width: 767px) {
+  .desktop-dictation {
+    display: none;
+  }
+  .phone-dictation {
+    display: block;
+  }
+  .month-group > .section-heading,
+  .month-group .monthly-note {
+    padding: 18px 14px;
+  }
 }
 .monthly-note textarea {
   margin-top: 12px;

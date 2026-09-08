@@ -11,9 +11,45 @@ import {
   calendarIcs,
   validateEntity,
   dashboardGroups,
+  monthlyTaskGroups,
+  reportMonths,
   type Operation,
   type Entity,
 } from '../lib/model';
+void test('monthly dashboard and report share month grouping and retain months with notes only', () => {
+  const t = createEntity('task', 'business', {
+    title: 'Magazine ad',
+    draft: '2026-08-30',
+    final: '2026-09-15',
+  });
+  const settings = createEntity('settings', 'business', {
+    monthlyNotes: {
+      '2026-09': 'September decisions',
+      '2026-10': 'October planning',
+      '2026-08': 'Outside the report',
+    },
+  });
+  const snapshot = makeReport([t, settings], {
+    ...defaultReport(),
+    from: '2026-09-01',
+    to: '2026-10-31',
+  });
+  const months = reportMonths(snapshot);
+  assert.deepEqual(
+    months.map((m) => m.key),
+    ['2026-09', '2026-10'],
+  );
+  assert.equal(months[0].items[0].id, monthlyTaskGroups([t])[0].items[0].id);
+  assert.equal(months[1].items.length, 0);
+  assert.equal(months[1].notes, 'October planning');
+  assert.ok(!JSON.stringify(months).includes('Outside the report'));
+  assert.ok(
+    reportMonths({
+      ...snapshot,
+      options: { ...snapshot.options, monthlyNotes: false },
+    }).every((m) => !m.notes),
+  );
+});
 void test('dashboard groups use the next unfinished date and count a task only once', () => {
   const task = (id: string, extra: Partial<Entity>) =>
     createEntity('task', 'business', { id, title: id, ...extra });

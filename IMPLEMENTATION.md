@@ -17,7 +17,7 @@ Private, single-editor web app built from Scott’s agreed workflow. Brand: retr
 
 ## Deliberate boundaries
 
-- Device speech recognition is optional and browser dependent. Phone keyboard dictation is the fallback. No app-owned audio recording or cloud transcription service.
+- Capture uses a standard text field: Wispr Flow on desktop and the iPhone keyboard microphone for phone dictation. No in-app microphone or audio recorder.
 - Apple/Google calendar integration currently uses ICS downloads. No automatic external calendar sync or two-way editing.
 - Outlook compose handoff does not attach files automatically or confirm sending.
 - Background sync while the PWA is closed is not promised; leave it open to upload.
@@ -26,7 +26,7 @@ Private, single-editor web app built from Scott’s agreed workflow. Brand: retr
 
 ## Sources
 
-- Speech recognition support: https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition
+- Monthly dashboard sections and PDF preview share the same grouping; monthly notes appear directly after their month’s task table.
 - Fonts: https://github.com/google/fonts/tree/main/ofl/barlow and https://github.com/google/fonts/tree/main/ofl/bitter
 
 ## Local development
