@@ -377,7 +377,13 @@ export function TaskEditor({
                 checked={!!draft.important}
                 onChange={(important) => change({ important })}
               >
-                Keep on my radar
+                Mark as important
+              </Toggle>
+              <Toggle
+                checked={!!draft.pinned}
+                onChange={(pinned) => change({ pinned })}
+              >
+                Pin to top of list
               </Toggle>
             </>
           )}

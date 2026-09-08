@@ -14,6 +14,8 @@ import {
   monthlyTaskGroups,
   reportMonths,
   reportDateStatus,
+  compareTasks,
+  manualOrderChanges,
   type Operation,
   type Entity,
 } from '../lib/model';
@@ -303,4 +305,64 @@ void test('report deadline colors use the saved date and due-soon window', () =>
     reportDateStatus(snapshot, { ...task, status: 'postponed' }, 'draft'),
     'none',
   );
+});
+
+void test('pins stay above unpinned tasks for every sort direction; flags do not change ordering', () => {
+  const a = createEntity('task', 'business', {
+    title: 'Alpha',
+    final: '2026-09-01',
+    order: 0,
+    important: true,
+  });
+  const z = createEntity('task', 'business', {
+    title: 'Zulu',
+    final: '2026-09-30',
+    order: 9,
+    pinned: true,
+  });
+  for (const sort of ['manual', 'title', 'draft', 'final', 'notes', 'next']) {
+    for (const direction of [-1, 1])
+      assert.equal(
+        [a, z].sort((x, y) => compareTasks(x, y, sort, direction))[0].id,
+        z.id,
+      );
+  }
+  assert.equal(
+    [a, { ...z, pinned: false }].sort((x, y) =>
+      compareTasks(x, y, 'title', -1),
+    )[0].id,
+    z.id,
+  );
+});
+void test('manual moves preserve hidden tasks and dates, and cannot cross pin boundaries', () => {
+  const task = (id: string, order: number, pinned = false) =>
+    createEntity('task', 'business', {
+      id,
+      title: id,
+      order,
+      pinned,
+      final: '2026-09-15',
+    });
+  const a = task('a', 0),
+    hidden = task('hidden', 1),
+    b = task('b', 2),
+    c = task('c', 3);
+  const all = [a, hidden, b, c];
+  const changes = manualOrderChanges(all, [a, b, c], 'c', 'a');
+  const moved = all
+    .map((t) => ({
+      ...t,
+      order: changes.find((x) => x.task.id === t.id)?.order ?? t.order,
+    }))
+    .sort((x, y) => compareTasks(x, y, 'manual'));
+  assert.deepEqual(
+    moved.map((t) => t.id),
+    ['c', 'hidden', 'a', 'b'],
+  );
+  assert.ok(moved.every((t) => t.final === '2026-09-15'));
+  assert.deepEqual(
+    manualOrderChanges(all, [{ ...a, pinned: true }, b, c], 'a', 'b'),
+    [],
+  );
+  assert.deepEqual(manualOrderChanges(all, [a, b], 'c', 'a'), []);
 });

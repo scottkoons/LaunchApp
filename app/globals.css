@@ -2693,3 +2693,143 @@ details[open] > summary {
   color: #117741;
   background: #e2f5ea;
 }
+
+/* Space uses the original deep navy canvas and slate working surfaces. */
+[data-theme='space'] {
+  --background: #0f172a;
+  --foreground: #e5e9f0;
+  --card: #1e293b;
+  --sidebar: #1e293b;
+  --muted: #273449;
+  --muted-foreground: #94a3b8;
+  --primary: #f59a23;
+  --primary-foreground: #0f172a;
+  --accent: #3c3938;
+  --border: #334155;
+  --destructive: #ff416b;
+  --green: #00cf96;
+  --yellow: #ffc400;
+  --blue: #25bdf3;
+}
+[data-theme='space'] .month-group > .section-heading {
+  background: #0f172a;
+}
+[data-theme='space'] .task-table thead {
+  background: #172133;
+}
+[data-theme='space'] .month-group .monthly-note {
+  background: #1e293b;
+}
+[data-theme='space'] .date-badge {
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+.task-table .drag-cell {
+  width: 28px;
+  padding: 0 2px 0 8px;
+  vertical-align: middle;
+}
+.drag-handle {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  min-height: 36px;
+  cursor: grab;
+  color: var(--muted-foreground);
+  border-radius: 5px;
+}
+.drag-handle svg {
+  width: 17px;
+  height: 17px;
+}
+.drag-handle:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+.drag-handle:active {
+  cursor: grabbing;
+}
+.drag-handle:focus-visible,
+.task-actions button:focus-visible,
+.task-move-buttons button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.task-table .row-tools {
+  width: 76px;
+  padding: 8px 6px;
+  vertical-align: middle;
+}
+.task-actions,
+.task-move-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+.task-actions .icon-button {
+  width: 30px;
+  height: 30px;
+  color: var(--muted-foreground);
+  border-radius: 5px;
+}
+.task-actions svg {
+  width: 16px;
+  height: 16px;
+}
+.task-actions button:hover,
+.task-actions .is-selected {
+  color: var(--primary);
+  background: var(--accent);
+}
+.task-actions .is-selected svg {
+  fill: color-mix(in srgb, var(--primary) 22%, transparent);
+}
+.task-move-buttons button {
+  width: 30px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  color: var(--muted-foreground);
+}
+.task-move-buttons button svg {
+  width: 13px;
+  height: 13px;
+}
+.task-move-buttons button:hover:not(:disabled) {
+  color: var(--foreground);
+  background: var(--muted);
+}
+.task-move-buttons button:disabled {
+  opacity: 0.25;
+}
+.pinned-task .title-cell {
+  box-shadow: inset 2px 0 color-mix(in srgb, var(--primary) 65%, transparent);
+}
+.dragging-task {
+  opacity: 0.45;
+}
+@media (max-width: 767px) {
+  .task-table .drag-cell {
+    width: 25px;
+    padding-left: 3px;
+  }
+  .task-table .row-tools {
+    width: 44px;
+    padding: 10px 3px;
+  }
+  .task-actions,
+  .task-move-buttons {
+    flex-direction: column;
+  }
+  .task-actions .icon-button,
+  .task-move-buttons button {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+[data-theme='space'] h1,
+[data-theme='space'] h2 {
+  font-family: Georgia, 'Times New Roman', serif;
+  letter-spacing: -0.025em;
+}

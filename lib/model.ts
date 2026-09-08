@@ -54,6 +54,7 @@ export type Entity = {
   order?: number;
   sourceId?: string;
   important?: boolean;
+  pinned?: boolean;
   businessName?: string;
   soonDays?: number;
   monthsAhead?: number;
@@ -177,6 +178,46 @@ export function monthKeys(from: string, to: string) {
     if (keys.length >= 120) break;
   }
   return keys;
+}
+export function compareTasks(
+  a: Entity,
+  b: Entity,
+  sort: string,
+  direction = 1,
+) {
+  const pin = Number(!!b.pinned) - Number(!!a.pinned);
+  if (pin) return pin;
+  if (sort === 'manual') return (a.order || 0) - (b.order || 0);
+  const value = (t: Entity) =>
+    sort === 'next'
+      ? nextDate(t)
+      : String(t[sort as 'title' | 'notes' | 'draft' | 'final'] || '9999');
+  return value(a).localeCompare(value(b)) * direction;
+}
+export function manualOrderChanges(
+  all: Entity[],
+  group: Entity[],
+  source: string,
+  target: string,
+) {
+  const from = group.findIndex((t) => t.id === source),
+    to = group.findIndex((t) => t.id === target);
+  if (
+    from < 0 ||
+    to < 0 ||
+    from === to ||
+    !!group[from].pinned !== !!group[to].pinned
+  )
+    return [];
+  const desired = [...group];
+  desired.splice(to, 0, desired.splice(from, 1)[0]);
+  const ids = new Set(group.map((t) => t.id));
+  const ordered = [...all].sort((a, b) => (a.order || 0) - (b.order || 0));
+  let index = 0;
+  const reordered = ordered.map((t) => (ids.has(t.id) ? desired[index++] : t));
+  return reordered.flatMap((task, order) =>
+    task.order === order ? [] : [{ task, order }],
+  );
 }
 export function monthlyTaskGroups(
   tasks: Entity[],

@@ -58,6 +58,7 @@ import {
   RefreshCw,
   Check,
   Flag,
+  Pin,
   FileX,
   Repeat2,
   GripVertical,
@@ -85,6 +86,8 @@ import {
   urgency,
   dashboardGroups,
   monthlyTaskGroups,
+  compareTasks,
+  manualOrderChanges,
   dateStatus,
   type Entity,
   type Scope,
@@ -147,6 +150,10 @@ export default function Launch({
     [noteTab, setNoteTab] = useState('inbox'),
     [refYear, setRefYear] = useState('all');
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reordering = useRef(false);
+  useEffect(() => {
+    if (ready) localStorage.setItem('launch-task-sort', sort);
+  }, [sort, ready]);
   const searchRef = useRef<HTMLInputElement>(null);
   const settings = records.find((e) => e.kind === 'settings' && !e.deletedAt);
   const soon = settings?.soonDays ?? 2;
@@ -157,6 +164,7 @@ export default function Launch({
   }
   useEffect(() => {
     setSidebarOpen(localStorage.getItem('launch-sidebar-open') !== 'false');
+    setSort(localStorage.getItem('launch-task-sort') || 'next');
     const t = localStorage.getItem('launch-theme') || 'space';
     setTheme(t);
     document.documentElement.dataset.theme = t;
@@ -338,22 +346,7 @@ export default function Launch({
         `${t.title} ${t.notes}`.toLowerCase().includes(query.toLowerCase()),
     )
     .filter((t) => filter === 'all' || urgency(t, day(), soon) === filter)
-    .sort((a, b) => {
-      if (sort === 'manual') return (a.order || 0) - (b.order || 0);
-      const av =
-          sort === 'next'
-            ? nextDate(a)
-            : String(
-                a[sort as 'title' | 'notes' | 'draft' | 'final'] || '9999',
-              ),
-        bv =
-          sort === 'next'
-            ? nextDate(b)
-            : String(
-                b[sort as 'title' | 'notes' | 'draft' | 'final'] || '9999',
-              );
-      return av.localeCompare(bv) * direction;
-    });
+    .sort((a, b) => compareTasks(a, b, sort, direction));
   function sortBy(key: string) {
     if (sort === key) setDirection((d) => -d);
     else {
@@ -361,16 +354,40 @@ export default function Launch({
       setDirection(1);
     }
   }
-  async function reorder(id: string, target: string) {
-    if (id === target) return;
-    const list = [...filtered];
-    const i = list.findIndex((t) => t.id === id),
-      j = list.findIndex((t) => t.id === target);
-    if (i < 0 || j < 0) return;
-    const [item] = list.splice(i, 1);
-    list.splice(j, 0, item);
-    for (let n = 0; n < list.length; n++)
-      if (list[n].order !== n) await store.change(list[n], { order: n });
+  async function reorder(id: string, target: string, group: Entity[]) {
+    if (reordering.current || id === target) return;
+    const source = group.find((t) => t.id === id),
+      destination = group.find((t) => t.id === target);
+    if (!source || !destination) return;
+    if (!!source.pinned !== !!destination.pinned) {
+      notify(
+        'Pinned tasks stay at the top. Unpin the task to move it below other tasks.',
+      );
+      return;
+    }
+    reordering.current = true;
+    try {
+      for (const { task, order } of manualOrderChanges(
+        tasks,
+        group,
+        id,
+        target,
+      ))
+        await store.change(task, { order });
+      setSort('manual');
+      setDirection(1);
+      notify('Task moved. Manual order saved.');
+    } catch {
+      notify('Could not save the new order. Please try again.');
+    } finally {
+      reordering.current = false;
+      setDragId('');
+    }
+  }
+  function moveTask(t: Entity, group: Entity[], delta: number) {
+    const peers = group.filter((item) => !!item.pinned === !!t.pinned);
+    const target = peers[peers.findIndex((item) => item.id === t.id) + delta];
+    if (target) void reorder(t.id, target.id, group);
   }
   const groups = isMonthly
     ? monthlyTaskGroups(filtered, [
@@ -442,6 +459,9 @@ export default function Launch({
               <Table className="task-table">
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="drag-cell">
+                      <span className="sr-only">Drag to reorder</span>
+                    </TableHead>
                     <TableHead className="check-cell">
                       <span className="sr-only">Complete</span>
                     </TableHead>
@@ -470,7 +490,7 @@ export default function Launch({
                       </button>
                     </TableHead>
                     <TableHead className="row-tools">
-                      <span className="sr-only">Reorder</span>
+                      <span className="sr-only">Flag and pin</span>
                     </TableHead>
                   </TableRow>
                 </TableHeader>
@@ -478,16 +498,53 @@ export default function Launch({
                   {group.items.map((t) => (
                     <TableRow
                       key={t.id}
-                      draggable={sort === 'manual' && view !== 'completed'}
-                      onDragStart={() => setDragId(t.id)}
+                      className={
+                        (t.pinned ? 'pinned-task ' : '') +
+                        (dragId === t.id ? 'dragging-task' : '')
+                      }
                       onDragOver={(e) => {
-                        if (sort === 'manual') e.preventDefault();
+                        if (group.items.some((item) => item.id === dragId)) {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = 'move';
+                        }
                       }}
                       onDrop={(e) => {
                         e.preventDefault();
-                        if (sort === 'manual') void reorder(dragId, t.id);
+                        void reorder(dragId, t.id, group.items);
                       }}
                     >
+                      <TableCell className="drag-cell">
+                        {view !== 'completed' && (
+                          <button
+                            type="button"
+                            className="drag-handle"
+                            draggable
+                            aria-label={`Move ${t.title}. Drag, or use up and down arrow keys.`}
+                            title="Drag to reorder · Arrow keys to move"
+                            onDragStart={(e) => {
+                              setDragId(t.id);
+                              e.dataTransfer.effectAllowed = 'move';
+                              e.dataTransfer.setData('text/plain', t.id);
+                            }}
+                            onDragEnd={() => setDragId('')}
+                            onKeyDown={(e) => {
+                              if (
+                                e.key === 'ArrowUp' ||
+                                e.key === 'ArrowDown'
+                              ) {
+                                e.preventDefault();
+                                moveTask(
+                                  t,
+                                  group.items,
+                                  e.key === 'ArrowUp' ? -1 : 1,
+                                );
+                              }
+                            }}
+                          >
+                            <GripVertical />
+                          </button>
+                        )}
+                      </TableCell>
                       <TableCell className="check-cell">
                         {view === 'completed' ? (
                           <button
@@ -617,32 +674,69 @@ export default function Launch({
                         </TableCell>
                       ))}
                       <TableCell className="row-tools">
-                        {sort === 'manual' && (
-                          <div className="reorder-controls">
-                            <GripVertical />
+                        <div className="task-actions">
+                          <button
+                            className={
+                              'icon-button task-flag ' +
+                              (t.important ? 'is-selected' : '')
+                            }
+                            aria-label={`${t.important ? 'Unflag' : 'Flag'} ${t.title} as important`}
+                            title={
+                              t.important
+                                ? 'Remove important flag'
+                                : 'Mark important'
+                            }
+                            aria-pressed={!!t.important}
+                            onClick={() =>
+                              void store.change(t, { important: !t.important })
+                            }
+                          >
+                            <Flag />
+                          </button>
+                          <button
+                            className={
+                              'icon-button task-pin ' +
+                              (t.pinned ? 'is-selected' : '')
+                            }
+                            aria-label={`${t.pinned ? 'Unpin' : 'Pin'} ${t.title}`}
+                            title={
+                              t.pinned
+                                ? 'Unpin task'
+                                : 'Pin above other tasks when sorting'
+                            }
+                            aria-pressed={!!t.pinned}
+                            onClick={() =>
+                              void store.change(t, { pinned: !t.pinned })
+                            }
+                          >
+                            <Pin />
+                          </button>
+                        </div>
+                        {view !== 'completed' && (
+                          <div className="task-move-buttons">
                             <button
                               aria-label={`Move ${t.title} up`}
-                              disabled={filtered.indexOf(t) === 0}
-                              onClick={() =>
-                                void reorder(
-                                  t.id,
-                                  filtered[filtered.indexOf(t) - 1]?.id,
-                                )
+                              title="Move up"
+                              disabled={
+                                group.items.filter(
+                                  (item) => !!item.pinned === !!t.pinned,
+                                )[0]?.id === t.id
                               }
+                              onClick={() => moveTask(t, group.items, -1)}
                             >
                               <ArrowUp />
                             </button>
                             <button
                               aria-label={`Move ${t.title} down`}
+                              title="Move down"
                               disabled={
-                                filtered.indexOf(t) === filtered.length - 1
+                                group.items
+                                  .filter(
+                                    (item) => !!item.pinned === !!t.pinned,
+                                  )
+                                  .at(-1)?.id === t.id
                               }
-                              onClick={() =>
-                                void reorder(
-                                  t.id,
-                                  filtered[filtered.indexOf(t) + 1]?.id,
-                                )
-                              }
+                              onClick={() => moveTask(t, group.items, 1)}
                             >
                               <ArrowDown />
                             </button>
