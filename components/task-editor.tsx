@@ -242,7 +242,7 @@ export function TaskEditor({
                   onChange={(scope) =>
                     change({
                       scope: scope as Entity['scope'],
-                      report: scope === 'personal' ? false : draft.report,
+                      report: scope === 'business',
                     })
                   }
                   options={[
@@ -255,7 +255,9 @@ export function TaskEditor({
                 ['task', 'agenda', 'event'].includes(draft.kind) && (
                   <Toggle
                     checked={draft.report}
-                    onChange={(report) => change({ report })}
+                    onChange={(report) =>
+                      change({ report, reportPreferenceSet: true })
+                    }
                   >
                     Include in marketing reports
                   </Toggle>
@@ -732,6 +734,11 @@ export function TaskEditor({
                     ...draft,
                     id: uid(),
                     title: draft.title + ' (copy)',
+                    report:
+                      draft.scope === 'business' &&
+                      (!draft.routine || draft.report),
+                    reportDefaultsVersion: 1,
+                    reportSchedule: [],
                     status: 'active',
                     completedAt: '',
                     draftDone: false,

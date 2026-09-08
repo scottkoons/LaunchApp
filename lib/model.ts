@@ -16,6 +16,8 @@ export type Entity = {
   notes: string;
   scope: Scope;
   report: boolean;
+  reportPreferenceSet?: boolean;
+  reportDefaultsVersion?: number;
   files: string[];
   createdAt: string;
   updatedAt: string;
@@ -332,6 +334,23 @@ export function visibleMonthlyTasks(
     return month <= today.slice(0, 7) || months.includes(month);
   });
 }
+// Repair the original import and note-conversion defaults once. Explicit new
+// choices and recurring-series choices always take precedence over a default.
+export function migrateReportDefaults(e: Entity): Entity {
+  if (e.kind !== 'task' || e.deletedAt || e.reportDefaultsVersion === 1)
+    return e;
+  const repair =
+    e.scope === 'business' &&
+    !e.routine &&
+    !e.reportPreferenceSet &&
+    !e.reportSchedule?.length &&
+    (e.legacy?.source === 'mission-control' || !!e.sourceId);
+  return {
+    ...e,
+    reportDefaultsVersion: 1,
+    ...(repair ? { report: true } : {}),
+  };
+}
 // One-time migration of the two routines identified in Scott's original import.
 // Retain the original dates in legacy.record; never infer routine mode for other
 // report-muted tasks, which can still need draft/final review.
@@ -645,7 +664,7 @@ export function recurringReportUpdates(
           !entity.deletedAt &&
           entity.status !== 'completed' &&
           (entity.occurrence || workDate(entity)) >= cutoff)
-          ? { report }
+          ? { report, reportPreferenceSet: true }
           : {}),
       },
     }));
@@ -750,6 +769,9 @@ export function validateEntity(e: Entity) {
       (!/^\d{4}-\d{2}-\d{2}$/.test(e[k]!) || day(parseDay(e[k]!)) !== e[k])
     )
       throw new Error('Invalid date');
+  if (e.report === undefined)
+    e.report = e.kind === 'task' && e.scope === 'business';
+  if (typeof e.report !== 'boolean') throw new Error('Invalid report choice');
   if (e.scope === 'personal') e.report = false;
   if (e.kind === 'task' && e.draft && e.final && e.final < e.draft)
     throw new Error('Final due date must be on or after the draft due date.');

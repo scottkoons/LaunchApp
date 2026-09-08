@@ -1197,7 +1197,6 @@ export default function Launch({
                                   notes: n.notes,
                                   files: n.files,
                                   sourceId: n.id,
-                                  report: false,
                                 })
                               }
                             >

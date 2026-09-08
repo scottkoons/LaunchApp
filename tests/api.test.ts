@@ -231,3 +231,49 @@ void test('future planned work reveals recurring occurrences with one final date
     assert.equal(deleted.status, 200);
   }
 });
+
+void test('old report defaults are repaired once and a later explicit exclusion survives sync', async () => {
+  const item = createEntity('task', 'business', {
+    title: 'TEST: imported report default',
+    final: '2026-09-15',
+    report: false,
+    legacy: { source: 'mission-control' },
+  });
+  await add(item);
+  const read = async () =>
+    (await (await request('/api/sync')).json()) as { records: Entity[] };
+  const corrected = (await read()).records.find((e) => e.id === item.id)!;
+  assert.equal(corrected.report, true);
+  assert.equal(corrected.reportDefaultsVersion, 1);
+  const exclude = await request('/api/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      id: uid(),
+      entityId: item.id,
+      kind: 'task',
+      patch: { report: false, reportPreferenceSet: true },
+      base: {
+        report: true,
+        reportPreferenceSet: corrected.reportPreferenceSet,
+      },
+    }),
+  });
+  assert.equal(exclude.status, 200);
+  assert.equal(
+    (await read()).records.find((e) => e.id === item.id)!.report,
+    false,
+  );
+  const remove = await request('/api/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      id: uid(),
+      entityId: item.id,
+      kind: 'task',
+      patch: { deletedAt: new Date().toISOString() },
+      base: {},
+    }),
+  });
+  assert.equal(remove.status, 200);
+});

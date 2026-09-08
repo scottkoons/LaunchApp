@@ -81,7 +81,8 @@ def convert(source, output):
                  draftDone=bool(r['draft_completed_at']) or done, finalDone=done,
                  completedAt=r['delivered_at'] or r['approved_at'] or '' if done else '',
                  important=bool(r['is_important'] or r['is_pinned']),
-                 report=bool(r['include_in_report']) and scope == 'business' and not internal,
+                 report=scope == 'business' and not internal,
+                 reportDefaultsVersion=1,
                  companyId=eid('companies', r['assigned_company_id']) if r['assigned_company_id'] else '',
                  contactId=eid('contacts', r['assigned_contact_id']) if r['assigned_contact_id'] else '', repeat='none')
         if done and not e['completedAt']:

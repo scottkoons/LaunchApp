@@ -19,6 +19,7 @@ import {
   dashboardMonths,
   visibleMonthlyTasks,
   migrateLegacyRoutine,
+  migrateReportDefaults,
   reportMonths,
   reportDateStatus,
   compareTasks,
@@ -735,4 +736,60 @@ void test('dashboard rolling window honors settings, overdue work, notes and yea
   assert.ok(!months.includes('2027-02'));
   const completed = { ...task('2026-10-01'), status: 'completed' as const };
   assert.ok(!dashboardMonths([completed], '2026-09-08').includes('2026-10'));
+});
+
+void test('report defaults repair imported business work and converted notes exactly once', () => {
+  const imported = createEntity('task', 'business', {
+    title: 'Q2 Financials',
+    report: false,
+    legacy: { source: 'mission-control' },
+  });
+  const repaired = migrateReportDefaults(imported);
+  assert.equal(repaired.report, true);
+  assert.equal(imported.report, false);
+  assert.equal(
+    migrateReportDefaults({ ...repaired, report: false }).report,
+    false,
+  );
+  assert.equal(
+    migrateReportDefaults({ ...imported, reportPreferenceSet: true }).report,
+    false,
+  );
+  assert.equal(
+    migrateReportDefaults({
+      ...imported,
+      reportSchedule: [{ from: '2026-09-01', report: false }],
+    }).report,
+    false,
+  );
+  assert.equal(
+    migrateReportDefaults({ ...imported, routine: true }).report,
+    false,
+  );
+  assert.equal(
+    migrateReportDefaults({ ...imported, scope: 'personal' }).report,
+    false,
+  );
+  const converted = createEntity('task', 'business', {
+    title: 'Take menu pictures',
+    report: false,
+    sourceId: 'note-1',
+  });
+  assert.equal(migrateReportDefaults(converted).report, true);
+  const ordinary = createEntity('task', 'business', {
+    title: 'Explicit internal item',
+    report: false,
+  });
+  assert.equal(migrateReportDefaults(ordinary).report, false);
+  const tasks = [
+    repaired,
+    { ...migrateReportDefaults(converted), final: '2026-09-15' },
+  ];
+  const report = makeReport(tasks, {
+    ...defaultReport(),
+    from: '2026-09-01',
+    to: '2026-09-30',
+  });
+  assert.equal(report.backburner.length, 1);
+  assert.equal(report.tasks.length, 1);
 });

@@ -3,6 +3,7 @@ import {
   validateEntity,
   reportEligible,
   migrateLegacyRoutine,
+  migrateReportDefaults,
   now,
   type Entity,
 } from '@/lib/model';
@@ -16,7 +17,7 @@ export async function POST(request: Request) {
     if (!Array.isArray(input.records) || input.records.length > 100)
       throw new Error('Import up to 100 records per batch');
     const entities = input.records.map((original: Entity) => {
-      const e = migrateLegacyRoutine(original);
+      const e = migrateReportDefaults(migrateLegacyRoutine(original));
       validateEntity(e);
       if (!e.id || e.id.length > 160) throw new Error('Invalid record ID');
       if (e.kind === 'meeting' && e.snapshot) {
