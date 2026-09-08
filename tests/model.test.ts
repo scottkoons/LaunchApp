@@ -5,6 +5,7 @@ import {
   completedDateRange,
   recurrenceDates,
   spawnOccurrence,
+  recurringReportUpdates,
   makeReport,
   defaultReport,
   validateReportOptions,
@@ -446,7 +447,7 @@ void test('final date cannot precede draft, but same-day and single dates work',
   assert.equal(validateEntity({ ...task, draft: '' }).final, '2026-09-09');
 });
 
-void test('legacy routines keep their weekly work day, original data, and report exclusion', () => {
+void test('legacy routines keep their weekly work day, original data, and an editable report default', () => {
   const old = createEntity('task', 'business', {
     title: 'Enter DoorDash & UberEats Transactions',
     draft: '2026-09-14',
@@ -477,13 +478,13 @@ void test('legacy routines keep their weekly work day, original data, and report
       from: '2026-09-01',
       to: '2026-09-30',
     }).tasks.length,
-    0,
+    1,
   );
   assert.throws(
     () => validateEntity({ ...routine, draft: '2026-09-14' }),
     /one final due date/,
   );
-  assert.equal(validateEntity({ ...routine, report: true }).report, false);
+  assert.equal(validateEntity({ ...routine, report: true }).report, true);
 });
 
 void test('recurring instances do not open future months; planned work, notes and rollover do', () => {
@@ -564,4 +565,95 @@ void test('completed presets handle year boundaries, leap February and Sunday', 
     from: '2026-09-07',
     to: '2026-09-13',
   });
+});
+
+void test('new business tasks default into reports; simple completion does not change inclusion', () => {
+  assert.equal(createEntity('task', 'business').report, true);
+  assert.equal(createEntity('task', 'personal').report, false);
+  for (const report of [true, false]) {
+    const root = createEntity('task', 'business', {
+      title: 'Weekly work',
+      routine: true,
+      report,
+      final: '2026-09-08',
+      repeat: 'weekly',
+    });
+    assert.equal(validateEntity(root).report, report);
+    assert.equal(spawnOccurrence(root, '2026-09-15').report, report);
+  }
+});
+
+void test('report choice can change one occurrence including the root without changing future defaults', () => {
+  const root = createEntity('task', 'business', {
+    title: 'Reviews',
+    routine: true,
+    report: false,
+    final: '2026-09-08',
+    repeat: 'weekly',
+  });
+  const next = spawnOccurrence(root, '2026-09-15');
+  let records = [root, next];
+  function apply(selected: Entity, report: boolean) {
+    for (const update of recurringReportUpdates(
+      records,
+      selected,
+      report,
+      false,
+    ))
+      records = records.map((e) =>
+        e.id === update.entity.id ? { ...e, ...update.patch } : e,
+      );
+  }
+  apply(root, true);
+  assert.equal(records[0].report, true);
+  assert.equal(records[1].report, false);
+  assert.equal(spawnOccurrence(records[0], '2026-09-22').report, false);
+  apply(records[1], true);
+  assert.equal(records[1].report, true);
+  assert.equal(spawnOccurrence(records[0], '2026-09-29').report, false);
+});
+
+void test('future report choices update generated repeats, preserve history, and apply to later months', () => {
+  const root = createEntity('task', 'business', {
+    title: 'DoorDash',
+    routine: true,
+    report: false,
+    final: '2026-09-07',
+    repeat: 'weekly',
+  });
+  const selected = spawnOccurrence(root, '2026-09-14');
+  const later = spawnOccurrence(root, '2026-09-21');
+  const completed = {
+    ...spawnOccurrence(root, '2026-09-28'),
+    status: 'completed' as const,
+  };
+  const unrelated = createEntity('task', 'business', {
+    title: 'Other',
+    report: false,
+  });
+  let records = [root, selected, later, completed, unrelated];
+  for (const update of recurringReportUpdates(records, selected, true, true))
+    records = records.map((e) =>
+      e.id === update.entity.id ? { ...e, ...update.patch } : e,
+    );
+  assert.deepEqual(
+    records.map((e) => e.report),
+    [false, true, true, false, false],
+  );
+  assert.equal(spawnOccurrence(records[0], '2026-09-07').report, false);
+  assert.equal(spawnOccurrence(records[0], '2027-02-01').report, true);
+  for (const update of recurringReportUpdates(records, records[2], false, true))
+    records = records.map((e) =>
+      e.id === update.entity.id ? { ...e, ...update.patch } : e,
+    );
+  assert.equal(records[1].report, true);
+  assert.equal(spawnOccurrence(records[0], '2027-02-01').report, false);
+  assert.throws(
+    () =>
+      validateEntity({
+        ...root,
+        reportSchedule: [{ from: '2026-02-31', report: true }],
+      }),
+    /Invalid recurring/,
+  );
 });

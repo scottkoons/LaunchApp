@@ -11,7 +11,7 @@ import {
   Rocket,
   Check,
 } from 'lucide-react';
-import { Toggle, Pick } from './launch-controls';
+import { Pick } from './launch-controls';
 import { createEntity, now, type Entity, type FileMeta } from '@/lib/model';
 import { downloadBlob } from './calendar';
 import type { LaunchStore } from '@/lib/client-store';
@@ -198,12 +198,9 @@ export function SettingsPanel({
               Can be changed per task. Personal tasks are always excluded.
             </small>
           </span>
-          <Toggle
-            checked={settings?.reportDefault ?? true}
-            onChange={(reportDefault) => void update({ reportDefault })}
-          >
-            Include by default
-          </Toggle>
+          <span className="hint">
+            Included by default · change per task or recurring series
+          </span>
         </div>
       </section>
       <section className="settings-section">

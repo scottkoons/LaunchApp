@@ -11,6 +11,9 @@ import { Check, Copy, Mail, Trash2 } from 'lucide-react';
 import { Attachments, Pick, Toggle } from './launch-controls';
 import {
   createEntity,
+  addDays,
+  parseDay,
+  recurringReportUpdates,
   day,
   now,
   uid,
@@ -40,6 +43,7 @@ export function TaskEditor({
 }) {
   const [draft, setDraft] = useState<Entity | null>(null),
     [saving, setSaving] = useState(false);
+  const [reportApply, setReportApply] = useState('one');
   const base = useRef<Entity | null>(null);
   useEffect(() => {
     if (!entity) return;
@@ -50,6 +54,7 @@ export function TaskEditor({
           'null',
       );
     } catch {}
+    setReportApply('one');
     base.current = saved?.base || structuredClone(entity);
     setDraft(saved?.draft || saved || structuredClone(entity));
   }, [entity, store.account]);
@@ -81,7 +86,23 @@ export function TaskEditor({
     }
     setSaving(true);
     try {
-      const existing = records.find((e) => e.id === d.id);
+      const existing = store.data.records.find((e) => e.id === d.id);
+      const reportUpdates =
+        existing &&
+        d.kind === 'task' &&
+        d.scope === 'business' &&
+        d.repeat &&
+        d.repeat !== 'none' &&
+        existing.repeat &&
+        existing.repeat !== 'none' &&
+        (d.report !== base.current?.report || reportApply === 'future')
+          ? recurringReportUpdates(
+              store.data.records,
+              existing,
+              d.report,
+              reportApply === 'future',
+            )
+          : [];
       if (existing) {
         const patch = Object.fromEntries(
           Object.entries(d).filter(
@@ -93,6 +114,10 @@ export function TaskEditor({
         );
         await store.change(base.current || existing, patch);
       } else await store.add(d);
+      for (const { entity: item, patch } of reportUpdates) {
+        const latest = store.data.records.find((e) => e.id === item.id) || item;
+        await store.change(latest, patch);
+      }
       localStorage.removeItem(`launch-draft-${store.account}-${d.id}`);
       notify(
         d.status === 'completed'
@@ -157,6 +182,56 @@ export function TaskEditor({
               onChange={(e) => change({ title: e.target.value })}
             />
           </label>
+          {isTask &&
+            draft.scope === 'business' &&
+            !records.some((e) => e.id === draft.id) && (
+              <details>
+                <summary>Start from a recurring preset</summary>
+                <p className="hint">
+                  Weekly, one due date, excluded from reports. You can change
+                  any of these settings.
+                </p>
+                <div className="two-col">
+                  {[
+                    {
+                      title: 'Respond to reviews',
+                      label: 'Weekly reviews',
+                      weekday: 2,
+                    },
+                    {
+                      title: 'Enter DoorDash & UberEats Transactions',
+                      label: 'DoorDash & Uber Eats',
+                      weekday: 1,
+                    },
+                  ].map((preset) => (
+                    <button
+                      type="button"
+                      className="secondary"
+                      key={preset.title}
+                      onClick={() =>
+                        change({
+                          title: preset.title,
+                          routine: true,
+                          report: false,
+                          draft: '',
+                          review: '',
+                          draftDone: false,
+                          finalDone: false,
+                          final: addDays(
+                            day(),
+                            (preset.weekday - parseDay(day()).getDay() + 7) % 7,
+                          ),
+                          repeat: 'weekly',
+                          repeatDays: [preset.weekday],
+                        })
+                      }
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </details>
+            )}
           {!isCompany && !isContact && (
             <div className="two-col">
               <label className="field">
@@ -177,7 +252,6 @@ export function TaskEditor({
                 />
               </label>
               {draft.scope === 'business' &&
-                !draft.routine &&
                 ['task', 'agenda', 'event'].includes(draft.kind) && (
                   <Toggle
                     checked={draft.report}
@@ -188,6 +262,32 @@ export function TaskEditor({
                 )}
             </div>
           )}
+          {isTask &&
+            draft.scope === 'business' &&
+            draft.repeat &&
+            draft.repeat !== 'none' &&
+            (records.some((e) => e.id === draft.id) ? (
+              <label className="field">
+                Apply report choice to
+                <Pick
+                  label="Apply report choice to"
+                  value={reportApply}
+                  onChange={setReportApply}
+                  options={[
+                    ['one', 'This occurrence'],
+                    ['future', 'This and future occurrences'],
+                  ]}
+                />
+                <span className="hint">
+                  Future changes leave completed history as it is.
+                </span>
+              </label>
+            ) : (
+              <p className="hint">
+                New repeats will keep your report choice. You can change
+                individual occurrences later.
+              </p>
+            ))}
           <label className="field">
             Notes
             <textarea
@@ -211,7 +311,6 @@ export function TaskEditor({
                           review: '',
                           draftDone: false,
                           finalDone: draft.status === 'completed',
-                          report: false,
                         }
                       : {}),
                   })
@@ -221,8 +320,7 @@ export function TaskEditor({
               </Toggle>
               {draft.routine && (
                 <p className="hint">
-                  Excluded from marketing reports. Click its due-date pill to
-                  complete it in one step.
+                  Click its due-date pill to complete it in one step.
                 </p>
               )}
               <div className="two-col">
@@ -342,8 +440,8 @@ export function TaskEditor({
                 {draft.seriesId && (
                   <>
                     <p className="hint">
-                      Edits apply to this occurrence. Future occurrences keep
-                      the original schedule.
+                      Date and note edits apply to this occurrence. Future
+                      occurrences keep the original schedule.
                     </p>
                     <button
                       className="text-button"

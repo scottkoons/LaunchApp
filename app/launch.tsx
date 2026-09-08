@@ -362,7 +362,7 @@ export default function Launch({
       createEntity(kind, kind === 'agenda' ? 'business' : scope, {
         report:
           kind === 'task'
-            ? scope === 'business' && (settings?.reportDefault ?? true)
+            ? scope === 'business'
             : kind === 'agenda' || kind === 'event',
         ...extra,
       }),

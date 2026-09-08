@@ -165,6 +165,7 @@ void test('authenticated persistence, idempotency, conflicts, reporting, files, 
 void test('future planned work reveals recurring occurrences with one final date', async () => {
   const routine = createEntity('task', 'business', {
     title: 'TEST: routine schedule',
+    reportSchedule: [{ from: '2027-01-01', report: false }],
     routine: true,
     report: true,
     final: '2026-09-08',
@@ -173,7 +174,8 @@ void test('future planned work reveals recurring occurrences with one final date
     repeatFrom: '2026-09-08',
   });
   const saved = await add(routine);
-  assert.equal(saved.entity.report, false);
+  assert.equal(saved.entity.report, true);
+  assert.deepEqual(saved.entity.reportSchedule, routine.reportSchedule);
   const ad = createEntity('task', 'business', {
     title: 'TEST: February launch',
     final: '2027-02-10',
@@ -198,6 +200,20 @@ void test('future planned work reveals recurring occurrences with one final date
     ).length,
     repeats.length,
   );
+  const report = await request('/api/reports', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      options: { ...defaultReport(), from: '2026-09-01', to: '2027-02-28' },
+    }),
+  });
+  assert.equal(report.status, 200);
+  const reportData = (await report.json()) as { entity: Entity };
+  const reported = reportData.entity.snapshot!.tasks.filter(
+    (e) => e.id === routine.id || e.seriesId === routine.id,
+  );
+  assert.ok(reported.some((e) => e.final === '2026-09-08'));
+  assert.ok(!reported.some((e) => e.final?.startsWith('2027-02')));
   for (const task of again.records.filter(
     (t) => t.id === ad.id || t.id === routine.id || t.seriesId === routine.id,
   )) {

@@ -41,6 +41,7 @@ export type Entity = {
   seriesId?: string;
   occurrence?: string;
   seriesStopped?: boolean;
+  reportSchedule?: { from: string; report: boolean }[];
   companyId?: string;
   contactId?: string;
   email?: string;
@@ -499,7 +500,6 @@ export function makeReport(
             e.kind === 'task' &&
             e.scope === 'personal' &&
             !e.deletedAt)) &&
-        !e.routine &&
         !options.excluded.includes(e.id),
     )
     .sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -577,6 +577,57 @@ export function recurrenceDates(t: Entity, until: string): string[] {
       !t.excludedDates?.includes(date),
   );
 }
+// Keep the series default separate from an individual occurrence's report flag.
+// A new future rule replaces later rules; completed history is never bulk edited.
+export function recurringReportUpdates(
+  records: Entity[],
+  selected: Entity,
+  report: boolean,
+  future: boolean,
+): { entity: Entity; patch: Partial<Entity> }[] {
+  const rootId = selected.seriesId || selected.id;
+  const root = records.find((e) => e.id === rootId && !e.deletedAt);
+  if (!root)
+    throw new Error('The repeat schedule is unavailable. Sync and try again.');
+  const anchor = root.repeatAnchor || root.occurrence || workDate(root);
+  const cutoff = selected.occurrence || workDate(selected);
+  if (!anchor || !cutoff)
+    throw new Error('Add a due date for the repeat schedule.');
+  let schedule = root.reportSchedule?.length
+    ? [...root.reportSchedule]
+    : [{ from: anchor, report: root.report }];
+  if (future)
+    schedule = [
+      ...schedule.filter((r) => r.from < cutoff),
+      { from: cutoff, report },
+    ];
+  return records
+    .filter(
+      (e) =>
+        e.id === rootId ||
+        e.id === selected.id ||
+        (future &&
+          e.seriesId === rootId &&
+          e.scope === 'business' &&
+          !e.deletedAt &&
+          e.status !== 'completed' &&
+          (e.occurrence || workDate(e)) >= cutoff),
+    )
+    .map((entity) => ({
+      entity,
+      patch: {
+        ...(entity.id === rootId ? { reportSchedule: schedule } : {}),
+        ...(entity.id === selected.id ||
+        (future &&
+          entity.scope === 'business' &&
+          !entity.deletedAt &&
+          entity.status !== 'completed' &&
+          (entity.occurrence || workDate(entity)) >= cutoff)
+          ? { report }
+          : {}),
+      },
+    }));
+}
 export function spawnOccurrence(t: Entity, date: string): Entity {
   const anchor = t.repeatAnchor || workDate(t);
   const delta = Math.round(
@@ -588,6 +639,11 @@ export function spawnOccurrence(t: Entity, date: string): Entity {
     seriesId: t.seriesId || t.id,
     occurrence: date,
     repeatAnchor: anchor,
+    report:
+      (t.reportSchedule || [])
+        .filter((r) => r.from <= date)
+        .sort((a, b) => a.from.localeCompare(b.from))
+        .at(-1)?.report ?? t.report,
     status: 'active' as const,
     draftDone: false,
     finalDone: false,
@@ -682,8 +738,21 @@ export function validateEntity(e: Entity) {
       throw new Error(
         'Simple to-dos use one final due date. Clear the draft and review dates.',
       );
-    e.report = false;
   }
+  if (
+    e.reportSchedule !== undefined &&
+    (!Array.isArray(e.reportSchedule) ||
+      e.reportSchedule.length > 500 ||
+      e.reportSchedule.some(
+        (r) =>
+          !r ||
+          typeof r.report !== 'boolean' ||
+          typeof r.from !== 'string' ||
+          !/^\d{4}-\d{2}-\d{2}$/.test(r.from) ||
+          day(parseDay(r.from)) !== r.from,
+      ))
+  )
+    throw new Error('Invalid recurring report choices');
   for (const value of [e.time, e.endTime])
     if (value && !/^([01]\d|2[0-3]):[0-5]\d$/.test(value))
       throw new Error('Invalid time');

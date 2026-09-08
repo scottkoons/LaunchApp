@@ -264,7 +264,7 @@ function TaskRow({
         'classic-task-grid classic-task-row' +
         (task.important ? ' is-important' : '') +
         (task.pinned ? ' is-pinned' : '') +
-        (task.routine ? ' is-routine' : '') +
+        (task.scope === 'business' && !task.report ? ' is-report-muted' : '') +
         (finishing ? ' is-completing' : '') +
         (isDragging ? ' is-dragging' : '')
       }

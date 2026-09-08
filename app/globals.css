@@ -3745,15 +3745,15 @@ h3,
   }
 }
 
-.classic-task-row.is-routine .classic-title-line {
+.classic-task-row.is-report-muted .classic-title-line {
   padding-left: 14px;
 }
-.classic-task-row.is-routine .classic-title,
-.classic-task-row.is-routine .classic-notes,
-.classic-task-row.is-routine .classic-mobile-note {
+.classic-task-row.is-report-muted .classic-title,
+.classic-task-row.is-report-muted .classic-notes,
+.classic-task-row.is-report-muted .classic-mobile-note {
   color: var(--muted-foreground);
 }
-.classic-task-row.is-routine .classic-title:hover {
+.classic-task-row.is-report-muted .classic-title:hover {
   color: var(--foreground);
 }
 
