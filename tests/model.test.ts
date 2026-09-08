@@ -24,6 +24,7 @@ import {
   reportDateStatus,
   compareTasks,
   manualOrderChanges,
+  taskMonthMove,
   type Operation,
   type Entity,
 } from '../lib/model';
@@ -847,4 +848,59 @@ void test('report calendar includes multi-day events that start before its date 
     to: '2026-09-30',
   });
   assert.equal(report.events.length, 1);
+});
+
+void test('month drop resumes one task, preserves deadline gap and clamps month ends', () => {
+  const task = createEntity('task', 'business', {
+    title: 'Monthly advertisement',
+    status: 'postponed',
+    draft: '2026-01-28',
+    final: '2026-01-31',
+    revisit: '2026-09-10',
+    repeat: 'monthly',
+    repeatAnchor: '2026-01-31',
+    seriesId: 'series',
+    occurrence: '2026-01-31',
+    publication: '2026-10-10',
+    pinned: true,
+  });
+  const patch = taskMonthMove(task, '2026-02', '2026-01-08');
+  assert.deepEqual(patch, {
+    status: 'active',
+    revisit: '',
+    draft: '2026-02-25',
+    final: '2026-02-28',
+  });
+  const moved = validateEntity({ ...task, ...patch });
+  assert.equal(moved.repeatAnchor, task.repeatAnchor);
+  assert.equal(moved.occurrence, task.occurrence);
+  assert.equal(moved.publication, task.publication);
+  assert.equal(moved.pinned, true);
+  assert.deepEqual(taskMonthMove(task, '2026-09', '2026-09-08'), {
+    status: 'active',
+    revisit: '',
+    draft: '2026-09-27',
+    final: '2026-09-30',
+  });
+});
+void test('month drop handles undated, single-date, current-month and DST deadlines', () => {
+  const task = createEntity('task', 'business');
+  assert.deepEqual(taskMonthMove(task, '2026-09', '2026-09-08'), {
+    status: 'active',
+    revisit: '',
+    final: '2026-09-08',
+  });
+  assert.deepEqual(
+    taskMonthMove({ ...task, draft: '2026-08-02' }, '2026-09', '2026-09-08'),
+    { status: 'active', revisit: '', draft: '2026-09-08' },
+  );
+  assert.deepEqual(
+    taskMonthMove(
+      { ...task, draft: '2026-02-07', final: '2026-02-10' },
+      '2026-03',
+      '2026-02-01',
+    ),
+    { status: 'active', revisit: '', draft: '2026-03-07', final: '2026-03-10' },
+  );
+  assert.throws(() => taskMonthMove(task, '2026-13'));
 });

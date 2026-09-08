@@ -29,6 +29,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { TaskTable } from '@/components/task-table';
+import { TaskDragBoard, TaskDropSection } from '@/components/task-drag-board';
 import { NotesDrawer } from '@/components/notes-drawer';
 import {
   PanelLeftClose,
@@ -78,6 +79,7 @@ import {
   type CompletedPeriod,
   compareTasks,
   manualOrderChanges,
+  taskMonthMove,
   type Entity,
   type Scope,
 } from '@/lib/model';
@@ -497,6 +499,64 @@ export default function Launch({
             items: filtered,
           },
         ];
+  const postponed = tasks
+    .filter(
+      (t) =>
+        t.status === 'postponed' &&
+        (!query ||
+          `${t.title} ${t.notes}`.toLowerCase().includes(query.toLowerCase())),
+    )
+    .sort((a, b) => compareTasks(a, b, sort, direction));
+  const dropMonths = isMonthly
+    ? [...new Set([day().slice(0, 7), ...groups.map((g) => g.key)])]
+    : [];
+  const dragDestinations = isDashboard
+    ? [
+        ...dropMonths.map((key) => ({ key, label: monthLabel(key) })),
+        { key: 'postponed', label: 'Postponed' },
+      ]
+    : isMonthly
+      ? groups.map((g) => ({ key: g.key, label: g.label }))
+      : [];
+  async function transferTask(task: Entity, destination: string) {
+    try {
+      const latest = store.data.records.find((e) => e.id === task.id);
+      if (!latest || latest.deletedAt || latest.status === 'completed') return;
+      const patch: Partial<Entity> =
+        destination === 'postponed'
+          ? { status: 'postponed' }
+          : taskMonthMove(latest, destination);
+      const updated = await store.change(latest, patch);
+      notify(
+        destination === 'postponed'
+          ? 'Task postponed. Dates kept; deadline warnings paused.'
+          : `Moved to ${monthLabel(destination)}. ${updated.draft ? `Draft ${pretty(updated.draft)} · ` : ''}${updated.final ? `Final ${pretty(updated.final)}` : pretty(updated.review)}${updated.repeat && updated.repeat !== 'none' ? ' · This occurrence only.' : ''}`,
+        () => void undoLast(),
+      );
+    } catch (error) {
+      notify((error as Error).message || 'Could not move this task.');
+    }
+  }
+  const taskTable = (items: Entity[]) => (
+    <TaskTable
+      tasks={items}
+      completed={view === 'completed'}
+      completing={completing}
+      soon={soon}
+      sort={sort}
+      direction={direction}
+      ratio={columnRatio}
+      setRatio={(ratio) => {
+        setColumnRatio(ratio);
+        localStorage.setItem('launch-column-ratio', String(ratio));
+      }}
+      onSort={sortBy}
+      onOpen={open}
+      onComplete={(task) => void complete(task)}
+      onMilestone={(task, key) => void milestone(task, key)}
+      onPatch={(task, patch) => void store.change(task, patch)}
+    />
+  );
   const showTasks = () =>
     mode === 'calendar' && view === 'tasks' ? (
       <Calendar
@@ -509,7 +569,10 @@ export default function Launch({
     ) : (
       <>
         {groups.map((group) => (
-          <section
+          <TaskDropSection
+            id={'section:' + group.key}
+            destination={isMonthly ? group.key : undefined}
+            label={group.label}
             className={
               'task-group ' +
               (isMonthly
@@ -544,25 +607,7 @@ export default function Launch({
               )}
             </div>
             {group.items.length ? (
-              <TaskTable
-                tasks={group.items}
-                completed={view === 'completed'}
-                completing={completing}
-                soon={soon}
-                sort={sort}
-                direction={direction}
-                ratio={columnRatio}
-                setRatio={(ratio) => {
-                  setColumnRatio(ratio);
-                  localStorage.setItem('launch-column-ratio', String(ratio));
-                }}
-                onSort={sortBy}
-                onOpen={open}
-                onComplete={(task) => void complete(task)}
-                onMilestone={(task, key) => void milestone(task, key)}
-                onPatch={(task, patch) => void store.change(task, patch)}
-                onReorder={reorder}
-              />
+              taskTable(group.items)
             ) : isMonthly ? (
               <p className="month-empty">
                 {query
@@ -598,7 +643,7 @@ export default function Launch({
                 store={store}
               />
             )}
-          </section>
+          </TaskDropSection>
         ))}
         {!groups.length && (
           <Empty
@@ -1061,75 +1106,121 @@ export default function Launch({
                       )}
                     </div>
                   </div>
-                  {!ready ? (
-                    <p className="loading">Opening your workspace…</p>
-                  ) : (
-                    showTasks()
-                  )}
-                  {isDashboard && ready && (
-                    <div className="dashboard-bottom">
-                      <section>
-                        <div className="section-heading">
-                          <h2>On your radar</h2>
-                          <button
-                            className="text-button"
-                            onClick={() => navigate('backburner')}
-                          >
-                            Back burner <ArrowUpRight />
-                          </button>
-                        </div>
-                        {active
-                          .filter((t) => !workDate(t))
-                          .sort(
-                            (a, b) =>
-                              Number(!!b.important) - Number(!!a.important) ||
-                              (a.order || 0) - (b.order || 0),
-                          )
-                          .slice(0, 3)
-                          .map((t) => (
-                            <button
-                              className="dashboard-preview"
-                              key={t.id}
-                              onClick={() => open(t)}
+                  <TaskDragBoard
+                    groups={
+                      isDashboard
+                        ? [
+                            ...groups,
+                            {
+                              key: 'postponed',
+                              label: 'Postponed',
+                              items: postponed,
+                            },
+                          ]
+                        : groups
+                    }
+                    destinations={dragDestinations}
+                    onReorder={reorder}
+                    onTransfer={transferTask}
+                  >
+                    {!ready ? (
+                      <p className="loading">Opening your workspace…</p>
+                    ) : (
+                      showTasks()
+                    )}
+                    {isDashboard && ready && (
+                      <>
+                        {isMonthly &&
+                          !groups.some((g) => g.key === day().slice(0, 7)) && (
+                            <TaskDropSection
+                              id="current-month-drop"
+                              destination={day().slice(0, 7)}
+                              label={
+                                'Schedule in ' + monthLabel(day().slice(0, 7))
+                              }
+                              className="empty-month-drop"
                             >
-                              <Orbit />
-                              <span>
-                                {t.title}
-                                <small>No deadline yet</small>
-                              </span>
-                            </button>
-                          ))}
-                        {tasks
-                          .filter(
-                            (t) =>
-                              t.status === 'postponed' &&
-                              t.revisit &&
-                              t.revisit <= day(),
-                          )
-                          .map((t) => (
-                            <button
-                              className="dashboard-preview"
-                              key={t.id}
-                              onClick={() => open(t)}
-                            >
-                              <Pause />
-                              <span>
-                                {t.title}
-                                <small>
-                                  Ready to revisit · {pretty(t.revisit)}
-                                </small>
-                              </span>
-                            </button>
-                          ))}
-                        <button
-                          className="text-button"
-                          onClick={() => navigate('tasks')}
+                              Drag a postponed task here to schedule it in{' '}
+                              {monthLabel(day().slice(0, 7))}.
+                            </TaskDropSection>
+                          )}
+                        <TaskDropSection
+                          id="section:postponed"
+                          destination="postponed"
+                          label="Postponed tasks"
+                          className="task-group month-group postponed-dashboard"
                         >
-                          Open full task list <ArrowUpRight />
-                        </button>
-                      </section>
-                    </div>
-                  )}
+                          <div className="section-heading">
+                            <div>
+                              <p className="eyebrow">ON HOLD</p>
+                              <h2>Postponed</h2>
+                            </div>
+                            <span className="count">{postponed.length}</span>
+                            <button
+                              className="text-button add-in-month"
+                              onClick={() => navigate('postponed')}
+                            >
+                              View all <ArrowUpRight />
+                            </button>
+                          </div>
+                          <p className="postponed-hint">
+                            Drag tasks here to put them on hold. Drag one into a
+                            month to resume it. Dates stay unchanged until
+                            rescheduled.
+                          </p>
+                          {postponed.length ? (
+                            taskTable(postponed)
+                          ) : (
+                            <p className="month-empty">
+                              Nothing postponed. Drop a task here whenever plans
+                              change.
+                            </p>
+                          )}
+                        </TaskDropSection>
+                        <div className="dashboard-bottom">
+                          <section>
+                            <div className="section-heading">
+                              <h2>On your radar</h2>
+                              <button
+                                className="text-button"
+                                onClick={() => navigate('backburner')}
+                              >
+                                Back burner <ArrowUpRight />
+                              </button>
+                            </div>
+                            {active
+                              .filter((t) => !workDate(t))
+                              .sort(
+                                (a, b) =>
+                                  Number(!!b.important) -
+                                    Number(!!a.important) ||
+                                  (a.order || 0) - (b.order || 0),
+                              )
+                              .slice(0, 3)
+                              .map((t) => (
+                                <button
+                                  className="dashboard-preview"
+                                  key={t.id}
+                                  onClick={() => open(t)}
+                                >
+                                  <Orbit />
+                                  <span>
+                                    {t.title}
+                                    <small>No deadline yet</small>
+                                  </span>
+                                </button>
+                              ))}
+                            <button
+                              className="text-button"
+                              onClick={() => navigate('tasks')}
+                            >
+                              Open full task list <ArrowUpRight />
+                            </button>
+                          </section>
+                        </div>
+                      </>
+                    )}
+                  </TaskDragBoard>
                 </>
               )}
               {view === 'notes' && (

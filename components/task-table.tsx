@@ -5,19 +5,9 @@
 // keeps its sortable grid and resize interaction; mutations use Launch's store.
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
-  DndContext,
-  PointerSensor,
-  KeyboardSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-} from '@dnd-kit/core';
-import {
   SortableContext,
   useSortable,
   verticalListSortingStrategy,
-  sortableKeyboardCoordinates,
-  arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
@@ -49,21 +39,12 @@ type Props = {
   onComplete: (task: Entity) => void;
   onMilestone: (task: Entity, key: 'draft' | 'final') => void;
   onPatch: (task: Entity, patch: Partial<Entity>) => void;
-  onReorder: (id: string, target: string, group: Entity[]) => Promise<void>;
 };
 
 export function TaskTable(props: Props) {
   const { tasks, ratio, setRatio, onSort, sort, direction } = props;
   const container = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(1000);
-  const [preview, setPreview] = useState<Entity[] | null>(null);
-  const [dragging, setDragging] = useState(false);
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    }),
-  );
   useEffect(() => {
     const element = container.current;
     if (!element) return;
@@ -80,7 +61,6 @@ export function TaskTable(props: Props) {
   const style = {
     '--task-columns': `26px ${nameWidth}px 6px minmax(100px, 1fr) 82px 82px 30px 30px`,
   } as CSSProperties;
-  const shown = preview || tasks;
   const heading = (key: string, label: string) => (
     <button
       onClick={() => onSort(key)}
@@ -91,11 +71,7 @@ export function TaskTable(props: Props) {
     </button>
   );
   return (
-    <div
-      ref={container}
-      className={'classic-task-list' + (dragging ? ' is-sorting' : '')}
-      style={style}
-    >
+    <div ref={container} className="classic-task-list" style={style}>
       <div className="classic-task-grid classic-table-heading">
         <span />
         {heading('title', 'Task name')}
@@ -145,48 +121,14 @@ export function TaskTable(props: Props) {
         <CircleCheck aria-label="Complete task" />
         <Pin aria-label="Pin task" />
       </div>
-      <DndContext
-        sensors={sensors}
-        collisionDetection={(args) =>
-          closestCenter({
-            ...args,
-            droppableContainers: args.droppableContainers.filter(
-              (container) =>
-                !!tasks.find((task) => task.id === container.id)?.pinned ===
-                !!tasks.find((task) => task.id === args.active.id)?.pinned,
-            ),
-          })
-        }
-        onDragStart={() => setDragging(true)}
-        onDragCancel={() => setDragging(false)}
-        onDragEnd={({ active, over }) => {
-          setDragging(false);
-          if (!over || active.id === over.id || preview) return;
-          const from = tasks.findIndex((task) => task.id === active.id);
-          const to = tasks.findIndex((task) => task.id === over.id);
-          if (from < 0 || to < 0 || !!tasks[from].pinned !== !!tasks[to].pinned)
-            return;
-          setPreview(arrayMove(tasks, from, to));
-          void props
-            .onReorder(String(active.id), String(over.id), tasks)
-            .finally(() => setPreview(null));
-        }}
-        accessibility={{
-          screenReaderInstructions: {
-            draggable:
-              'Press Space to pick up this task. Use the arrow keys to move it. Press Space to drop, or Escape to cancel. Pinned tasks remain at the top.',
-          },
-        }}
+      <SortableContext
+        items={tasks.map((task) => task.id)}
+        strategy={verticalListSortingStrategy}
       >
-        <SortableContext
-          items={shown.map((task) => task.id)}
-          strategy={verticalListSortingStrategy}
-        >
-          {shown.map((task) => (
-            <TaskRow key={task.id} task={task} {...props} busy={!!preview} />
-          ))}
-        </SortableContext>
-      </DndContext>
+        {tasks.map((task) => (
+          <TaskRow key={task.id} task={task} {...props} />
+        ))}
+      </SortableContext>
     </div>
   );
 }
@@ -196,12 +138,11 @@ function TaskRow({
   completed,
   completing,
   soon,
-  busy,
   onOpen,
   onComplete,
   onMilestone,
   onPatch,
-}: Props & { task: Entity; busy: boolean }) {
+}: Props & { task: Entity }) {
   const finishing = !!completing[task.id] && !completed;
   const {
     setNodeRef,
@@ -210,7 +151,7 @@ function TaskRow({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: task.id, disabled: completed || busy || finishing });
+  } = useSortable({ id: task.id, disabled: completed || finishing });
   const pill = (key: 'draft' | 'final') => {
     if (task.routine && key === 'draft') return null;
     const done =
@@ -218,11 +159,16 @@ function TaskRow({
       task[key === 'draft' ? 'draftDone' : 'finalDone'];
     return task[key] ? (
       <button
-        className={'date-badge ' + dateStatus(task[key], done, day(), soon)}
+        className={
+          'date-badge ' +
+          (task.status === 'postponed' && !done
+            ? 'paused'
+            : dateStatus(task[key], done, day(), soon))
+        }
         aria-label={
           task.routine
             ? `${completed ? 'Reopen' : 'Complete'} ${task.title}, due ${pretty(task[key])}`
-            : `${task.title}: ${key} ${pretty(task[key])}, ${done ? 'done' : dateStatus(task[key], done, day(), soon)}. Mark ${done ? 'unfinished' : 'finished'}`
+            : `${task.title}: ${key} ${pretty(task[key])}, ${done ? 'done' : task.status === 'postponed' && !done ? 'paused' : dateStatus(task[key], done, day(), soon)}. Mark ${done ? 'unfinished' : 'finished'}`
         }
         title={
           task.routine
@@ -282,7 +228,7 @@ function TaskRow({
             {...attributes}
             {...listeners}
             aria-label={`Move ${task.title}`}
-            title="Drag to reorder · Space then arrow keys to move"
+            title="Drag to reorder or move to a section · Space then arrow keys to move"
           >
             <GripVertical />
           </button>

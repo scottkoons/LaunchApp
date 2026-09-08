@@ -5,6 +5,7 @@ import { LaunchStore } from '../lib/client-store';
 import {
   createEntity,
   mergePatch,
+  taskMonthMove,
   type Entity,
   type Operation,
   type FileMeta,
@@ -321,4 +322,39 @@ void test('concurrent sync callers await the same network pass', async () => {
   await Promise.all([first, second]);
   assert.equal(requests, 1);
   assert.equal(store.syncing, false);
+});
+
+void test('postpone and month-drop undo restore dates without rolling back newer notes', async () => {
+  Object.defineProperty(globalThis, 'navigator', {
+    value: { onLine: false },
+    configurable: true,
+  });
+  const store = new LaunchStore('postpone-month-undo');
+  const task = createEntity('task', 'business', {
+    title: 'Move ad',
+    draft: '2026-08-10',
+    final: '2026-08-15',
+    pinned: true,
+  });
+  await store.add(task);
+  const held = await store.change(task, { status: 'postponed' });
+  assert.equal(held.final, '2026-08-15');
+  const scheduled = await store.change(
+    held,
+    taskMonthMove(held, '2026-09', '2026-09-08'),
+  );
+  await store.change(scheduled, { notes: 'Keep my later note' });
+  const undone = await store.undoLast();
+  assert.equal(undone?.status, 'postponed');
+  assert.equal(undone?.draft, '2026-08-10');
+  assert.equal(undone?.final, '2026-08-15');
+  assert.equal(undone?.notes, 'Keep my later note');
+  assert.equal(undone?.pinned, true);
+  assert.equal((await store.undoLast())?.status, 'active');
+  const reloaded = new LaunchStore('postpone-month-undo');
+  await reloaded.init();
+  assert.equal(
+    reloaded.data.records.find((t) => t.id === task.id)?.final,
+    '2026-08-15',
+  );
 });

@@ -133,7 +133,7 @@ export class LaunchStore {
   private submitted: Cache = empty();
   private syncPromise: Promise<void> | null = null;
   // Session history is independent of notification lifetime. Store only the
-  // lifecycle fields so undo never rolls back subsequent notes or attachments.
+  // lifecycle and moved-deadline fields so undo preserves later notes and attachments.
   undoHistory: {
     entityId: string;
     before: Partial<Entity>;
@@ -207,8 +207,15 @@ export class LaunchStore {
     const next = validateEntity({ ...latest, ...patch, updatedAt: now() });
     if (remember) {
       const keys: (keyof Entity)[] = ['deletedAt', 'draftDone', 'finalDone'];
-      if (latest.status === 'completed' || next.status === 'completed')
-        keys.push('status', 'completedAt');
+      if ('status' in patch)
+        keys.push(
+          'status',
+          'completedAt',
+          'draft',
+          'final',
+          'review',
+          'revisit',
+        );
       const before: Partial<Entity> = {},
         after: Partial<Entity> = {};
       const defaults = {
@@ -217,6 +224,10 @@ export class LaunchStore {
         finalDone: false,
         completedAt: '',
         status: 'active',
+        draft: '',
+        final: '',
+        review: '',
+        revisit: '',
       };
       for (const key of keys) {
         if (key in patch && latest[key] !== next[key]) {

@@ -232,6 +232,44 @@ export function compareTasks(
       : String(t[sort as 'title' | 'notes' | 'draft' | 'final'] || '9999');
   return value(a).localeCompare(value(b)) * direction;
 }
+// Move deadline dates together; completed flags, delivery dates and recurrence
+// identity remain unchanged. A month drop changes this occurrence only.
+export function taskMonthMove(
+  task: Entity,
+  month: string,
+  today = day(),
+): Partial<Entity> {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))
+    throw new Error('Choose a valid month.');
+  const anchor = workDate(task);
+  const first = parseDay(month + '-01');
+  const last = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  let target = day(
+    new Date(
+      first.getFullYear(),
+      first.getMonth(),
+      Math.min(anchor ? parseDay(anchor).getDate() : 1, last),
+    ),
+  );
+  if (month === today.slice(0, 7) && target < today) target = today;
+  const patch: Partial<Entity> = { status: 'active', revisit: '' };
+  if (!anchor) return { ...patch, final: target };
+  const serial = (value: string) => {
+    const d = parseDay(value);
+    return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+  };
+  const delta = (serial(target) - serial(anchor)) / 86400000;
+  for (const field of ['draft', 'final'] as const) {
+    if (task[field]) {
+      const date = parseDay(task[field]);
+      date.setDate(date.getDate() + delta);
+      patch[field] = day(date);
+    }
+  }
+  if (!task.draft && !task.final) patch.review = target;
+  return patch;
+}
+
 export function manualOrderChanges(
   all: Entity[],
   group: Entity[],
