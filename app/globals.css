@@ -2555,3 +2555,111 @@ details[open] > summary {
     height: 65px;
   }
 }
+
+/* Grouped navigation and the compact desktop rail. */
+.sidebar-brand-row {
+  display: flex;
+  align-items: center;
+  padding: 8px 6px;
+  gap: 4px;
+}
+.sidebar-brand-row .brand {
+  padding: 12px 0 24px;
+  flex: 1;
+  min-width: 0;
+}
+.sidebar-brand-row .brand span {
+  left: 48px;
+  bottom: 8px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+.navigation-toggle {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  color: var(--muted-foreground);
+}
+.navigation-toggle:hover {
+  color: var(--foreground);
+  background: var(--muted);
+}
+.navigation-toggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+[data-slot='sidebar-content'] {
+  padding: 8px 10px;
+}
+.launch-nav-group {
+  padding: 0;
+  margin-bottom: 22px;
+}
+.launch-nav-group:last-child {
+  margin-bottom: 0;
+}
+.launch-nav-group .nav-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  padding: 0 12px;
+  height: 32px;
+  margin-bottom: 6px;
+}
+.nav-count {
+  border-radius: 999px;
+}
+[data-slot='sidebar-gap'],
+[data-slot='sidebar-container'] {
+  transition-duration: 240ms;
+  transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+[data-collapsible='icon'] .brand-name,
+[data-collapsible='icon'] .sidebar-header-toggle,
+[data-collapsible='icon'] .theme-switch,
+[data-collapsible='icon'] .account > div,
+[data-collapsible='icon'] .account > .avatar,
+[data-collapsible='icon'] .nav-text,
+[data-collapsible='icon'] .nav-count {
+  display: none;
+}
+[data-collapsible='icon'] .sidebar-brand-row {
+  padding: 8px 0;
+}
+[data-collapsible='icon'] .brand {
+  justify-content: center;
+  padding: 12px 0 16px;
+}
+[data-collapsible='icon'] [data-slot='sidebar-content'] {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+[data-collapsible='icon'] .launch-nav-group {
+  padding-top: 12px;
+  margin-bottom: 12px;
+  border-top: 1px solid var(--border);
+}
+[data-collapsible='icon'] .launch-nav-group:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+[data-collapsible='icon'] .nav-label {
+  display: none;
+}
+[data-collapsible='icon'] .nav-item {
+  width: 44px !important;
+  height: 44px !important;
+  margin: 0 auto;
+  justify-content: center;
+  padding: 0 !important;
+}
+[data-collapsible='icon'] .nav-item svg {
+  width: 19px;
+  height: 19px;
+}
+[data-collapsible='icon'] .account {
+  justify-content: center;
+  padding: 12px 0;
+}

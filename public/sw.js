@@ -1,4 +1,4 @@
-const CACHE='launch-shell-v4';
+const CACHE='launch-shell-v5';
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(c=>c.addAll(['/offline.html','/offline.js','/icons/icon-192.png','/manifest.webmanifest'])));self.skipWaiting();});
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('launch-shell-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',event=>{const u=new URL(event.request.url);if(u.origin!==location.origin||event.request.method!=='GET'||u.pathname.startsWith('/api/')||u.pathname.includes('signin')||u.pathname.includes('signout')||u.pathname.includes('callback'))return;if(event.request.mode==='navigate'){event.respondWith(fetch(event.request,{cache:'no-store'}).catch(()=>caches.match('/offline.html')));return;}if(['/offline.js','/icons/icon-192.png','/manifest.webmanifest'].includes(u.pathname))event.respondWith(caches.match(event.request).then(cached=>cached||fetch(event.request)));});

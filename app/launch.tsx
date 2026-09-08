@@ -6,10 +6,11 @@ import {
   SidebarContent,
   SidebarHeader,
   SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
-  SidebarTrigger,
   useSidebar,
 } from '@/components/ui/sidebar';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -36,6 +37,8 @@ import {
 } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
+  PanelLeftClose,
+  PanelLeftOpen,
   LayoutDashboard,
   ListTodo,
   Inbox,
@@ -98,13 +101,21 @@ const NAV = [
   ['dashboard', 'Dashboard', LayoutDashboard],
   ['tasks', 'All tasks', ListTodo],
   ['notes', 'Quick notes', Inbox],
-  ['meetings', 'Meetings', NotebookPen],
+  ['meetings', 'Meetings & reports', NotebookPen],
   ['reference', 'Reference board', Images],
   ['contacts', 'Contacts', Users],
   ['completed', 'Completed', CheckCheck],
   ['backburner', 'Back burner', Orbit],
   ['postponed', 'Postponed', Pause],
 ] as const;
+const NAV_GROUPS = [
+  {
+    label: 'Views',
+    items: ['dashboard', 'tasks', 'completed', 'backburner', 'postponed'],
+  },
+  { label: 'Workspace', items: ['notes', 'reference', 'contacts'] },
+  { label: 'Meetings & exports', items: ['meetings'] },
+];
 export default function Launch({
   account,
   name,
@@ -117,6 +128,7 @@ export default function Launch({
   const [view, setView] = useState('dashboard'),
     [scope, setScope] = useState<Scope>('business'),
     [theme, setTheme] = useState('space'),
+    [sidebarOpen, setSidebarOpen] = useState(true),
     [mode, setMode] = useState('grouped'),
     [dashboardMode, setDashboardMode] = useState('grouped'),
     [sort, setSort] = useState('next'),
@@ -145,6 +157,7 @@ export default function Launch({
     toastTimer.current = setTimeout(() => setToast(null), undo ? 10000 : 6000);
   }
   useEffect(() => {
+    setSidebarOpen(localStorage.getItem('launch-sidebar-open') !== 'false');
     const t = localStorage.getItem('launch-theme') || 'space';
     setTheme(t);
     document.documentElement.dataset.theme = t;
@@ -702,36 +715,72 @@ export default function Launch({
     );
   return (
     <SidebarProvider
-      style={{ '--sidebar-width': '222px' } as React.CSSProperties}
+      open={sidebarOpen}
+      onOpenChange={(open) => {
+        setSidebarOpen(open);
+        localStorage.setItem('launch-sidebar-open', String(open));
+      }}
+      style={
+        {
+          '--sidebar-width': '244px',
+          '--sidebar-width-icon': '72px',
+        } as React.CSSProperties
+      }
     >
-      <Sidebar>
+      <Sidebar collapsible="icon">
         <SidebarHeader>
-          <div className="brand">
-            <img src="/icons/rocket-96.png" alt="" />
-            Launch<span>YOUR PRIVATE WORKSPACE</span>
+          <div className="sidebar-brand-row">
+            <div className="brand">
+              <img src="/icons/rocket-96.png" alt="Launch" />
+              <div className="brand-name">
+                Launch<span>YOUR PRIVATE WORKSPACE</span>
+              </div>
+            </div>
+            <NavigationToggle className="sidebar-header-toggle" />
           </div>
         </SidebarHeader>
         <SidebarContent>
-          <p className="nav-label">WORKSPACE</p>
-          <SidebarMenu>
-            {NAV.map(([v, label, Icon]) => (
-              <SidebarMenuItem key={v}>
-                <NavItem active={view === v} onClick={() => navigate(v)}>
-                  <Icon />
-                  <span>{label}</span>
-                  {v === 'notes' && notes.length > 0 && (
-                    <b className="nav-count">{notes.length}</b>
-                  )}
-                  {v === 'dashboard' && overdue > 0 && (
-                    <b className="nav-count red">{overdue}</b>
-                  )}
-                  {v === 'dashboard' && upcoming > 0 && (
-                    <b className="nav-count amber">{upcoming}</b>
-                  )}
-                </NavItem>
-              </SidebarMenuItem>
+          <nav aria-label="Main navigation">
+            {NAV_GROUPS.map((group) => (
+              <SidebarGroup className="launch-nav-group" key={group.label}>
+                <SidebarGroupLabel className="nav-label">
+                  {group.label}
+                </SidebarGroupLabel>
+                <SidebarMenu>
+                  {group.items.map((id) => {
+                    const [v, label, Icon] = NAV.find(([key]) => key === id)!;
+                    const accessibleLabel =
+                      v === 'dashboard'
+                        ? `${label}, ${overdue} overdue, ${upcoming} upcoming`
+                        : v === 'notes' && notes.length
+                          ? `${label}, ${notes.length} notes`
+                          : label;
+                    return (
+                      <SidebarMenuItem key={v}>
+                        <NavItem
+                          label={accessibleLabel}
+                          active={view === v}
+                          onClick={() => navigate(v)}
+                        >
+                          <Icon />
+                          <span className="nav-text">{label}</span>
+                          {v === 'notes' && notes.length > 0 && (
+                            <b className="nav-count">{notes.length}</b>
+                          )}
+                          {v === 'dashboard' && overdue > 0 && (
+                            <b className="nav-count red">{overdue}</b>
+                          )}
+                          {v === 'dashboard' && upcoming > 0 && (
+                            <b className="nav-count amber">{upcoming}</b>
+                          )}
+                        </NavItem>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </SidebarGroup>
             ))}
-          </SidebarMenu>
+          </nav>
         </SidebarContent>
         <SidebarFooter>
           <div className="theme-switch">
@@ -750,13 +799,18 @@ export default function Launch({
               </button>
             ))}
           </div>
-          <button
-            className={'nav-item ' + (view === 'settings' ? 'selected' : '')}
-            onClick={() => navigate('settings')}
-          >
-            <SettingsIcon />
-            Settings
-          </button>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <NavItem
+                label="Settings"
+                active={view === 'settings'}
+                onClick={() => navigate('settings')}
+              >
+                <SettingsIcon />
+                <span className="nav-text">Settings</span>
+              </NavItem>
+            </SidebarMenuItem>
+          </SidebarMenu>
           <div className="account">
             <span className="avatar">{name.slice(0, 1)}K</span>
             <div>
@@ -776,7 +830,7 @@ export default function Launch({
       <div className="workspace">
         <header className="topbar">
           <div className="topbar-left">
-            <SidebarTrigger className="mobile-menu" />
+            <NavigationToggle />
             <Tabs
               value={scope}
               onValueChange={(v) => {
@@ -1666,11 +1720,30 @@ export default function Launch({
     </SidebarProvider>
   );
 }
+function NavigationToggle({ className = '' }: { className?: string }) {
+  const { open, openMobile, isMobile, toggleSidebar } = useSidebar();
+  const expanded = isMobile ? openMobile : open;
+  const label = expanded ? 'Collapse navigation' : 'Expand navigation';
+  return (
+    <button
+      type="button"
+      className={'icon-button navigation-toggle ' + className}
+      onClick={toggleSidebar}
+      aria-label={label}
+      aria-expanded={expanded}
+      title={label + ' (⌘B / Ctrl+B)'}
+    >
+      {expanded ? <PanelLeftClose /> : <PanelLeftOpen />}
+    </button>
+  );
+}
 function NavItem({
+  label,
   active,
   onClick,
   children,
 }: {
+  label: string;
   active: boolean;
   onClick: () => void;
   children: React.ReactNode;
@@ -1679,6 +1752,9 @@ function NavItem({
   return (
     <SidebarMenuButton
       className="nav-item"
+      aria-label={label}
+      aria-current={active ? 'page' : undefined}
+      tooltip={label}
       isActive={active}
       onClick={() => {
         onClick();
