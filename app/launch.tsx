@@ -74,6 +74,8 @@ import {
   monthlyTaskGroups,
   planningMonths,
   visibleMonthlyTasks,
+  completedDateRange,
+  type CompletedPeriod,
   compareTasks,
   manualOrderChanges,
   type Entity,
@@ -138,6 +140,7 @@ export default function Launch({
     [syncOpen, setSyncOpen] = useState(false),
     [completedFrom, setCompletedFrom] = useState(''),
     [completedTo, setCompletedTo] = useState(day()),
+    [completedPeriod, setCompletedPeriod] = useState<CompletedPeriod>('all'),
     [columnRatio, setColumnRatio] = useState(0.55),
     [noteTab, setNoteTab] = useState('inbox'),
     [refYear, setRefYear] = useState('all');
@@ -308,6 +311,15 @@ export default function Launch({
   const scoped = live.filter((e) => e.scope === scope);
   const tasks = scoped.filter((e) => e.kind === 'task');
   const visibleMonths = planningMonths(tasks, day(), settings?.monthlyNotes);
+  const completedRange =
+    completedPeriod === 'custom'
+      ? { from: completedFrom, to: completedTo }
+      : completedDateRange(completedPeriod);
+  function editCompletedRange(from: string, to: string) {
+    setCompletedFrom(from);
+    setCompletedTo(to);
+    setCompletedPeriod('custom');
+  }
   const active = tasks.filter(
     (t) => t.status !== 'completed' && t.status !== 'postponed',
   );
@@ -390,8 +402,10 @@ export default function Launch({
     .filter((t) =>
       view === 'completed'
         ? t.status === 'completed' &&
-          (!completedFrom || (t.completedAt || '') >= completedFrom) &&
-          (!completedTo || (t.completedAt || '').slice(0, 10) <= completedTo)
+          (!completedRange.from ||
+            (t.completedAt || '') >= completedRange.from) &&
+          (!completedRange.to ||
+            (t.completedAt || '').slice(0, 10) <= completedRange.to)
         : view === 'postponed'
           ? t.status === 'postponed'
           : view === 'backburner'
@@ -939,20 +953,65 @@ export default function Launch({
                         </TabsList>
                       </Tabs>
                     ) : view === 'completed' ? (
-                      <div className="date-filter">
-                        <input
-                          aria-label="Completed from"
-                          type="date"
-                          value={completedFrom}
-                          onChange={(e) => setCompletedFrom(e.target.value)}
+                      <div className="completed-date-filter">
+                        <Pick
+                          label="Completed date range"
+                          value={completedPeriod}
+                          onChange={(period) =>
+                            period === 'custom'
+                              ? editCompletedRange(
+                                  completedRange.from,
+                                  completedRange.to,
+                                )
+                              : setCompletedPeriod(period as CompletedPeriod)
+                          }
+                          options={[
+                            ['all', 'All time'],
+                            ['this-month', 'This month'],
+                            ['this-week', 'This week'],
+                            ['last-month', 'Last month'],
+                            ['last-week', 'Last week'],
+                            ['last-year', 'Last year'],
+                            ['custom', 'Custom dates'],
+                          ]}
                         />
-                        <span>to</span>
-                        <input
-                          aria-label="Completed to"
-                          type="date"
-                          value={completedTo}
-                          onChange={(e) => setCompletedTo(e.target.value)}
-                        />
+                        <div className="date-filter">
+                          <input
+                            aria-label="Completed from"
+                            type="date"
+                            value={completedRange.from}
+                            max={completedRange.to || undefined}
+                            onChange={(e) =>
+                              editCompletedRange(
+                                e.target.value,
+                                completedRange.to,
+                              )
+                            }
+                          />
+                          <span>to</span>
+                          <input
+                            aria-label="Completed to"
+                            type="date"
+                            value={completedRange.to}
+                            min={completedRange.from || undefined}
+                            onChange={(e) =>
+                              editCompletedRange(
+                                completedRange.from,
+                                e.target.value,
+                              )
+                            }
+                          />
+                        </div>
+                        <p className="hint completed-range-hint">
+                          Based on completion date. Weeks run Monday–Sunday.
+                        </p>
+                        {completedRange.from &&
+                          completedRange.to &&
+                          completedRange.from > completedRange.to && (
+                            <p className="inline-warning" role="alert">
+                              The end date must be on or after the start date.
+                            </p>
+                          )}
                       </div>
                     ) : (
                       <p className="hint">

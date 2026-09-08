@@ -127,6 +127,37 @@ export function addDays(s: string, n: number) {
   d.setDate(d.getDate() + n);
   return day(d);
 }
+export type CompletedPeriod =
+  | 'all'
+  | 'this-week'
+  | 'last-week'
+  | 'this-month'
+  | 'last-month'
+  | 'last-year'
+  | 'custom';
+export function completedDateRange(
+  period: Exclude<CompletedPeriod, 'custom'>,
+  today = day(),
+) {
+  const date = parseDay(today),
+    year = date.getFullYear(),
+    month = date.getMonth();
+  if (period === 'all') return { from: '', to: '' };
+  if (period === 'last-year')
+    return { from: `${year - 1}-01-01`, to: `${year - 1}-12-31` };
+  if (period === 'this-week' || period === 'last-week') {
+    const monday = addDays(
+      today,
+      -((date.getDay() + 6) % 7) - (period === 'last-week' ? 7 : 0),
+    );
+    return { from: monday, to: addDays(monday, 6) };
+  }
+  const selectedMonth = month - (period === 'last-month' ? 1 : 0);
+  return {
+    from: day(new Date(year, selectedMonth, 1)),
+    to: day(new Date(year, selectedMonth + 1, 0)),
+  };
+}
 export function monthLabel(s: string) {
   return parseDay(s.slice(0, 7) + '-01').toLocaleDateString('en-US', {
     month: 'long',

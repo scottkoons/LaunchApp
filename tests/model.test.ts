@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createEntity,
+  completedDateRange,
   recurrenceDates,
   spawnOccurrence,
   makeReport,
@@ -520,4 +521,47 @@ void test('recurring instances do not open future months; planned work, notes an
       (t) => t.final === '2026-09-15',
     ),
   );
+});
+
+void test('completed presets use calendar months, Monday weeks and the previous calendar year', () => {
+  const today = '2026-09-08';
+  assert.deepEqual(completedDateRange('this-month', today), {
+    from: '2026-09-01',
+    to: '2026-09-30',
+  });
+  assert.deepEqual(completedDateRange('this-week', today), {
+    from: '2026-09-07',
+    to: '2026-09-13',
+  });
+  assert.deepEqual(completedDateRange('last-month', today), {
+    from: '2026-08-01',
+    to: '2026-08-31',
+  });
+  assert.deepEqual(completedDateRange('last-week', today), {
+    from: '2026-08-31',
+    to: '2026-09-06',
+  });
+  assert.deepEqual(completedDateRange('last-year', today), {
+    from: '2025-01-01',
+    to: '2025-12-31',
+  });
+  assert.deepEqual(completedDateRange('all', today), { from: '', to: '' });
+});
+void test('completed presets handle year boundaries, leap February and Sunday', () => {
+  assert.deepEqual(completedDateRange('last-month', '2026-01-02'), {
+    from: '2025-12-01',
+    to: '2025-12-31',
+  });
+  assert.deepEqual(completedDateRange('last-week', '2026-01-02'), {
+    from: '2025-12-22',
+    to: '2025-12-28',
+  });
+  assert.deepEqual(completedDateRange('last-month', '2024-03-15'), {
+    from: '2024-02-01',
+    to: '2024-02-29',
+  });
+  assert.deepEqual(completedDateRange('this-week', '2026-09-13'), {
+    from: '2026-09-07',
+    to: '2026-09-13',
+  });
 });

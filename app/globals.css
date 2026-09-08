@@ -3756,3 +3756,30 @@ h3,
 .classic-task-row.is-routine .classic-title:hover {
   color: var(--foreground);
 }
+
+.completed-date-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.completed-date-filter > .pick {
+  min-width: 150px;
+}
+.completed-date-filter > .inline-warning {
+  flex-basis: 100%;
+  margin: 0;
+}
+@media (max-width: 767px) {
+  .completed-date-filter {
+    width: 100%;
+  }
+  .completed-date-filter > .pick {
+    width: 100%;
+  }
+}
+.completed-range-hint {
+  flex-basis: 100%;
+  margin: 0;
+}
