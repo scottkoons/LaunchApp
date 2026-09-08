@@ -6,6 +6,7 @@ import {
   spawnOccurrence,
   makeReport,
   defaultReport,
+  validateReportOptions,
   mergePatch,
   urgency,
   calendarIcs,
@@ -365,4 +366,64 @@ void test('manual moves preserve hidden tasks and dates, and cannot cross pin bo
     [],
   );
   assert.deepEqual(manualOrderChanges(all, [a, b], 'c', 'a'), []);
+});
+
+void test('report personal opt-in is explicit, muted business remains excluded, optional sections work', () => {
+  const opts = {
+    ...defaultReport(),
+    from: '2026-09-01',
+    to: '2026-09-30',
+    completedFrom: '2026-09-01',
+    completedTo: '2026-09-30',
+    agendaFrom: '2026-09-01',
+    agendaTo: '2026-09-30',
+  };
+  assert.equal(opts.includePersonal, false);
+  assert.equal(opts.cover, false);
+  const personal = createEntity('task', 'personal', {
+    title: 'Personal note',
+    final: '2026-09-10',
+  });
+  const muted = createEntity('task', 'business', {
+    title: 'Internal only',
+    report: false,
+    final: '2026-09-10',
+  });
+  const completed = createEntity('task', 'business', {
+    title: 'Delivered',
+    status: 'completed',
+    completedAt: '2026-09-08T12:00:00Z',
+  });
+  const agenda = createEntity('agenda', 'business', {
+    title: 'Discuss menu',
+    date: '2026-09-09',
+    report: true,
+  });
+  const data = [personal, muted, completed, agenda];
+  assert.equal(makeReport(data, opts).tasks.length, 0);
+  const included = makeReport(data, { ...opts, includePersonal: true });
+  assert.deepEqual(
+    included.tasks.map((t) => t.id),
+    [personal.id],
+  );
+  assert.equal(included.completed.length, 1);
+  assert.equal(included.agenda.length, 1);
+  const hidden = makeReport(data, {
+    ...opts,
+    includeCompleted: false,
+    includeAgenda: false,
+  });
+  assert.equal(hidden.completed.length, 0);
+  assert.equal(hidden.agenda.length, 0);
+});
+void test('PDF options reject invalid, reversed and excessive ranges before generation', () => {
+  const opts = defaultReport();
+  assert.doesNotThrow(() => validateReportOptions(opts));
+  assert.throws(() => validateReportOptions({ ...opts, from: '2026-02-31' }));
+  assert.throws(() =>
+    validateReportOptions({ ...opts, from: '2026-10-01', to: '2026-09-01' }),
+  );
+  assert.throws(() =>
+    validateReportOptions({ ...opts, from: '2020-01-01', to: '2026-09-01' }),
+  );
 });

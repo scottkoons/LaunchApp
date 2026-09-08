@@ -6,7 +6,12 @@ import {
   originGuard,
   allRecords,
 } from '@/lib/server';
-import { makeReport, createEntity, defaultReport } from '@/lib/model';
+import {
+  makeReport,
+  createEntity,
+  defaultReport,
+  validateReportOptions,
+} from '@/lib/model';
 export async function POST(request: Request) {
   try {
     originGuard(request);
@@ -16,24 +21,7 @@ export async function POST(request: Request) {
       options: Record<string, unknown>;
     };
     const options = { ...defaultReport(), ...input.options };
-    for (const key of [
-      'meetingDate',
-      'from',
-      'to',
-      'completedFrom',
-      'completedTo',
-      'agendaFrom',
-      'agendaTo',
-    ] as const)
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(options[key]))
-        throw new Error('Choose valid report dates');
-    if (
-      options.from > options.to ||
-      options.completedFrom > options.completedTo ||
-      options.agendaFrom > options.agendaTo
-    )
-      throw new Error('Start dates must come before end dates');
-    if (!Array.isArray(options.excluded)) throw new Error('Invalid selection');
+    validateReportOptions(options);
     const snapshot = makeReport(await allRecords(user), options);
     const entity = createEntity('meeting', 'business', {
       id: input.id || crypto.randomUUID(),

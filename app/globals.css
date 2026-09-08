@@ -2833,3 +2833,263 @@ details[open] > summary {
   font-family: Georgia, 'Times New Roman', serif;
   letter-spacing: -0.025em;
 }
+/* Report setup and real PDF preview. */
+.report-start {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 28px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+}
+.report-start p {
+  color: var(--muted-foreground);
+  margin-top: 8px;
+}
+.report-hub {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 36px;
+  margin-top: 36px;
+}
+.report-options-dialog {
+  width: min(740px, calc(100vw - 32px)) !important;
+  max-width: 740px !important;
+  max-height: 90dvh;
+  padding: 28px !important;
+  background: var(--card) !important;
+  display: flex !important;
+  flex-direction: column;
+  gap: 14px;
+}
+.report-options-dialog [data-slot='dialog-title'] {
+  font-size: 24px;
+  padding-right: 28px;
+}
+.report-options-scroll {
+  overflow-y: auto;
+  min-height: 0;
+  padding: 4px 6px 10px 0;
+}
+.report-options-scroll .two-col {
+  margin-bottom: 18px;
+}
+.report-section-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 24px;
+  margin: 20px 0;
+}
+.report-section-options .toggle {
+  margin: 0;
+}
+.calendar-layout-options {
+  border: 0;
+  margin: 24px 0 14px;
+}
+.calendar-layout-options legend {
+  margin-bottom: 12px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.calendar-layout-options label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.calendar-layout-options .selected {
+  border-color: var(--primary);
+  background: var(--accent);
+}
+.calendar-layout-options input {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  padding: 0;
+  accent-color: var(--primary);
+}
+.calendar-layout-options strong,
+.calendar-layout-options small {
+  display: block;
+}
+.calendar-layout-options small {
+  font-size: 13px;
+  color: var(--muted-foreground);
+  margin-top: 6px;
+}
+.report-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 18px;
+}
+.report-error {
+  border: 1px solid var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 8%, transparent);
+  color: var(--destructive);
+  padding: 12px;
+  border-radius: 8px;
+}
+.report-personal-note {
+  color: var(--yellow);
+  margin: 12px 0;
+}
+.pdf-preview-dialog {
+  width: calc(100vw - 32px) !important;
+  max-width: 1600px !important;
+  height: 94dvh;
+  padding: 20px !important;
+  background: var(--card) !important;
+  display: flex !important;
+  flex-direction: column;
+  gap: 12px;
+}
+.pdf-preview-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 36px;
+  gap: 20px;
+}
+.pdf-preview-frame {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+  background: #323639;
+  border-radius: 6px;
+}
+.pdf-preview-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+.pdf-preview-footer a {
+  color: var(--primary);
+}
+@media (max-width: 767px) {
+  .report-start,
+  .pdf-preview-heading,
+  .pdf-preview-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .report-hub,
+  .report-section-options {
+    grid-template-columns: 1fr;
+  }
+  .report-options-dialog {
+    padding: 20px !important;
+  }
+  .pdf-preview-dialog {
+    padding: 12px !important;
+  }
+  .pdf-preview-heading .button-row {
+    flex-wrap: wrap;
+  }
+  .pdf-preview-heading .button {
+    padding: 8px;
+    font-size: 13px;
+  }
+}
+.pdf-pages-viewer {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #30353a;
+  color: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.pdf-viewer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 18px;
+  border-bottom: 1px solid #50545a;
+  font-size: 13px;
+}
+.pdf-viewer-toolbar select {
+  background: #252a30;
+  color: white;
+  border: 1px solid #6e7782;
+  padding: 4px 9px;
+  border-radius: 5px;
+}
+.pdf-viewer-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+.pdf-thumbnails {
+  width: 140px;
+  flex-shrink: 0;
+  overflow: auto;
+  padding: 18px;
+  background: #272c31;
+  border-right: 1px solid #50545a;
+}
+.pdf-thumbnails button {
+  display: block;
+  width: 100%;
+  margin-bottom: 20px;
+  color: white;
+  font-size: 12px;
+}
+.pdf-thumbnails img {
+  display: block;
+  width: 100%;
+  margin-bottom: 6px;
+  border: 3px solid transparent;
+}
+.pdf-thumbnails button:focus img,
+.pdf-thumbnails button:hover img {
+  border-color: var(--accent);
+}
+.pdf-page-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 24px;
+}
+.pdf-page-scroll figure {
+  margin: 0 auto 22px;
+  scroll-margin-top: 24px;
+}
+.pdf-page-scroll figure img {
+  display: block;
+  width: 100%;
+  background: white;
+  box-shadow: 0 2px 12px #0005;
+}
+.pdf-page-scroll figcaption {
+  color: #c6ccd4;
+  font-size: 12px;
+  text-align: center;
+  margin-top: 8px;
+}
+@media (max-width: 700px) {
+  .pdf-thumbnails {
+    display: none;
+  }
+  .pdf-page-scroll {
+    padding: 12px;
+  }
+}
+
+.report-options-scroll .field {
+  margin-bottom: 0;
+}

@@ -128,6 +128,7 @@ export default function Launch({
   const data = useLaunchStore(account),
     { store, records, files, ready } = data;
   const [view, setView] = useState('dashboard'),
+    [reportRequest, setReportRequest] = useState(0),
     [scope, setScope] = useState<Scope>('business'),
     [theme, setTheme] = useState('space'),
     [sidebarOpen, setSidebarOpen] = useState(true),
@@ -183,6 +184,7 @@ export default function Launch({
     localStorage.setItem('launch-theme', t);
   }
   function navigate(v: string) {
+    if (v === 'meetings') setReportRequest((n) => n + 1);
     setView(v);
     setQuery('');
     setFilter('all');
@@ -1630,6 +1632,7 @@ export default function Launch({
                   />
                 ) : (
                   <Reports
+                    openRequest={reportRequest}
                     records={records}
                     store={store}
                     notify={notify}

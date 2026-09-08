@@ -77,12 +77,25 @@ for (const layout of ['one', 'two'] as const) {
     `outputs/report-${layout}.pdf`,
     Buffer.from(doc.output('arraybuffer')),
   );
+  let landscape = 0;
   for (let page = 1; page <= doc.getNumberOfPages(); page++) {
     doc.setPage(page);
-    assert.ok(
-      doc.internal.pageSize.getHeight() > doc.internal.pageSize.getWidth(),
-      `Page ${page} must be portrait`,
-    );
+    const portrait =
+      doc.internal.pageSize.getHeight() > doc.internal.pageSize.getWidth();
+    if (!portrait) landscape++;
+    if (page === 1 || layout === 'two')
+      assert.ok(portrait, `Page ${page} must be portrait`);
   }
-  console.log(layout, doc.getNumberOfPages(), 'portrait pages verified');
+  assert.equal(
+    landscape,
+    layout === 'one' ? 2 : 0,
+    'Only single-month calendar pages use landscape',
+  );
+  console.log(
+    layout,
+    doc.getNumberOfPages(),
+    'pages;',
+    landscape,
+    'landscape calendar pages verified',
+  );
 }

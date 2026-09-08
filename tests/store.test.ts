@@ -105,4 +105,23 @@ void test('offline note and photo survive restart, sync once, and retain conflic
   await restarted.resolve(restarted.data.queue[0].id, true);
   assert.equal(remote[0].notes, 'My phone change');
   assert.equal(restarted.data.queue.length, 0);
+  online = false;
+  await restarted.change(restarted.data.records[0], {
+    notes: 'Retain this during a timeout',
+  });
+  const fetchSuccess = globalThis.fetch;
+  globalThis.fetch = async (_input, init) => {
+    assert.ok(init?.signal, 'Sync requests have a timeout signal');
+    throw new DOMException('Timed out', 'TimeoutError');
+  };
+  online = true;
+  await restarted.sync();
+  assert.equal(restarted.syncing, false);
+  assert.match(restarted.error, /timed out/i);
+  assert.equal(restarted.data.queue.length, 1);
+  assert.equal(restarted.data.records[0].notes, 'Retain this during a timeout');
+  globalThis.fetch = fetchSuccess;
+  await restarted.sync();
+  assert.equal(restarted.data.queue.length, 0);
+  assert.equal(remote[0].notes, 'Retain this during a timeout');
 });

@@ -180,7 +180,9 @@ export class LaunchStore {
   async resolve(id: string, keepLocal: boolean) {
     const op = this.data.queue.find((q) => q.id === id);
     if (!op) return;
-    const response = await fetch('/api/sync');
+    const response = await fetch('/api/sync', {
+      signal: AbortSignal.timeout(20000),
+    });
     if (!response.ok) throw new Error('Reconnect to resolve this change.');
     const remote = (await response.json()) as { records: Entity[] };
     const current = remote.records.find((e: Entity) => e.id === op.entityId);
@@ -208,7 +210,11 @@ export class LaunchStore {
         const form = new FormData();
         form.set('id', item.meta.id);
         form.set('file', item.blob, item.meta.name);
-        const r = await fetch('/api/files', { method: 'POST', body: form });
+        const r = await fetch('/api/files', {
+          method: 'POST',
+          body: form,
+          signal: AbortSignal.timeout(60000),
+        });
         if (!r.ok)
           throw new Error(
             ((await r.json()) as { error: string }).error || 'Upload failed',
@@ -229,6 +235,7 @@ export class LaunchStore {
           continue;
         }
         const r = await fetch('/api/sync', {
+          signal: AbortSignal.timeout(20000),
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(op),
@@ -252,7 +259,9 @@ export class LaunchStore {
             .concat(result.entity);
         await this.persist();
       }
-      const r = await fetch('/api/sync');
+      const r = await fetch('/api/sync', {
+        signal: AbortSignal.timeout(20000),
+      });
       if (!r.ok)
         throw new Error(
           r.status === 401
@@ -278,9 +287,11 @@ export class LaunchStore {
       await this.persist();
     } catch (e) {
       this.error =
-        e instanceof Error
-          ? e.message
-          : 'Waiting to sync. Your changes are saved on this device.';
+        e instanceof Error && e.name === 'TimeoutError'
+          ? 'Connection timed out. Your changes are saved on this device; retry sync.'
+          : e instanceof Error
+            ? e.message
+            : 'Waiting to sync. Your changes are saved on this device.';
     } finally {
       this.syncing = false;
       this.emit();

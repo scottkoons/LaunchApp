@@ -94,6 +94,9 @@ export type ReportOptions = {
   monthlyNotes: boolean;
   cover: boolean;
   calendarLayout: 'one' | 'two';
+  includePersonal?: boolean;
+  includeCompleted?: boolean;
+  includeAgenda?: boolean;
   excluded: string[];
 };
 export type ReportSnapshot = {
@@ -348,16 +351,66 @@ export function defaultReport(): ReportOptions {
     calendar: true,
     monthlyNotes: true,
     cover: false,
+    includePersonal: false,
+    includeCompleted: true,
+    includeAgenda: true,
     calendarLayout: 'one',
     excluded: [],
   };
+}
+export function validateReportOptions(options: ReportOptions) {
+  for (const key of [
+    'meetingDate',
+    'from',
+    'to',
+    'completedFrom',
+    'completedTo',
+    'agendaFrom',
+    'agendaTo',
+  ] as const) {
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(options[key]) ||
+      day(parseDay(options[key])) !== options[key]
+    )
+      throw new Error('Choose valid report dates.');
+  }
+  for (const [from, to] of [
+    [options.from, options.to],
+    [options.completedFrom, options.completedTo],
+    [options.agendaFrom, options.agendaTo],
+  ]) {
+    if (from > to) throw new Error('Start dates must come before end dates.');
+    if (+parseDay(to) - +parseDay(from) > 732 * 86400000)
+      throw new Error('Choose a date range of two years or less.');
+  }
+  if (
+    !['one', 'two'].includes(options.calendarLayout) ||
+    !Array.isArray(options.excluded)
+  )
+    throw new Error('Choose valid report options.');
+  for (const key of [
+    'includePersonal',
+    'includeCompleted',
+    'includeAgenda',
+  ] as const)
+    if (options[key] !== undefined && typeof options[key] !== 'boolean')
+      throw new Error('Choose valid report options.');
+  return options;
 }
 export function makeReport(
   records: Entity[],
   options: ReportOptions,
 ): ReportSnapshot {
   const items = records
-    .filter((e) => reportEligible(e) && !options.excluded.includes(e.id))
+    .filter(
+      (e) =>
+        (reportEligible(e) ||
+          (options.includePersonal === true &&
+            e.kind === 'task' &&
+            e.scope === 'personal' &&
+            !e.deletedAt)) &&
+        !options.excluded.includes(e.id),
+    )
     .sort((a, b) => (a.order || 0) - (b.order || 0));
   const tasks = items.filter((e) => e.kind === 'task');
   const settings = records.find((e) => e.kind === 'settings');
@@ -377,6 +430,7 @@ export function makeReport(
     ),
     completed: tasks.filter(
       (t) =>
+        options.includeCompleted !== false &&
         t.status === 'completed' &&
         inRange(t.completedAt, options.completedFrom, options.completedTo),
     ),
@@ -388,6 +442,7 @@ export function makeReport(
       : [],
     agenda: items.filter(
       (e) =>
+        options.includeAgenda !== false &&
         e.kind === 'agenda' &&
         inRange(e.date, options.agendaFrom, options.agendaTo),
     ),

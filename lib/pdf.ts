@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable';
 import {
   monthLabel,
   reportDateStatus,
+  validateReportOptions,
   reportMonths,
   pretty,
   parseDay,
@@ -12,6 +13,7 @@ import {
   type ReportSnapshot,
 } from './model';
 export function createPdf(s: ReportSnapshot) {
+  validateReportOptions(s.options);
   const doc = new jsPDF({
     unit: 'mm',
     format: 'letter',
@@ -55,7 +57,7 @@ export function createPdf(s: ReportSnapshot) {
       startY: y,
       head: [['TASK NAME', 'NOTES', 'DRAFT', 'FINAL']],
       body: rows.map((t) => [
-        t.title,
+        t.title + (t.scope === 'personal' ? ' (Personal)' : ''),
         t.reportNote || t.notes,
         t.draft ? pretty(t.draft) : '-',
         t.final ? pretty(t.final) : '-',
@@ -154,6 +156,11 @@ export function createPdf(s: ReportSnapshot) {
     doc.text(label, x + 2, y + 0.7);
   });
   y += 13;
+  if (s.options.includePersonal) {
+    doc.setTextColor(143, 88, 0);
+    doc.text('Includes personal tasks', 16, y);
+    y += 8;
+  }
   for (const month of reportMonths(s)) {
     if (month.items.length) table(month.label, month.items);
     else {
@@ -216,7 +223,8 @@ export function createPdf(s: ReportSnapshot) {
       ms.push(m);
     for (let i = 0; i < ms.length; i++) {
       const two = s.options.calendarLayout === 'two';
-      if (!two || i % 2 === 0) doc.addPage('letter', 'portrait');
+      if (!two || i % 2 === 0)
+        doc.addPage('letter', two ? 'portrait' : 'landscape');
       const top = two ? (i % 2 === 0 ? 22 : 145) : 23;
       const month = ms[i];
       doc.setFont('times', 'bold');
@@ -225,7 +233,7 @@ export function createPdf(s: ReportSnapshot) {
       doc.text(monthLabel(month), 16, top);
       const start = addDays(month, -parseDay(month).getDay());
       const cellWidth = (width() - 32) / 7;
-      const cellHeight = two ? 14 : 32;
+      const cellHeight = two ? 14 : 23;
       const base = top + 13;
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
@@ -269,12 +277,16 @@ export function createPdf(s: ReportSnapshot) {
               };
             });
         });
-        let lineY = z + 8;
+        let lineY = z + (two ? 7 : 8);
         let overflowCount = 0;
         doc.setFontSize(two ? 7 : 8);
         for (const { label, status } of labels) {
-          const lines = doc.splitTextToSize(label, cellWidth - 4) as string[];
-          if (two || lineY + lines.length * 3 > z + cellHeight - 5) {
+          let lines = doc.splitTextToSize(label, cellWidth - 4) as string[];
+          if (two)
+            lines = [
+              lines.length > 1 ? lines[0].slice(0, -2) + '...' : lines[0],
+            ];
+          if (lineY + lines.length * 3 > z + cellHeight - 2) {
             overflow.push(`${date}: ${label}`);
             overflowCount++;
             continue;
