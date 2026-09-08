@@ -311,7 +311,7 @@ export default function Launch({
   const scoped = live.filter((e) => e.scope === scope);
   const tasks = scoped.filter((e) => e.kind === 'task');
   const visibleMonths = dashboardMonths(
-    tasks,
+    tasks.map((task) => completing[task.id] || task),
     day(),
     scope === 'business' ? settings?.monthlyNotes : {},
     settings?.monthsAhead ?? 2,
