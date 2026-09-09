@@ -1,5 +1,15 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
+
+// Configure the framework's viewport instead of adding a second <meta> tag.
+// iOS needs viewport-fit=cover to report the safe-area insets used by our shell.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#101c2d',
+};
+
 export const metadata: Metadata = {
   title: 'Launch · Your day, in view',
   description:
@@ -19,13 +29,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" data-theme="space">
-      <head>
-        <meta name="theme-color" content="#101c2d" />
-        <meta
-          name="viewport"
-          content="width=device-width, initial-scale=1, viewport-fit=cover"
-        />
-      </head>
       <body>{children}</body>
     </html>
   );
