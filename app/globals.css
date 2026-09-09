@@ -3586,6 +3586,9 @@ h3,
 }
 #notes-drawer-content [data-slot='tabs-list'] {
   background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
   justify-content: start;
   padding: 0;
   gap: 16px;
@@ -3594,12 +3597,16 @@ h3,
   padding: 0;
   font-size: 12px;
   min-width: auto;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
   border-radius: 0;
   box-shadow: none;
 }
+#notes-drawer-content [data-slot='tabs-trigger'][data-active],
 #notes-drawer-content [data-slot='tabs-trigger'][data-state='active'],
 #notes-drawer-content [data-slot='tabs-trigger'][aria-selected='true'] {
-  border-bottom: 2px solid var(--primary);
+  border-bottom-color: var(--primary);
   background: transparent;
 }
 .notes-drawer-body {
