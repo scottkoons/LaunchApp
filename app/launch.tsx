@@ -1398,8 +1398,11 @@ export default function Launch({
                 </>
               )}
               {view === 'reference' && (
-                <>
-                  <div className="toolbar">
+                <section
+                  className="reference-board"
+                  aria-label="Reference library"
+                >
+                  <div className="toolbar reference-toolbar">
                     <label className="search">
                       <Search />
                       <input
@@ -1409,46 +1412,50 @@ export default function Launch({
                         onChange={(e) => setQuery(e.target.value)}
                       />
                     </label>
-                    <Pick
-                      label="Reference year"
-                      value={refYear}
-                      onChange={setRefYear}
-                      options={[
-                        ['all', 'All years'],
-                        ...[
-                          ...new Set(
-                            scoped
-                              .filter((e) => e.kind === 'reference' && e.year)
-                              .map((e) => e.year!),
-                          ),
-                        ]
-                          .sort()
-                          .map((y) => [y, y] as [string, string]),
-                      ]}
+                    <div className="reference-year-filter">
+                      <Pick
+                        label="Reference year"
+                        value={refYear}
+                        onChange={setRefYear}
+                        options={[
+                          ['all', 'All years'],
+                          ...[
+                            ...new Set(
+                              scoped
+                                .filter((e) => e.kind === 'reference' && e.year)
+                                .map((e) => e.year!),
+                            ),
+                          ]
+                            .sort()
+                            .map((y) => [y, y] as [string, string]),
+                        ]}
+                      />
+                    </div>
+                  </div>
+                  <div className="reference-upload">
+                    <Attachments
+                      ids={[]}
+                      store={store}
+                      files={files}
+                      onChange={async (ids) => {
+                        if (ids.length) {
+                          const first = store.data.files.find(
+                            (f) => f.id === ids[0],
+                          );
+                          await store.add(
+                            createEntity('reference', scope, {
+                              title: first?.name || 'New reference',
+                              files: ids,
+                              report: false,
+                              year: String(new Date().getFullYear()),
+                            }),
+                          );
+                          notify('Added to your reference board.');
+                        }
+                      }}
+                      notify={notify}
                     />
                   </div>
-                  <Attachments
-                    ids={[]}
-                    store={store}
-                    files={files}
-                    onChange={async (ids) => {
-                      if (ids.length) {
-                        const first = store.data.files.find(
-                          (f) => f.id === ids[0],
-                        );
-                        await store.add(
-                          createEntity('reference', scope, {
-                            title: first?.name || 'New reference',
-                            files: ids,
-                            report: false,
-                            year: String(new Date().getFullYear()),
-                          }),
-                        );
-                        notify('Added to your reference board.');
-                      }
-                    }}
-                    notify={notify}
-                  />
                   <div className="reference-grid">
                     {scoped
                       .filter(
@@ -1470,7 +1477,7 @@ export default function Launch({
                         />
                       ))}
                   </div>
-                </>
+                </section>
               )}
               {view === 'contacts' && (
                 <>
