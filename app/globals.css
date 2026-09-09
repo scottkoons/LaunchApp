@@ -1139,8 +1139,8 @@ kbd {
 .task-create-modal {
   display: flex;
   flex-direction: column;
-  width: min(740px, calc(100vw - var(--safe-left) - var(--safe-right) - 32px));
-  max-width: 740px;
+  width: min(960px, calc(100vw - var(--safe-left) - var(--safe-right) - 32px));
+  max-width: 960px;
   padding: 0;
   gap: 0;
   overflow: hidden;
@@ -1157,10 +1157,170 @@ kbd {
   font-size: 21px;
 }
 .task-create-modal [data-slot='dialog-description'] {
-  margin-top: 7px;
-  padding-right: 12px;
+  margin: 0;
+  padding: 0;
+}
+.task-create-note {
+  align-self: center;
+  margin-right: auto;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.task-create-modal .editor-body {
+  padding: 24px 28px;
+}
+.task-create-preset {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 12px;
+  margin-bottom: 24px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--background);
+}
+.task-create-preset > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+.task-create-preset svg {
+  width: 16px;
+  height: 16px;
+}
+.task-create-preset .pick {
+  flex: 1;
+  min-width: 0;
+}
+.task-create-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr);
+  gap: 40px;
+  align-items: start;
+}
+.task-create-modal .field {
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.task-create-modal .field > input,
+.task-create-modal .pick {
+  min-height: 40px;
+}
+.task-create-modal .field > input:first-child {
+  margin-top: 0;
+}
+.task-create-modal textarea {
+  min-height: 96px;
+  height: 96px;
+}
+.task-create-modal .section-label {
+  margin: 0 0 12px;
+}
+.task-create-modal .toggle {
+  margin-bottom: 12px;
   font-size: 13px;
-  line-height: 1.4;
+}
+.task-create-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin: 4px 0 16px;
+}
+.task-create-flags .toggle {
+  margin: 0;
+}
+.task-create-modal .two-col {
+  gap: 12px;
+}
+.task-create-modal .two-col > .toggle {
+  margin-top: 26px;
+}
+.task-create-modal details {
+  padding: 12px 0;
+  margin-bottom: 0;
+}
+.task-create-modal details[open] > summary {
+  margin-bottom: 12px;
+}
+.task-create-modal .dropzone {
+  width: 100%;
+  padding: 16px 12px;
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: center;
+  gap: 8px;
+}
+.task-create-modal .dropzone > svg {
+  width: 18px;
+  height: 18px;
+}
+.task-create-modal .dropzone > span {
+  grid-column: 1 / -1;
+}
+.task-create-modal .camera-action {
+  margin-bottom: 0;
+}
+.task-create-modal [data-slot='dialog-close'] {
+  border: 0;
+  background: transparent;
+}
+@media (min-width: 701px) and (max-height: 800px) {
+  .task-create-modal [data-slot='sheet-header'] {
+    padding: 16px 28px;
+  }
+  .task-create-modal .editor-body {
+    padding: 12px 28px;
+  }
+  .task-create-modal .editor-actions {
+    padding: 12px 28px;
+  }
+  .task-create-preset {
+    padding-block: 8px;
+    margin-bottom: 16px;
+  }
+  .task-create-flags {
+    margin-bottom: 12px;
+  }
+  .task-create-modal .field {
+    margin-bottom: 12px;
+  }
+  .task-create-modal textarea {
+    min-height: 80px;
+    height: 80px;
+  }
+  .task-create-modal .dropzone {
+    padding-block: 12px;
+  }
+  .task-create-modal .reminder-picker {
+    margin: 8px 0;
+  }
+}
+@media (max-width: 700px) {
+  .task-create-modal .editor-body {
+    padding: 20px;
+  }
+  .task-create-columns {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+  .task-create-preset {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .task-create-preset .pick {
+    flex-basis: 100%;
+  }
+  .task-create-modal .editor-actions {
+    flex-wrap: wrap;
+  }
+  .task-create-note {
+    flex-basis: 100%;
+  }
 }
 [data-slot='sheet-title'] {
   font-family: Bitter, Georgia, serif;
