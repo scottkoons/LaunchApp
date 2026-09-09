@@ -161,12 +161,12 @@
   --muted-foreground: #6b7280;
   --faint-foreground: #9ca3af;
   --primary-foreground: #ffffff;
-  --border: #e5e7eb;
+  --border: #d9dde3;
   --border-strong: #d1d5db;
-  --accent: #fff4e6;
+  --accent: #ffe4bf;
   --label-foreground: #374151;
-  --month-header: #f4f2ee;
-  --month-columns: #f4f2ee;
+  --month-header: #e9e4dc;
+  --month-columns: #f0ece6;
   --month-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   --selection: #ffe0bf;
   --selection-foreground: #1a1a2e;
@@ -298,6 +298,10 @@ h3 {
 .nav-item[data-active] {
   color: var(--primary);
   background: var(--accent);
+}
+[data-theme='light'] .nav-item[data-active] {
+  color: #965000;
+  box-shadow: inset 3px 0 #e8922d;
 }
 .account {
   display: flex;
@@ -3348,6 +3352,13 @@ h3,
 }
 .classic-task-row:hover {
   background: color-mix(in srgb, var(--card) 87%, var(--muted));
+}
+[data-theme='light']
+  .classic-task-row:where(:nth-child(even of .classic-task-row)) {
+  background: #f2f4f6;
+}
+[data-theme='light'] .classic-task-row:hover {
+  background: #e8edf2;
 }
 .classic-task-row.is-important::before {
   content: '';
