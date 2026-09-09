@@ -1507,6 +1507,9 @@ details[open] > summary {
   display: flex;
   background: var(--background);
   touch-action: pan-y pinch-zoom;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
   transition: transform 180ms ease-out;
 }
 .capture-sheet .swipe-note-front {

@@ -3,8 +3,13 @@
 import { useRef, useState, type KeyboardEvent } from 'react';
 import { ArrowUpRight, Inbox, MoreHorizontal, Trash2 } from 'lucide-react';
 import type { Entity } from '@/lib/model';
-
-const ACTION_WIDTH = 88;
+import {
+  NOTE_ACTION_WIDTH as ACTION_WIDTH,
+  moveNoteSwipe,
+  noteDeleteDistance,
+  noteSwipeDeletes,
+  type NoteSwipe,
+} from '@/lib/note-swipe';
 
 export function SwipeNote({
   note,
@@ -22,15 +27,7 @@ export function SwipeNote({
   const [offset, setOffset] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteThreshold, setDeleteThreshold] = useState(Infinity);
-  const gesture = useRef<{
-    id: number;
-    x: number;
-    y: number;
-    start: number;
-    offset: number;
-    width: number;
-    direction: 'pending' | 'horizontal' | 'vertical';
-  } | null>(null);
+  const gesture = useRef<NoteSwipe | null>(null);
   const suppressClick = useRef(false);
   const deletingRef = useRef(false);
   const actions = useRef<HTMLButtonElement>(null);
@@ -85,7 +82,7 @@ export function SwipeNote({
           suppressClick.current = false;
           const start = revealed ? -ACTION_WIDTH : 0;
           const width = event.currentTarget.clientWidth;
-          setDeleteThreshold(Math.max(160, width * 0.6));
+          setDeleteThreshold(noteDeleteDistance(width));
           gesture.current = {
             id: event.pointerId,
             x: event.clientX,
@@ -94,32 +91,30 @@ export function SwipeNote({
             offset: start,
             width,
             direction: 'pending',
+            samples: [{ x: event.clientX, time: event.timeStamp }],
           };
         }}
         onPointerMove={(event) => {
           const g = gesture.current;
           if (!g || g.id !== event.pointerId) return;
-          const dx = event.clientX - g.x,
-            dy = event.clientY - g.y;
-          if (
-            g.direction === 'pending' &&
-            Math.max(Math.abs(dx), Math.abs(dy)) > 8
-          ) {
-            g.direction =
-              Math.abs(dx) > Math.abs(dy) ? 'horizontal' : 'vertical';
+          const previousDirection = g.direction;
+          moveNoteSwipe(g, event.clientX, event.clientY, event.timeStamp);
+          if (previousDirection === 'pending' && g.direction !== 'pending') {
             suppressClick.current = true;
             if (g.direction === 'horizontal')
               event.currentTarget.setPointerCapture(event.pointerId);
           }
           if (g.direction !== 'horizontal') return;
-          g.offset = Math.max(-g.width, Math.min(0, g.start + dx));
           setOffset(g.offset);
         }}
         onPointerUp={(event) => {
           const g = gesture.current;
           if (!g || g.id !== event.pointerId) return;
+          // Fast flicks may release between pointermove events. Include that final travel.
+          moveNoteSwipe(g, event.clientX, event.clientY, event.timeStamp);
           if (g.direction === 'horizontal') {
-            if (-g.offset >= Math.max(160, g.width * 0.6)) {
+            suppressClick.current = true;
+            if (noteSwipeDeletes(g)) {
               void remove();
             } else {
               onReveal(g.offset < -ACTION_WIDTH / 2);
