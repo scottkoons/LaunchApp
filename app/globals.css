@@ -1544,6 +1544,9 @@ details[open] > summary {
 .swipe-note-delete svg {
   width: 20px;
 }
+.swipe-note-delete:disabled {
+  opacity: 1;
+}
 .swipe-note-delete:focus-visible,
 .swipe-note-actions:focus-visible {
   outline: 2px solid var(--primary);

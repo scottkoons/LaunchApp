@@ -21,12 +21,14 @@ export function SwipeNote({
 }) {
   const [offset, setOffset] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [deleteThreshold, setDeleteThreshold] = useState(Infinity);
   const gesture = useRef<{
     id: number;
     x: number;
     y: number;
     start: number;
     offset: number;
+    width: number;
     direction: 'pending' | 'horizontal' | 'vertical';
   } | null>(null);
   const suppressClick = useRef(false);
@@ -56,6 +58,7 @@ export function SwipeNote({
     <div className="swipe-note">
       <button
         className="swipe-note-delete"
+        style={{ width: Math.max(ACTION_WIDTH, -(offset ?? 0)) }}
         onKeyDown={handleEscape}
         aria-label={`Delete note: ${note.title}`}
         aria-hidden={!revealed}
@@ -64,7 +67,13 @@ export function SwipeNote({
         onClick={() => void remove()}
       >
         <Trash2 />
-        <span>{deleting ? 'Deleting…' : 'Delete'}</span>
+        <span>
+          {deleting
+            ? 'Deleting…'
+            : offset !== null && -offset >= deleteThreshold
+              ? 'Release to delete'
+              : 'Delete'}
+        </span>
       </button>
       <div
         className={`swipe-note-front${offset !== null ? ' is-swiping' : ''}`}
@@ -75,12 +84,15 @@ export function SwipeNote({
           if (!event.isPrimary || event.button !== 0 || deleting) return;
           suppressClick.current = false;
           const start = revealed ? -ACTION_WIDTH : 0;
+          const width = event.currentTarget.clientWidth;
+          setDeleteThreshold(Math.max(160, width * 0.6));
           gesture.current = {
             id: event.pointerId,
             x: event.clientX,
             y: event.clientY,
             start,
             offset: start,
+            width,
             direction: 'pending',
           };
         }}
@@ -100,14 +112,19 @@ export function SwipeNote({
               event.currentTarget.setPointerCapture(event.pointerId);
           }
           if (g.direction !== 'horizontal') return;
-          g.offset = Math.max(-ACTION_WIDTH, Math.min(0, g.start + dx));
+          g.offset = Math.max(-g.width, Math.min(0, g.start + dx));
           setOffset(g.offset);
         }}
         onPointerUp={(event) => {
           const g = gesture.current;
           if (!g || g.id !== event.pointerId) return;
-          if (g.direction === 'horizontal')
-            onReveal(g.offset < -ACTION_WIDTH / 2);
+          if (g.direction === 'horizontal') {
+            if (-g.offset >= Math.max(160, g.width * 0.6)) {
+              void remove();
+            } else {
+              onReveal(g.offset < -ACTION_WIDTH / 2);
+            }
+          }
           gesture.current = null;
           setOffset(null);
         }}
