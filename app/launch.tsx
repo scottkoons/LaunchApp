@@ -793,7 +793,7 @@ export default function Launch({
       <div className="workspace">
         <header className="topbar">
           <div className="topbar-left">
-            <NavigationToggle />
+            <NavigationToggle className="mobile-navigation-toggle" />
             <Tabs
               value={scope}
               onValueChange={(v) => {

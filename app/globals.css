@@ -2695,7 +2695,6 @@ details[open] > summary {
   transition-timing-function: cubic-bezier(0.25, 1, 0.5, 1);
 }
 [data-collapsible='icon'] .brand-name,
-[data-collapsible='icon'] .sidebar-header-toggle,
 [data-collapsible='icon'] .theme-switch,
 [data-collapsible='icon'] .account > div,
 [data-collapsible='icon'] .account > .avatar,
@@ -2705,6 +2704,13 @@ details[open] > summary {
 }
 [data-collapsible='icon'] .sidebar-brand-row {
   padding: 8px 0;
+  flex-direction: column;
+  gap: 0;
+}
+@media (min-width: 768px) {
+  .mobile-navigation-toggle {
+    display: none;
+  }
 }
 [data-collapsible='icon'] .brand {
   justify-content: center;
