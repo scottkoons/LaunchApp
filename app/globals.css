@@ -4406,3 +4406,120 @@ h3,
   width: 18px;
   height: 18px;
 }
+
+/* Scratch-pad notes stay visible when checked; deletion is a separate action. */
+.quick-note-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 14px 8px;
+  border-radius: 7px;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+.quick-note-row:hover,
+.quick-note-row:focus-within {
+  background: color-mix(in srgb, var(--muted) 48%, transparent);
+}
+.quick-note-copy {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+.quick-note-title {
+  display: block;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.quick-note-copy small {
+  display: block;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  margin-top: 6px;
+}
+.quick-note-actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+.quick-note-actions .icon-button {
+  width: 26px;
+  height: 30px;
+  padding: 5px;
+  color: var(--muted-foreground);
+}
+.quick-note-actions .danger:hover {
+  color: var(--destructive);
+}
+.quick-note-actions [aria-pressed='true'] {
+  color: var(--primary);
+}
+.note-hover-action {
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+.quick-note-row:hover .note-hover-action,
+.quick-note-row:focus-within .note-hover-action {
+  opacity: 1;
+}
+.is-complete .quick-note-title,
+.note-card.is-complete .note-title {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  color: var(--muted-foreground);
+}
+.note-card.is-complete .note-body {
+  color: var(--muted-foreground);
+}
+.quick-note-row.is-complete {
+  margin-top: 2px;
+}
+.completed-captures {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.completed-captures h3 {
+  font-size: 14px;
+  color: var(--muted-foreground);
+  margin-bottom: 8px;
+}
+.note-editor-modal {
+  max-width: 640px;
+}
+.note-editor-header {
+  padding: 24px 30px;
+  border-bottom: 1px solid var(--border);
+}
+.note-editor-modal .dropzone {
+  width: 100%;
+}
+.note-editor-modal .note-promote {
+  margin-right: auto;
+}
+.note-editor-modal .editor-body textarea {
+  min-height: 80px;
+}
+.note-editor-modal .editor-body textarea[rows='4'] {
+  min-height: 130px;
+}
+@media (hover: none), (pointer: coarse) {
+  .note-hover-action {
+    opacity: 1;
+  }
+  .quick-note-actions .icon-button {
+    width: 36px;
+    height: 44px;
+    padding: 8px;
+  }
+}
+@media (max-width: 600px) {
+  .note-editor-modal .editor-actions {
+    flex-wrap: wrap;
+  }
+  .note-editor-modal .note-promote {
+    flex-basis: 100%;
+  }
+}

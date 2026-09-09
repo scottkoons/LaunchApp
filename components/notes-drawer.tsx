@@ -6,11 +6,12 @@ import {
   PanelRightOpen,
   Plus,
   Paperclip,
-  Check,
   MessageSquare,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { createEntity, pretty, type Entity, type Scope } from '@/lib/model';
+import { QuickNoteRow } from './quick-note-row';
+import { quickNotes } from '@/lib/notes';
 import type { LaunchStore } from '@/lib/client-store';
 
 export function NotesDrawer({
@@ -20,6 +21,7 @@ export function NotesDrawer({
   onOpen,
   onCapture,
   onAgenda,
+  onDelete,
   notify,
 }: {
   scope: Scope;
@@ -28,6 +30,7 @@ export function NotesDrawer({
   onOpen: (item: Entity) => void;
   onCapture: (text: string) => void;
   onAgenda: () => void;
+  onDelete: (note: Entity) => Promise<void>;
   notify: (text: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -79,14 +82,15 @@ export function NotesDrawer({
       setBusy(false);
     }
   }
-  const items = records
-    .filter(
-      (item) =>
-        item.scope === scope &&
-        !item.archived &&
-        item.kind === (tab === 'notes' ? 'note' : 'agenda'),
-    )
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const items =
+    tab === 'notes'
+      ? quickNotes(records, scope)
+      : records
+          .filter(
+            (item) =>
+              item.scope === scope && !item.archived && item.kind === 'agenda',
+          )
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return (
     <aside
       className={
@@ -195,38 +199,37 @@ export function NotesDrawer({
               </button>
             )}
             <div className="drawer-notes-list">
-              {items.map((item) => (
-                <div className="drawer-note" key={item.id}>
-                  <button
-                    className="drawer-note-open"
-                    onClick={() => onOpen(item)}
-                  >
-                    <span>{item.title}</span>
-                    <small>
-                      {tab === 'agenda'
-                        ? item.date
-                          ? pretty(item.date)
-                          : 'No meeting date yet'
-                        : pretty(item.createdAt)}
-                      {item.files.length > 0
-                        ? ` · ${item.files.length} attachments`
-                        : ''}
-                    </small>
-                  </button>
-                  {tab === 'notes' && (
+              {items.map((item) =>
+                item.kind === 'note' ? (
+                  <QuickNoteRow
+                    key={item.id}
+                    note={item}
+                    store={store}
+                    onOpen={onOpen}
+                    onDelete={onDelete}
+                    notify={notify}
+                  />
+                ) : (
+                  <div className="drawer-note" key={item.id}>
                     <button
-                      className="classic-action"
-                      aria-label={`Archive note ${item.title}`}
-                      title="Archive note"
-                      onClick={() =>
-                        void store.change(item, { archived: true })
-                      }
+                      className="drawer-note-open"
+                      onClick={() => onOpen(item)}
                     >
-                      <Check />
+                      <span>{item.title}</span>
+                      <small>
+                        {tab === 'agenda'
+                          ? item.date
+                            ? pretty(item.date)
+                            : 'No meeting date yet'
+                          : pretty(item.createdAt)}
+                        {item.files.length > 0
+                          ? ` · ${item.files.length} attachments`
+                          : ''}
+                      </small>
                     </button>
-                  )}
-                </div>
-              ))}
+                  </div>
+                ),
+              )}
             </div>
             {!items.length && (
               <p className="hint">

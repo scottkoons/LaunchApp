@@ -1,3 +1,4 @@
+import { quickNotes } from '../lib/notes';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import 'fake-indexeddb/auto';
@@ -450,4 +451,131 @@ void test('reminder snooze, acknowledgement, and undo persist offline without ch
     task.reminderAt,
   );
   assert.ok(reloaded.data.queue.length > 0);
+});
+
+void test('saving a task or agenda item archives its source note and preserves both offline', async () => {
+  Object.defineProperty(globalThis, 'navigator', {
+    value: { onLine: false },
+    configurable: true,
+  });
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: { getItem: () => null, setItem: () => {} },
+    configurable: true,
+  });
+  for (const kind of ['task', 'agenda'] as const) {
+    const account = 'note-conversion-' + crypto.randomUUID();
+    const store = new LaunchStore(account);
+    await store.init();
+    const note = createEntity('note', 'business', {
+      title: 'Menu planning',
+      notes: 'Confirm menu\n\nAssign signs',
+      files: ['photo-id'],
+    });
+    await store.add(note);
+    const destination = createEntity(kind, 'business', {
+      title: note.title,
+      notes: note.notes,
+      files: note.files,
+      sourceId: note.id,
+      report: true,
+      date: kind === 'agenda' ? '2026-09-09' : '',
+    });
+    // Opening or canceling the draft does not archive the note.
+    assert.equal(
+      store.data.records.find((e) => e.id === note.id)?.archived,
+      undefined,
+    );
+    assert.equal(store.data.records.length, 1);
+    await assert.rejects(store.addFromNote({ ...destination, title: '' }));
+    assert.equal(store.data.records.length, 1);
+    assert.equal(store.data.records[0].archived, undefined);
+    await store.addFromNote(destination);
+    const restarted = new LaunchStore(account);
+    await restarted.init();
+    assert.equal(restarted.data.records.length, 2);
+    const original = restarted.data.records.find((e) => e.id === note.id)!;
+    const saved = restarted.data.records.find((e) => e.id === destination.id)!;
+    assert.equal(original.archived, true);
+    assert.equal(original.deletedAt, undefined);
+    assert.equal(original.notes, note.notes);
+    assert.equal(saved.kind, kind);
+    assert.equal(saved.title, note.title);
+    assert.equal(saved.notes, note.notes);
+    assert.deepEqual(saved.files, note.files);
+    assert.equal(saved.report, true);
+    assert.equal(restarted.data.queue.at(-2)?.entityId, saved.id);
+    assert.equal(restarted.data.queue.at(-1)?.entityId, original.id);
+    // The same queued operations produce a visible destination before archiving remotely.
+    const remote = new Map<string, Entity>();
+    for (const op of restarted.data.queue) {
+      const result = mergePatch(remote.get(op.entityId), op);
+      assert.deepEqual(result.conflicts, []);
+      remote.set(op.entityId, result.entity!);
+      if (remote.get(note.id)?.archived) assert.ok(remote.has(destination.id));
+    }
+    assert.equal(remote.get(note.id)?.archived, true);
+    assert.equal(remote.get(destination.id)?.notes, note.notes);
+  }
+});
+
+void test('checked notes stay visible at the bottom and can be unchecked or deleted independently', async () => {
+  Object.defineProperty(globalThis, 'navigator', {
+    value: { onLine: false },
+    configurable: true,
+  });
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: { getItem: () => null, setItem: () => {} },
+    configurable: true,
+  });
+  const store = new LaunchStore('scratchpad-' + crypto.randomUUID());
+  await store.init();
+  const first = await store.add(
+    createEntity('note', 'business', {
+      title: 'First',
+      createdAt: '2026-09-09T10:00:00Z',
+      files: ['photo'],
+    }),
+  );
+  const second = await store.add(
+    createEntity('note', 'business', {
+      title: 'Second',
+      createdAt: '2026-09-09T11:00:00Z',
+    }),
+  );
+  await store.add(createEntity('note', 'personal', { title: 'Private' }));
+  const checked = await store.change(second, { archived: true });
+  assert.deepEqual(
+    quickNotes(store.data.records, 'business').map((n) => n.id),
+    [first.id, second.id],
+  );
+  assert.equal(checked.deletedAt, undefined);
+  await store.change(checked, { notes: 'Edited while completed' });
+  const undone = await store.undoLast();
+  assert.equal(undone?.archived, false);
+  assert.equal(undone?.notes, 'Edited while completed');
+  assert.deepEqual(
+    quickNotes(store.data.records, 'business').map((n) => n.id),
+    [second.id, first.id],
+  );
+  const completed = await store.change(first, { archived: true });
+  const restarted = new LaunchStore(store.account);
+  await restarted.init();
+  assert.equal(
+    quickNotes(restarted.data.records, 'business').at(-1)?.id,
+    first.id,
+  );
+  await restarted.change(completed, { deletedAt: new Date().toISOString() });
+  assert.deepEqual(
+    quickNotes(restarted.data.records, 'business').map((n) => n.id),
+    [second.id],
+  );
+  const restored = await restarted.undoLast();
+  assert.equal(restored?.archived, true);
+  assert.deepEqual(restored?.files, ['photo']);
+  await restarted.change(restored!, { archived: false });
+  assert.equal(quickNotes(restarted.data.records, 'business').length, 2);
+  assert.equal(
+    quickNotes(restarted.data.records, 'business', 'first')[0]?.id,
+    first.id,
+  );
 });

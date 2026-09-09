@@ -3,6 +3,8 @@ import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { ArrowUpRight, Camera } from 'lucide-react';
 import { ReminderPicker } from './reminder-picker';
 import { reminderDay } from '@/lib/reminders';
+import { QuickNoteRow } from './quick-note-row';
+import { quickNotes } from '@/lib/notes';
 import { SwipeNote } from './swipe-note';
 import { Attachments } from './launch-controls';
 import {
@@ -126,6 +128,7 @@ export function Capture({
       setBusy(false);
     }
   }
+  const completed = quickNotes(records, scope).filter((note) => note.archived);
   const recent = records
     .filter(
       (e) =>
@@ -247,6 +250,13 @@ export function Capture({
               revealed={revealedNote === n.id}
               onReveal={(show) => setRevealedNote(show ? n.id : null)}
               onOpen={() => openNote(n)}
+              onToggle={async () => {
+                try {
+                  await store.change(n, { archived: !n.archived });
+                } catch (error) {
+                  notify((error as Error).message);
+                }
+              }}
               onDelete={async () => {
                 try {
                   await deleteNote(n);
@@ -259,6 +269,24 @@ export function Capture({
           ))
         ) : (
           <p className="empty-inline">Your next thought belongs here.</p>
+        )}
+        {quickNotes(records, scope).filter((note) => note.archived).length >
+          0 && (
+          <div className="completed-captures">
+            <h3>Completed notes</h3>
+            {quickNotes(records, scope)
+              .filter((note) => note.archived)
+              .map((note) => (
+                <QuickNoteRow
+                  key={note.id}
+                  note={note}
+                  store={store}
+                  onOpen={openNote}
+                  onDelete={deleteNote}
+                  notify={notify}
+                />
+              ))}
+          </div>
         )}
       </section>
     </div>

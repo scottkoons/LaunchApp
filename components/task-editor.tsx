@@ -130,6 +130,8 @@ export function TaskEditor({
           ),
         );
         await store.change(base.current || existing, patch);
+      } else if (d.sourceId && ['task', 'agenda'].includes(d.kind)) {
+        await store.addFromNote(d);
       } else await store.add(d);
       for (const { entity: item, patch } of reportUpdates) {
         const latest = store.data.records.find((e) => e.id === item.id) || item;

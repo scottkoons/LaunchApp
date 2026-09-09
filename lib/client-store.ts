@@ -220,6 +220,7 @@ export class LaunchStore {
     if (remember) {
       const keys: (keyof Entity)[] = [
         'deletedAt',
+        'archived',
         'draftDone',
         'finalDone',
         'reminderAt',
@@ -240,6 +241,7 @@ export class LaunchStore {
         after: Partial<Entity> = {};
       const defaults = {
         deletedAt: null,
+        archived: false,
         reminderAt: '',
         reminderZone: '',
         reminderAcknowledgedAt: '',
@@ -308,7 +310,7 @@ export class LaunchStore {
       this.undoing = false;
     }
   }
-  async add(entity: Entity) {
+  private queueAdd(entity: Entity) {
     validateEntity(entity);
     this.data.records.push(entity);
     this.data.queue.push({
@@ -319,6 +321,38 @@ export class LaunchStore {
       base: {},
       createdAt: now(),
     });
+  }
+  async add(entity: Entity) {
+    this.queueAdd(entity);
+    await this.persist();
+    void this.sync();
+    return entity;
+  }
+  async addFromNote(entity: Entity) {
+    const source = this.data.records.find((e) => e.id === entity.sourceId);
+    if (
+      !source ||
+      source.kind !== 'note' ||
+      !['task', 'agenda'].includes(entity.kind)
+    )
+      throw new Error('Open the quick note again before converting it.');
+    // Save the destination and archive its source in the same local transaction.
+    // Queue the destination first so syncing never hides an unsaved note.
+    this.queueAdd(entity);
+    if (!source.archived && !source.deletedAt) {
+      const patch = { archived: true, updatedAt: now() };
+      this.data.records = this.data.records.map((e) =>
+        e.id === source.id ? { ...e, ...patch } : e,
+      );
+      this.data.queue.push({
+        id: uid(),
+        entityId: source.id,
+        kind: 'note',
+        patch,
+        base: { archived: source.archived, updatedAt: source.updatedAt },
+        createdAt: now(),
+      });
+    }
     await this.persist();
     void this.sync();
     return entity;

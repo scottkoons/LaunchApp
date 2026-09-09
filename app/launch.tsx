@@ -38,6 +38,8 @@ import {
 } from '@/components/ui/dialog';
 import { TaskTable } from '@/components/task-table';
 import { TaskDragBoard, TaskDropSection } from '@/components/task-drag-board';
+import { NoteEditor } from '@/components/note-editor';
+import { quickNotes } from '@/lib/notes';
 import { NotesDrawer } from '@/components/notes-drawer';
 import {
   PanelLeftClose,
@@ -60,7 +62,7 @@ import {
   CloudOff,
   RefreshCw,
   Check,
-  Undo2,
+  Pencil,
   Trash2,
   Sun,
   Moon,
@@ -156,7 +158,6 @@ export default function Launch({
     [completedTo, setCompletedTo] = useState(day()),
     [completedPeriod, setCompletedPeriod] = useState<CompletedPeriod>('all'),
     [columnRatio, setColumnRatio] = useState(0.55),
-    [noteTab, setNoteTab] = useState('inbox'),
     [refYear, setRefYear] = useState('all');
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reordering = useRef(false);
@@ -1295,15 +1296,6 @@ export default function Launch({
               {view === 'notes' && (
                 <>
                   <div className="toolbar">
-                    <Tabs
-                      value={noteTab}
-                      onValueChange={(v) => setNoteTab(String(v))}
-                    >
-                      <TabsList>
-                        <TabsTrigger value="inbox">Quick notes</TabsTrigger>
-                        <TabsTrigger value="archived">Archived</TabsTrigger>
-                      </TabsList>
-                    </Tabs>
                     <label className="search">
                       <Search />
                       <input
@@ -1315,96 +1307,99 @@ export default function Launch({
                     </label>
                   </div>
                   <div className="notes-grid">
-                    {scoped
-                      .filter(
-                        (n) =>
-                          n.kind === 'note' &&
-                          !!n.archived === (noteTab === 'archived') &&
-                          `${n.title} ${n.notes}`
-                            .toLowerCase()
-                            .includes(query.toLowerCase()),
-                      )
-                      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-                      .map((n) => (
-                        <article className="note-card" key={n.id}>
-                          <p className="note-date">
-                            {new Date(n.createdAt).toLocaleString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              hour: 'numeric',
-                              minute: '2-digit',
-                            })}
-                          </p>
+                    {quickNotes(scoped, scope, query).map((n) => (
+                      <article
+                        className={`note-card${n.archived ? ' is-complete' : ''}`}
+                        key={n.id}
+                      >
+                        <p className="note-date">
+                          {new Date(n.createdAt).toLocaleString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: 'numeric',
+                            minute: '2-digit',
+                          })}
+                        </p>
+                        <button className="note-title" onClick={() => open(n)}>
+                          {n.title}
+                        </button>
+                        <p className="note-body">
+                          {n.notes !== n.title ? n.notes : ''}
+                        </p>
+                        {n.files.length > 0 && (
+                          <span className="hint">
+                            {n.files.length} attachment
+                            {n.files.length > 1 ? 's' : ''}
+                          </span>
+                        )}
+                        <div className="note-actions">
                           <button
-                            className="note-title"
+                            className="icon-button"
+                            aria-label={`Edit note: ${n.title}`}
+                            title="Edit note"
                             onClick={() => open(n)}
                           >
-                            {n.title}
+                            <Pencil />
                           </button>
-                          <p className="note-body">
-                            {n.notes !== n.title ? n.notes : ''}
-                          </p>
-                          {n.files.length > 0 && (
-                            <span className="hint">
-                              {n.files.length} attachment
-                              {n.files.length > 1 ? 's' : ''}
-                            </span>
-                          )}
-                          <div className="note-actions">
+                          <button
+                            className="text-button"
+                            onClick={() =>
+                              add('task', {
+                                title: n.title,
+                                notes: n.notes,
+                                files: n.files,
+                                sourceId: n.id,
+                              })
+                            }
+                          >
+                            Make task
+                            <ArrowUpRight />
+                          </button>
+                          {scope === 'business' && (
                             <button
                               className="text-button"
                               onClick={() =>
-                                add('task', {
+                                add('agenda', {
                                   title: n.title,
                                   notes: n.notes,
                                   files: n.files,
+                                  date: day(),
                                   sourceId: n.id,
+                                  report: true,
                                 })
                               }
                             >
-                              Make task
-                              <ArrowUpRight />
+                              For meeting
                             </button>
-                            {scope === 'business' && (
-                              <button
-                                className="text-button"
-                                onClick={() =>
-                                  add('agenda', {
-                                    title: n.title,
-                                    notes: n.notes,
-                                    files: n.files,
-                                    date: day(),
-                                    sourceId: n.id,
-                                    report: true,
-                                  })
-                                }
-                              >
-                                For meeting
-                              </button>
-                            )}
-                            <button
-                              className="icon-button"
-                              aria-label={
-                                n.archived ? 'Restore note' : 'Archive note'
-                              }
-                              onClick={() =>
-                                void store.change(n, { archived: !n.archived })
-                              }
-                            >
-                              {n.archived ? <Undo2 /> : <Check />}
-                            </button>
-                            <button
-                              className="icon-button"
-                              aria-label="Trash note"
-                              onClick={() => void trash(n)}
-                            >
-                              <Trash2 />
-                            </button>
-                          </div>
-                        </article>
-                      ))}
+                          )}
+                          <button
+                            className="icon-button"
+                            aria-pressed={!!n.archived}
+                            aria-label={
+                              n.archived ? 'Uncheck note' : 'Complete note'
+                            }
+                            onClick={() =>
+                              void store
+                                .change(n, { archived: !n.archived })
+                                .catch((error) =>
+                                  notify((error as Error).message),
+                                )
+                            }
+                          >
+                            <Check />
+                          </button>
+                          <button
+                            className="icon-button"
+                            aria-label="Trash note"
+                            onClick={() => void trash(n)}
+                          >
+                            <Trash2 />
+                          </button>
+                        </div>
+                      </article>
+                    ))}
                   </div>
-                  {!notes.length && noteTab === 'inbox' && (
+                  {!quickNotes(scoped, scope).length && (
                     <Empty
                       title="Catch the thought."
                       text="A link to check, a photo of a whiteboard, a reminder for later. Keep it simple."
@@ -1685,6 +1680,7 @@ export default function Launch({
           setCaptureOpen(true);
         }}
         onAgenda={() => add('agenda', { date: day(), report: true })}
+        onDelete={trash}
         notify={notify}
       />
       <nav className="mobile-bottom" aria-label="Phone navigation">
@@ -1710,9 +1706,28 @@ export default function Launch({
           Dashboard
         </button>
       </nav>
+      {editorOpen && editor?.kind === 'note' && (
+        <NoteEditor
+          key={editor.id}
+          note={editor}
+          open={editorOpen}
+          onClose={() => setEditorOpen(false)}
+          store={store}
+          files={files}
+          notify={notify}
+          onPromote={(note) =>
+            add('task', {
+              title: note.title,
+              notes: note.notes,
+              files: note.files,
+              sourceId: note.id,
+            })
+          }
+        />
+      )}
       <TaskEditor
         entity={editor}
-        open={editorOpen}
+        open={editorOpen && editor?.kind !== 'note'}
         onClose={() => setEditorOpen(false)}
         store={store}
         records={records}

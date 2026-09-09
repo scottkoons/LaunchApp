@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, type KeyboardEvent } from 'react';
-import { ArrowUpRight, Inbox, MoreHorizontal, Trash2 } from 'lucide-react';
+import { Check, Pencil, Inbox, MoreHorizontal, Trash2 } from 'lucide-react';
 import type { Entity } from '@/lib/model';
 import {
   NOTE_ACTION_WIDTH as ACTION_WIDTH,
@@ -17,12 +17,14 @@ export function SwipeNote({
   onReveal,
   onOpen,
   onDelete,
+  onToggle,
 }: {
   note: Entity;
   revealed: boolean;
   onReveal: (open: boolean) => void;
   onOpen: () => void;
   onDelete: () => Promise<void>;
+  onToggle: () => Promise<void>;
 }) {
   const [offset, setOffset] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -153,7 +155,16 @@ export function SwipeNote({
               {note.files.length ? ' · ' + note.files.length + ' files' : ''}
             </small>
           </span>
-          <ArrowUpRight />
+          <Pencil />
+        </button>
+        <button
+          className="icon-button"
+          aria-label={`Complete note: ${note.title}`}
+          aria-pressed={!!note.archived}
+          disabled={deleting}
+          onClick={() => void onToggle()}
+        >
+          <Check />
         </button>
         <button
           className="swipe-note-actions"
