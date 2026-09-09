@@ -1750,7 +1750,7 @@ details[open] > summary {
   flex: 0 0 180px;
 }
 .reference-year-filter .pick {
-  height: 44px;
+  height: 44px !important;
 }
 .reference-upload .attachments {
   display: grid;
