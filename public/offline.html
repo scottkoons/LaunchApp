@@ -6,12 +6,12 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <meta name="theme-color" content="#101c2d" />
+    <meta name="theme-color" content="#0f172a" />
     <title>Launch · Offline capture</title>
     <style>
       body {
         margin: 0;
-        background: #101c2d;
+        background: #0f172a;
         color: #f1f4f8;
         font:
           17px/1.5 system-ui,
@@ -30,12 +30,19 @@
         align-items: center;
         gap: 10px;
         font:
-          bold 26px Georgia,
-          serif;
+          bold 26px system-ui,
+          sans-serif;
       }
       header img {
         width: 42px;
         height: 42px;
+        border-radius: 9px;
+      }
+      header small {
+        display: block;
+        font:
+          12px/1.4 system-ui,
+          sans-serif;
       }
       h1 {
         font:
@@ -102,7 +109,10 @@
   </head>
   <body>
     <main>
-      <header><img src="/icons/icon-192.png" alt="" />Launch</header>
+      <header>
+        <img src="/icons/icon-192.png?v=launch-orbit-1" alt="" />
+        <div>Launch<small>Task Organizer</small></div>
+      </header>
       <p>Offline · capture is still here.</p>
       <h1>Keep the thought.</h1>
       <p>Use your keyboard’s microphone to dictate, or type a quick note.</p>

@@ -2704,16 +2704,26 @@ details[open] > summary {
   gap: 4px;
 }
 .sidebar-brand-row .brand {
-  padding: 12px 0 24px;
+  padding: 12px 0 18px;
   flex: 1;
   min-width: 0;
 }
-.sidebar-brand-row .brand span {
-  left: 48px;
-  bottom: 8px;
-  font-size: 9px;
-  letter-spacing: 0.08em;
+.sidebar-brand-row .brand-name > span {
+  display: block;
+  position: static;
+  font:
+    11px/1.4 'DM Sans',
+    sans-serif;
+  letter-spacing: 0.015em;
   white-space: nowrap;
+}
+.sidebar-brand-row .brand img {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+}
+.welcome > img {
+  border-radius: 16px;
 }
 .navigation-toggle {
   flex-shrink: 0;
@@ -3269,17 +3279,16 @@ h2,
 h3,
 [data-theme='space'] h1,
 [data-theme='space'] h2,
-.brand-name,
 [data-slot='sheet-title'] {
   font-family: 'DM Serif Display', Georgia, serif;
   font-weight: 400;
   letter-spacing: -0.02em;
 }
 .brand-name {
-  font-size: 25px;
-}
-.brand-name > span {
-  display: none;
+  font:
+    700 26px/1.1 'DM Sans',
+    sans-serif;
+  letter-spacing: -0.04em;
 }
 .topbar {
   height: 60px;

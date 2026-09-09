@@ -714,9 +714,9 @@ export default function Launch({
         <SidebarHeader>
           <div className="sidebar-brand-row">
             <div className="brand">
-              <img src="/icons/rocket-96.png" alt="Launch" />
+              <img src="/icons/orbit-96.png?v=launch-orbit-1" alt="Launch" />
               <div className="brand-name">
-                Launch<span>YOUR PRIVATE WORKSPACE</span>
+                Launch<span>Task Organizer</span>
               </div>
             </div>
             <NavigationToggle className="sidebar-header-toggle" />
@@ -1897,7 +1897,7 @@ function Empty({
 }) {
   return (
     <section className="welcome">
-      <img src="/icons/rocket-96.png" alt="" />
+      <img src="/icons/orbit-96.png?v=launch-orbit-1" alt="" />
       <h2>{title}</h2>
       <p>{text}</p>
       {action && (

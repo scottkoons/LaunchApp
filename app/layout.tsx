@@ -11,14 +11,25 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: 'Launch · Your day, in view',
+  title: 'Launch · Task Organizer',
   description:
     'Your private task planner, quick notes, and marketing meetings.',
   manifest: '/manifest.webmanifest',
   icons: {
-    icon: { url: '/icons/rocket-96.png', sizes: '96x96', type: 'image/png' },
+    icon: [
+      {
+        url: '/icons/favicon-32.png?v=launch-orbit-1',
+        sizes: '32x32',
+        type: 'image/png',
+      },
+      {
+        url: '/icons/orbit-96.png?v=launch-orbit-1',
+        sizes: '96x96',
+        type: 'image/png',
+      },
+    ],
     apple: {
-      url: '/apple-touch-icon.png?v=launch-rocket-1',
+      url: '/apple-touch-icon.png?v=launch-orbit-1',
       sizes: '180x180',
       type: 'image/png',
     },

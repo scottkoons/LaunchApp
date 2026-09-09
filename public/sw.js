@@ -1,4 +1,4 @@
-const CACHE = 'launch-shell-v12';
+const CACHE = 'launch-shell-v13';
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
@@ -7,10 +7,12 @@ self.addEventListener('install', (event) => {
         c.addAll([
           '/offline.html',
           '/offline.js',
+          '/icons/orbit-96.png?v=launch-orbit-1',
+          '/icons/favicon-32.png?v=launch-orbit-1',
           '/icons/icon-192.png',
-          '/icons/icon-192.png?v=launch-rocket-1',
-          '/icons/icon-512.png?v=launch-rocket-1',
-          '/apple-touch-icon.png?v=launch-rocket-1',
+          '/icons/icon-192.png?v=launch-orbit-1',
+          '/icons/icon-512.png?v=launch-orbit-1',
+          '/apple-touch-icon.png?v=launch-orbit-1',
           '/manifest.webmanifest',
         ]),
       ),
@@ -68,6 +70,8 @@ self.addEventListener('fetch', (event) => {
   if (
     [
       '/offline.js',
+      '/icons/orbit-96.png',
+      '/icons/favicon-32.png',
       '/icons/icon-192.png',
       '/icons/icon-512.png',
       '/apple-touch-icon.png',
