@@ -244,6 +244,13 @@ export default function Launch({
     if ('serviceWorker' in navigator)
       void navigator.serviceWorker.register('/sw.js').catch(() => {});
   }, []);
+  useEffect(() => {
+    const color =
+      theme === 'light' ? '#f4f5f7' : theme === 'dark' ? '#0d1117' : '#0f172a';
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute('content', color);
+  }, [theme]);
   function changeTheme(t: string) {
     setTheme(t);
     document.documentElement.dataset.theme = t;
@@ -762,20 +769,35 @@ export default function Launch({
         </SidebarContent>
         <SidebarFooter>
           <div className="theme-switch">
-            {[
-              ['space', 'Space', Rocket],
-              ['dark', 'Dark', Moon],
-              ['light', 'Light', Sun],
-            ].map(([t, label]) => (
-              <button
-                key={t as string}
-                className={theme === t ? 'selected' : ''}
-                onClick={() => changeTheme(t as string)}
-                aria-pressed={theme === t}
-              >
-                {label as string}
-              </button>
-            ))}
+            <button
+              className="theme-cycle"
+              onClick={() =>
+                changeTheme(
+                  theme === 'light'
+                    ? 'dark'
+                    : theme === 'dark'
+                      ? 'space'
+                      : 'light',
+                )
+              }
+              aria-label={`${theme === 'space' ? 'Space mode' : theme === 'dark' ? 'Dark mode' : 'Light mode'}. Switch to ${theme === 'light' ? 'Dark' : theme === 'dark' ? 'Space' : 'Light'}`}
+              title={`Switch to ${theme === 'light' ? 'Dark' : theme === 'dark' ? 'Space' : 'Light'}`}
+            >
+              {theme === 'space' ? (
+                <Rocket />
+              ) : theme === 'dark' ? (
+                <Moon />
+              ) : (
+                <Sun />
+              )}
+              <span>
+                {theme === 'space'
+                  ? 'Space mode'
+                  : theme === 'dark'
+                    ? 'Dark mode'
+                    : 'Light mode'}
+              </span>
+            </button>
           </div>
           <SidebarMenu>
             <SidebarMenuItem>

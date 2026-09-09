@@ -89,49 +89,96 @@
   --radius-md: 0.5rem;
   --radius-sm: 0.35rem;
 }
-:root {
-  --background: oklch(18.5% 0.028 253);
-  --foreground: oklch(94% 0.01 253);
-  --card: oklch(23% 0.029 253);
-  --sidebar: oklch(21% 0.028 253);
-  --muted: oklch(27% 0.03 253);
-  --muted-foreground: oklch(74% 0.025 253);
-  --primary: oklch(78% 0.16 64);
-  --primary-foreground: oklch(20% 0.027 253);
-  --accent: oklch(30% 0.025 64);
-  --border: oklch(33% 0.027 253);
-  --destructive: oklch(73% 0.15 18);
-  --green: oklch(78% 0.13 161);
-  --yellow: oklch(84% 0.13 87);
-  --blue: oklch(76% 0.11 238);
-  --radius: 0.7rem;
+/* Matched to the installed Mission Control Electron app, not the later rebuild. */
+:root,
+[data-theme='space'] {
   color-scheme: dark;
+  --radius: 0.7rem;
+  --primary: #e8922d;
+  --background: #0f172a;
+  --foreground: #f8fafc;
+  --card: #1e293b;
+  --sidebar: #1e293b;
+  --muted: #334155;
+  --muted-foreground: #94a3b8;
+  --faint-foreground: #64748b;
+  --primary-foreground: #0f172a;
+  --border: #334155;
+  --border-strong: #475569;
+  --accent: rgba(232, 146, 45, 0.15);
+  --label-foreground: var(--faint-foreground);
+  --month-header: #0f172a;
+  --month-columns: rgba(15, 23, 42, 0.5);
+  --month-shadow: none;
+  --selection: rgba(232, 146, 45, 0.35);
+  --selection-foreground: #f8fafc;
+  --calendar-outside: #161e2e;
+  --event-background: rgba(167, 139, 250, 0.18);
+  --event-foreground: #d1d5db;
+  --destructive: #f43f5e;
+  --green: #10b981;
+  --yellow: #fbbf24;
+  --blue: #38bdf8;
 }
 [data-theme='dark'] {
-  --background: oklch(17% 0.005 253);
-  --card: oklch(22% 0.006 253);
-  --sidebar: oklch(20% 0.006 253);
-  --muted: oklch(27% 0.006 253);
-  --border: oklch(33% 0.006 253);
-  --muted-foreground: oklch(75% 0.008 253);
+  color-scheme: dark;
+  --radius: 0.7rem;
+  --primary: #e8922d;
+  --background: #0d1117;
+  --foreground: #e6edf3;
+  --card: #1c2128;
+  --sidebar: #161b22;
+  --muted: #262c36;
+  --muted-foreground: #8b949e;
+  --faint-foreground: #6e7681;
+  --primary-foreground: #0d1117;
+  --border: #30363d;
+  --border-strong: #484f58;
+  --accent: rgba(232, 146, 45, 0.15);
+  --label-foreground: var(--faint-foreground);
+  --month-header: #161b22;
+  --month-columns: rgba(22, 27, 34, 0.6);
+  --month-shadow: none;
+  --selection: rgba(232, 146, 45, 0.35);
+  --selection-foreground: #e6edf3;
+  --calendar-outside: #161b22;
+  --event-background: rgba(167, 139, 250, 0.18);
+  --event-foreground: #d1d5db;
+  --destructive: #f43f5e;
+  --green: #10b981;
+  --yellow: #fbbf24;
+  --blue: #38bdf8;
 }
 [data-theme='light'] {
-  --background: oklch(98% 0.004 253);
-  --foreground: oklch(25% 0.029 253);
-  --card: oklch(99% 0.002 253);
-  --sidebar: oklch(96% 0.006 253);
-  --muted: oklch(94% 0.009 253);
-  --muted-foreground: oklch(46% 0.025 253);
-  --primary: #9f4700;
-  --primary-foreground: oklch(99% 0.003 60);
-  --accent: oklch(94% 0.025 64);
-  --border: oklch(86% 0.014 253);
-  --destructive: oklch(49% 0.19 22);
-  --green: oklch(43% 0.1 160);
-  --yellow: oklch(46% 0.1 75);
-  --blue: oklch(44% 0.12 248);
   color-scheme: light;
+  --radius: 0.7rem;
+  --primary: #e8922d;
+  --background: #f4f5f7;
+  --foreground: #1a1a2e;
+  --card: #fcfcfb;
+  --sidebar: #fcfcfb;
+  --muted: #f7f6f4;
+  --muted-foreground: #6b7280;
+  --faint-foreground: #9ca3af;
+  --primary-foreground: #ffffff;
+  --border: #e5e7eb;
+  --border-strong: #d1d5db;
+  --accent: #fff4e6;
+  --label-foreground: #374151;
+  --month-header: #f4f2ee;
+  --month-columns: #f4f2ee;
+  --month-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --selection: #ffe0bf;
+  --selection-foreground: #1a1a2e;
+  --calendar-outside: #f3f4f6;
+  --event-background: #ede9fe;
+  --event-foreground: #374151;
+  --destructive: #dc2626;
+  --green: #16a34a;
+  --yellow: #ca8a04;
+  --blue: #2563eb;
 }
+
 * {
   box-sizing: border-box;
   border-color: var(--border);
@@ -511,22 +558,6 @@ kbd {
   padding: 0 5px;
   margin-left: 8px;
   color: var(--muted-foreground);
-}
-.theme-switch {
-  display: flex;
-  gap: 4px;
-  padding: 8px;
-}
-.theme-switch button {
-  border-radius: 5px;
-  padding: 5px 9px;
-  flex: 1;
-  color: var(--muted-foreground);
-  font-size: 12px;
-}
-.theme-switch button.selected {
-  background: var(--accent);
-  color: var(--primary);
 }
 .summary button {
   display: flex;
@@ -1830,8 +1861,7 @@ details[open] > summary {
   border-right: 0;
 }
 .calendar-cell.outside {
-  background: color-mix(in oklab, var(--muted) 28%, var(--background));
-  opacity: 0.6;
+  background: var(--calendar-outside);
 }
 .date-number {
   font-size: 12px;
@@ -1861,8 +1891,8 @@ details[open] > summary {
   opacity: 0.7;
 }
 .calendar-entry.event {
-  color: var(--primary);
-  background: var(--accent);
+  color: var(--event-foreground);
+  background: var(--event-background);
 }
 .calendar-entry:hover {
   outline: 1px solid currentColor;
@@ -2118,13 +2148,13 @@ details[open] > summary {
   border: 1px solid #778797;
 }
 .theme-swatch.space {
-  background: #142235;
+  background: #0f172a;
 }
 .theme-swatch.dark {
-  background: #1b1d1f;
+  background: #0d1117;
 }
 .theme-swatch.light {
-  background: #eff2f5;
+  background: #f4f5f7;
 }
 .theme-option svg {
   color: var(--primary);
@@ -2779,33 +2809,14 @@ details[open] > summary {
 }
 
 /* Space uses the original deep navy canvas and slate working surfaces. */
-[data-theme='space'] {
-  --background: #0f172a;
-  --foreground: #e5e9f0;
-  --card: #1e293b;
-  --sidebar: #1e293b;
-  --muted: #273449;
-  --muted-foreground: #94a3b8;
-  --primary: #f59a23;
-  --primary-foreground: #0f172a;
-  --accent: #3c3938;
-  --border: #334155;
-  --destructive: #ff6384;
-  --green: #00cf96;
-  --yellow: #ffc400;
-  --blue: #25bdf3;
+.month-group > .section-heading {
+  background: var(--month-header);
 }
-[data-theme='space'] .month-group > .section-heading {
-  background: #0f172a;
+.month-group .task-table thead {
+  background: var(--month-columns);
 }
-[data-theme='space'] .task-table thead {
-  background: #172133;
-}
-[data-theme='space'] .month-group .monthly-note {
-  background: #1e293b;
-}
-[data-theme='space'] .date-badge {
-  background: color-mix(in srgb, currentColor 8%, transparent);
+.month-group .monthly-note {
+  background: var(--card);
 }
 .task-table .drag-cell {
   width: 28px;
@@ -3232,15 +3243,6 @@ h3,
   font-weight: 400;
   letter-spacing: -0.02em;
 }
-[data-theme='space'] {
-  --foreground: #f8fafc;
-  --primary: #e8922d;
-  --muted: #334155;
-  --accent: rgba(232, 146, 45, 0.15);
-  --primary-foreground: #0f172a;
-  --green: #00c48c;
-  --blue: #22b8ef;
-}
 .brand-name {
   font-size: 25px;
 }
@@ -3317,8 +3319,8 @@ h3,
 }
 .classic-table-heading {
   min-height: 45px;
-  background: color-mix(in srgb, var(--background) 55%, var(--card));
-  color: var(--muted-foreground);
+  background: var(--month-columns);
+  color: var(--label-foreground);
   border-bottom: 1px solid var(--border);
 }
 .classic-table-heading > button {
@@ -4156,4 +4158,71 @@ h3,
   .reminder-alert {
     display: none;
   }
+}
+
+/* Electron's three modes share layout but have distinct surface and pill treatments. */
+::selection {
+  background: var(--selection);
+  color: var(--selection-foreground);
+}
+.month-group {
+  box-shadow: var(--month-shadow);
+}
+.nav-label,
+.month-group .eyebrow,
+.monthly-note label {
+  color: var(--label-foreground);
+}
+.classic-task-row.is-report-muted .classic-title,
+.classic-task-row.is-report-muted .classic-notes,
+.classic-task-row.is-report-muted .classic-mobile-note {
+  color: var(--faint-foreground);
+}
+.date-badge.overdue {
+  --pill-color: var(--destructive);
+}
+.date-badge.soon {
+  --pill-color: var(--yellow);
+}
+.date-badge.future {
+  --pill-color: var(--blue);
+}
+.date-badge.done {
+  --pill-color: var(--green);
+}
+.date-badge:is(.overdue, .soon, .future, .done) {
+  color: var(--pill-color);
+  border-color: var(--pill-color);
+  background: color-mix(in srgb, var(--pill-color) 15%, transparent);
+}
+[data-theme='light'] .date-badge:is(.overdue, .soon, .future, .done) {
+  color: #fff;
+  border-color: transparent;
+  background: var(--pill-color);
+}
+.date-badge:is(.overdue, .soon, .future, .done):hover {
+  filter: brightness(1.1);
+}
+.theme-switch {
+  display: flex;
+}
+.theme-cycle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: var(--muted-foreground);
+  text-align: left;
+  font-size: 13px;
+}
+.theme-cycle:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+.theme-cycle svg {
+  width: 18px;
+  height: 18px;
 }
