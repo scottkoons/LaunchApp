@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
-import { ArrowUpRight, Camera, Inbox } from 'lucide-react';
+import { ArrowUpRight, Camera } from 'lucide-react';
+import { SwipeNote } from './swipe-note';
 import { Attachments } from './launch-controls';
 import {
   createEntity,
@@ -16,6 +17,7 @@ export function Capture({
   records,
   notify,
   openNote,
+  deleteNote,
 }: {
   scope: Scope;
   store: LaunchStore;
@@ -23,6 +25,7 @@ export function Capture({
   records: Entity[];
   notify: (s: string) => void;
   openNote: (e: Entity) => void;
+  deleteNote: (e: Entity) => Promise<void>;
 }) {
   const key = `launch-capture-${store.account}-${scope}`;
   const [text, setText] = useState(''),
@@ -31,6 +34,7 @@ export function Capture({
     [loaded, setLoaded] = useState(false);
   const saving = useRef(false);
   const uploading = useRef(false);
+  const [revealedNote, setRevealedNote] = useState<string | null>(null);
   const [filesBusy, setFilesBusy] = useState(false);
   function fileBusy(value: boolean) {
     uploading.current = value;
@@ -194,26 +198,21 @@ export function Capture({
         </div>
         {recent.length ? (
           recent.map((n) => (
-            <button
+            <SwipeNote
               key={n.id}
-              className="recent-note"
-              onClick={() => openNote(n)}
-            >
-              <Inbox />
-              <span>
-                {n.title}
-                <small>
-                  {new Date(n.createdAt).toLocaleString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    hour: 'numeric',
-                    minute: '2-digit',
-                  })}
-                  {n.files.length ? ' · ' + n.files.length + ' files' : ''}
-                </small>
-              </span>
-              <ArrowUpRight />
-            </button>
+              note={n}
+              revealed={revealedNote === n.id}
+              onReveal={(show) => setRevealedNote(show ? n.id : null)}
+              onOpen={() => openNote(n)}
+              onDelete={async () => {
+                try {
+                  await deleteNote(n);
+                  setRevealedNote(null);
+                } catch (error) {
+                  notify((error as Error).message);
+                }
+              }}
+            />
           ))
         ) : (
           <p className="empty-inline">Your next thought belongs here.</p>

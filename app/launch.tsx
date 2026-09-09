@@ -837,6 +837,7 @@ export default function Launch({
               records={records}
               notify={notify}
               openNote={open}
+              deleteNote={trash}
             />
           ) : (
             <>
@@ -1674,6 +1675,7 @@ export default function Launch({
               setCaptureOpen(false);
               open(e);
             }}
+            deleteNote={trash}
           />
         </SheetContent>
       </Sheet>
