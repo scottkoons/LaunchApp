@@ -15,7 +15,14 @@ export const metadata: Metadata = {
   description:
     'Your private task planner, quick notes, and marketing meetings.',
   manifest: '/manifest.webmanifest',
-  icons: { icon: '/icons/rocket-96.png', apple: '/icons/apple-touch-icon.png' },
+  icons: {
+    icon: { url: '/icons/rocket-96.png', sizes: '96x96', type: 'image/png' },
+    apple: {
+      url: '/apple-touch-icon.png?v=launch-rocket-1',
+      sizes: '180x180',
+      type: 'image/png',
+    },
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',

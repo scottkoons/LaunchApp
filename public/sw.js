@@ -1,4 +1,4 @@
-const CACHE = 'launch-shell-v11';
+const CACHE = 'launch-shell-v12';
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
@@ -8,6 +8,9 @@ self.addEventListener('install', (event) => {
           '/offline.html',
           '/offline.js',
           '/icons/icon-192.png',
+          '/icons/icon-192.png?v=launch-rocket-1',
+          '/icons/icon-512.png?v=launch-rocket-1',
+          '/apple-touch-icon.png?v=launch-rocket-1',
           '/manifest.webmanifest',
         ]),
       ),
@@ -47,10 +50,28 @@ self.addEventListener('fetch', (event) => {
     );
     return;
   }
+  // Keep install metadata current instead of retaining an old home-screen icon.
+  if (u.pathname === '/manifest.webmanifest') {
+    event.respondWith(
+      fetch(event.request)
+        .then(async (response) => {
+          if (response.ok) {
+            const cache = await caches.open(CACHE);
+            await cache.put(event.request, response.clone());
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request)),
+    );
+    return;
+  }
   if (
-    ['/offline.js', '/icons/icon-192.png', '/manifest.webmanifest'].includes(
-      u.pathname,
-    )
+    [
+      '/offline.js',
+      '/icons/icon-192.png',
+      '/icons/icon-512.png',
+      '/apple-touch-icon.png',
+    ].includes(u.pathname)
   )
     event.respondWith(
       caches
