@@ -2764,6 +2764,9 @@ details[open] > summary {
   height: 32px;
   margin-bottom: 6px;
 }
+.launch-nav-group:first-child .nav-label {
+  margin-top: 0;
+}
 .nav-count {
   border-radius: 999px;
 }
