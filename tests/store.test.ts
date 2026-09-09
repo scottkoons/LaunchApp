@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import 'fake-indexeddb/auto';
 import { LaunchStore } from '../lib/client-store';
 import {
+  validateEntity,
   createEntity,
   mergePatch,
   taskMonthMove,
@@ -10,6 +11,61 @@ import {
   type Operation,
   type FileMeta,
 } from '../lib/model';
+void test('single-date creation and edits persist Final locally and in the sync operation', async () => {
+  Object.defineProperty(globalThis, 'navigator', {
+    value: { onLine: false },
+    configurable: true,
+  });
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: { getItem: () => null, setItem: () => {} },
+    configurable: true,
+  });
+  const store = new LaunchStore('single-date-' + crypto.randomUUID());
+  await store.init();
+  const draftOnly = await store.add(
+    createEntity('task', 'business', {
+      title: 'Create with one date',
+      draft: '2026-09-09',
+      report: false,
+    }),
+  );
+  assert.equal(draftOnly.draft, '');
+  assert.equal(draftOnly.final, '2026-09-09');
+  assert.equal(draftOnly.routine, true);
+  assert.equal(draftOnly.report, false);
+  const unscheduled = await store.add(
+    createEntity('task', 'business', {
+      title: 'Give this a date',
+    }),
+  );
+  const updated = await store.change(unscheduled, { draft: '2026-09-10' });
+  assert.equal(updated.draft, '');
+  assert.equal(updated.final, '2026-09-10');
+  assert.equal(updated.routine, true);
+  const operation = store.data.queue.at(-1)!;
+  assert.equal(operation.patch.draft, '');
+  assert.equal(operation.patch.final, '2026-09-10');
+  assert.equal(operation.patch.routine, true);
+  const remote = validateEntity(mergePatch(unscheduled, operation).entity!);
+  assert.equal(remote.final, updated.final);
+  assert.equal(remote.draft, updated.draft);
+  const restarted = new LaunchStore(store.account);
+  await restarted.init();
+  assert.equal(
+    restarted.data.records.find((e) => e.id === updated.id)?.final,
+    updated.final,
+  );
+  const completed = await restarted.change(updated, {
+    status: 'completed',
+    completedAt: new Date().toISOString(),
+    finalDone: true,
+  });
+  assert.equal(completed.finalDone, true);
+  const undone = await restarted.undoLast();
+  assert.equal(undone?.status, 'active');
+  assert.equal(undone?.final, '2026-09-10');
+  assert.equal(undone?.finalDone, false);
+});
 void test('offline note and photo survive restart, sync once, and retain conflicting edits', async () => {
   let online = false;
   Object.defineProperty(globalThis, 'navigator', {

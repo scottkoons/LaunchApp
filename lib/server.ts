@@ -7,6 +7,7 @@ import {
   planningMonths,
   migrateLegacyRoutine,
   migrateReportDefaults,
+  normalizeTaskDeadlines,
   type Entity,
 } from './model';
 export function database() {
@@ -50,7 +51,9 @@ export async function allRecords(user: string) {
     (r) => ({ ...JSON.parse(r.body), version: r.version }) as Entity,
   );
   const migrations = list.flatMap((original, index) => {
-    const migrated = migrateReportDefaults(migrateLegacyRoutine(original));
+    const migrated = normalizeTaskDeadlines(
+      migrateReportDefaults(migrateLegacyRoutine(original)),
+    );
     return migrated === original ? [] : [{ original, migrated, index }];
   });
   if (migrations.length) {

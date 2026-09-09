@@ -3,6 +3,7 @@ import {
   lazy,
   Suspense,
   useEffect,
+  useEffectEvent,
   useLayoutEffect,
   useRef,
   useState,
@@ -265,6 +266,9 @@ export default function Launch({
     setQuery('');
     setFilter('all');
   }
+  const addTaskFromShortcut = useEffectEvent(() => {
+    if (!editorOpen && !captureOpen && !syncOpen) add('task');
+  });
   useEffect(() => {
     const handle = (e: KeyboardEvent) => {
       const editing = e
@@ -276,6 +280,16 @@ export default function Launch({
               target.isContentEditable),
         );
       if (e.isComposing) return;
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        !e.shiftKey &&
+        !e.altKey &&
+        e.key.toLowerCase() === 't'
+      ) {
+        e.preventDefault();
+        if (!e.repeat) addTaskFromShortcut();
+        return;
+      }
       if (
         !editing &&
         (e.metaKey || e.ctrlKey) &&
@@ -396,6 +410,7 @@ export default function Launch({
   function add(kind: Entity['kind'], extra: Partial<Entity> = {}) {
     open(
       createEntity(kind, kind === 'agenda' ? 'business' : scope, {
+        ...(kind === 'task' ? { routine: true } : {}),
         report:
           kind === 'task'
             ? scope === 'business'
@@ -623,7 +638,7 @@ export default function Launch({
                   className="text-button add-in-month"
                   onClick={() =>
                     add('task', {
-                      draft:
+                      final:
                         group.key === day().slice(0, 7)
                           ? day()
                           : group.key + '-01',
@@ -917,6 +932,8 @@ export default function Launch({
                 {view !== 'settings' && (
                   <button
                     className="button primary"
+                    aria-keyshortcuts={isTaskView ? 'Control+t' : undefined}
+                    title={isTaskView ? 'Add task (Control-T)' : undefined}
                     onClick={() =>
                       view === 'notes'
                         ? setCaptureOpen(true)

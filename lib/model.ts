@@ -424,6 +424,27 @@ export function migrateReportDefaults(e: Entity): Entity {
     ...(repair ? { report: true } : {}),
   };
 }
+// A single deadline is the task's due date. Keep review workflows and
+// two-deadline tasks intact, and retain reporting and recurrence preferences.
+export function normalizeTaskDeadlines(e: Entity): Entity {
+  if (
+    e.kind !== 'task' ||
+    e.deletedAt ||
+    e.review ||
+    !!e.draft === !!e.final ||
+    (!e.draft && e.routine)
+  )
+    return e;
+  return {
+    ...e,
+    routine: true,
+    draft: '',
+    final: e.draft || e.final,
+    draftDone: false,
+    finalDone:
+      e.status === 'completed' || !!(e.draft ? e.draftDone : e.finalDone),
+  };
+}
 // One-time migration of the two routines identified in Scott's original import.
 // Retain the original dates in legacy.record; never infer routine mode for other
 // report-muted tasks, which can still need draft/final review.
@@ -981,7 +1002,7 @@ export function validateEntity(e: Entity) {
     throw new Error('Invalid repeat');
   if (e.status && !['active', 'postponed', 'completed'].includes(e.status))
     throw new Error('Invalid status');
-  return e;
+  return Object.assign(e, normalizeTaskDeadlines(migrateReportDefaults(e)));
 }
 function escapeIcs(s: string) {
   return s

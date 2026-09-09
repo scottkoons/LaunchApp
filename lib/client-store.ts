@@ -200,11 +200,23 @@ export class LaunchStore {
     }
   }
   async change(entity: Entity, patch: Partial<Entity>, remember = true) {
+    const latest = this.data.records.find((e) => e.id === entity.id) || entity;
+    const candidate = { ...latest, ...patch, updatedAt: now() };
+    const next = validateEntity({ ...candidate });
+    // Include normalized deadline fields in the operation sent to other devices.
+    patch = {
+      ...patch,
+      ...Object.fromEntries(
+        Object.entries(next).filter(
+          ([key, value]) =>
+            JSON.stringify(value) !==
+            JSON.stringify(candidate[key as keyof Entity]),
+        ),
+      ),
+    };
     const base: Partial<Entity> = {};
     for (const key of Object.keys(patch) as (keyof Entity)[])
       Object.assign(base, { [key]: entity[key] });
-    const latest = this.data.records.find((e) => e.id === entity.id) || entity;
-    const next = validateEntity({ ...latest, ...patch, updatedAt: now() });
     if (remember) {
       const keys: (keyof Entity)[] = [
         'deletedAt',

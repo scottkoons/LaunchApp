@@ -17,6 +17,7 @@ import { Check, Copy, Mail, Trash2 } from 'lucide-react';
 import { Attachments, Pick, Toggle } from './launch-controls';
 import {
   createEntity,
+  normalizeTaskDeadlines,
   addDays,
   parseDay,
   recurringReportUpdates,
@@ -84,7 +85,7 @@ export function TaskEditor({
   }
   async function save(extra: Partial<Entity> = {}) {
     if (!draft || savingRef.current || filesBusy) return;
-    const d = { ...draft, ...extra };
+    const d = normalizeTaskDeadlines({ ...draft, ...extra });
     if (d.routine && d.status === 'completed') d.finalDone = true;
     if (!d.title.trim()) {
       notify('Give this item a name.');
@@ -372,7 +373,8 @@ export function TaskEditor({
               </Toggle>
               {draft.routine && (
                 <p className="hint">
-                  Click its due-date pill to complete it in one step.
+                  Its due date appears in Final. Click that date to complete it
+                  in one step.
                 </p>
               )}
               <div className="two-col">

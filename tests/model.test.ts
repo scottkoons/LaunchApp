@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  normalizeTaskDeadlines,
   createEntity,
   completedDateRange,
   recurrenceDates,
@@ -29,6 +30,77 @@ import {
   type Operation,
   type Entity,
 } from '../lib/model';
+void test('single-date work uses Final and one-step completion without changing report choices', () => {
+  for (const [title, date, report] of [
+    ['Q2 Marketing Overview', '2026-09-09', true],
+    ['Call Sonos and Listen Up', '2026-09-10', false],
+  ] as const) {
+    const original = createEntity('task', 'business', {
+      title,
+      draft: date,
+      routine: false,
+      report,
+      notes: 'Keep the original instructions.',
+      files: ['attachment'],
+      repeat: 'weekly',
+      repeatDays: [3],
+      repeatAnchor: date,
+    });
+    const normalized = normalizeTaskDeadlines(original);
+    assert.equal(normalized.draft, '');
+    assert.equal(normalized.final, date);
+    assert.equal(normalized.routine, true);
+    assert.equal(normalized.report, report);
+    assert.equal(normalized.notes, original.notes);
+    assert.deepEqual(normalized.files, original.files);
+    assert.equal(normalized.repeatAnchor, date);
+    assert.deepEqual(normalized.repeatDays, [3]);
+    assert.equal(original.draft, date);
+    assert.equal(normalizeTaskDeadlines(normalized), normalized);
+    assert.equal(validateEntity({ ...original }).final, date);
+  }
+  const finished = normalizeTaskDeadlines(
+    createEntity('task', 'personal', {
+      title: 'Finished item',
+      draft: '2026-09-10',
+      draftDone: true,
+    }),
+  );
+  assert.equal(finished.finalDone, true);
+  assert.equal(finished.draftDone, false);
+  assert.equal(finished.scope, 'personal');
+  assert.equal(finished.report, false);
+  assert.equal(
+    validateEntity(
+      createEntity('task', 'business', {
+        title: 'Final-only task',
+        final: '2026-09-10',
+      }),
+    ).routine,
+    true,
+  );
+});
+void test('single-date normalization preserves two-step workflows, review dates, and reminder plans', () => {
+  for (const patch of [
+    { draft: '2026-09-09', final: '2026-09-10', draftDone: true },
+    { draft: '2026-09-09', review: '2026-09-10' },
+    { final: '2026-09-10', review: '2026-09-09' },
+    { plannedDate: '2026-09-10' },
+    { publication: '2026-09-10' },
+    {},
+  ]) {
+    const task = createEntity('task', 'business', {
+      title: 'Keep workflow',
+      ...patch,
+    });
+    assert.equal(normalizeTaskDeadlines(task), task);
+  }
+  const note = createEntity('note', 'business', {
+    title: 'Note',
+    draft: '2026-09-09',
+  });
+  assert.equal(normalizeTaskDeadlines(note), note);
+});
 void test('monthly dashboard and report share month grouping and retain months with notes only', () => {
   const t = createEntity('task', 'business', {
     title: 'Magazine ad',
