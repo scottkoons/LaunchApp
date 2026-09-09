@@ -76,6 +76,7 @@ import {
   pretty,
   workDate,
   nextDate,
+  hasNewScheduledWork,
   monthLabel,
   urgency,
   dashboardGroups,
@@ -205,8 +206,19 @@ export default function Launch({
     };
   }, []);
   useEffect(() => {
-    if (ready) localStorage.setItem('launch-task-sort', sort);
+    if (ready) localStorage.setItem('launch-task-sort-v2', sort);
   }, [sort, ready]);
+  const previousTasks = useRef<Entity[] | null>(null);
+  useEffect(() => {
+    if (!ready) return;
+    const previous = previousTasks.current;
+    // Capture membership before the store appends another locally created task.
+    previousTasks.current = [...records];
+    if (previous && hasNewScheduledWork(previous, records)) {
+      setSort('next');
+      setDirection(1);
+    }
+  }, [records, ready]);
   const searchRef = useRef<HTMLInputElement>(null);
   const settings = records.find((e) => e.kind === 'settings' && !e.deletedAt);
   const soon = settings?.soonDays ?? 2;
@@ -219,7 +231,7 @@ export default function Launch({
     setSidebarOpen(localStorage.getItem('launch-sidebar-open') !== 'false');
     const savedRatio = Number(localStorage.getItem('launch-column-ratio'));
     if (savedRatio >= 0.1 && savedRatio <= 0.9) setColumnRatio(savedRatio);
-    setSort(localStorage.getItem('launch-task-sort') || 'next');
+    setSort(localStorage.getItem('launch-task-sort-v2') || 'next');
     const t = localStorage.getItem('launch-theme') || 'space';
     setTheme(t);
     document.documentElement.dataset.theme = t;

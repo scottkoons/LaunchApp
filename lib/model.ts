@@ -233,8 +233,36 @@ export function compareTasks(
   const value = (t: Entity) =>
     sort === 'next'
       ? nextDate(t) || t.plannedDate || '9999'
-      : String(t[sort as 'title' | 'notes' | 'draft' | 'final'] || '9999');
+      : sort === 'draft' || sort === 'final'
+        ? t[sort] ||
+          t[sort === 'draft' ? 'final' : 'draft'] ||
+          t.review ||
+          t.plannedDate ||
+          '9999'
+        : String(t[sort as 'title' | 'notes'] || '9999');
   return value(a).localeCompare(value(b)) * direction;
+}
+// New or rescheduled work returns the list to chronological order. Reordering,
+// completion animation, and ordinary edits should not change the selected sort.
+export function hasNewScheduledWork(previous: Entity[], current: Entity[]) {
+  const before = new Map(previous.map((task) => [task.id, task]));
+  return current.some((task) => {
+    if (
+      task.kind !== 'task' ||
+      task.deletedAt ||
+      task.status !== 'active' ||
+      !workDate(task)
+    )
+      return false;
+    const old = before.get(task.id);
+    return (
+      !old ||
+      ['draft', 'final', 'review', 'plannedDate'].some((field) => {
+        const key = field as 'draft' | 'final' | 'review' | 'plannedDate';
+        return (old[key] || '') !== (task[key] || '');
+      })
+    );
+  });
 }
 // Move deadline dates together; completed flags, delivery dates and recurrence
 // identity remain unchanged. A month drop changes this occurrence only.

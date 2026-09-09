@@ -23,6 +23,7 @@ import {
   reportMonths,
   reportDateStatus,
   compareTasks,
+  hasNewScheduledWork,
   manualOrderChanges,
   taskMonthMove,
   type Operation,
@@ -903,4 +904,82 @@ void test('month drop handles undated, single-date, current-month and DST deadli
     { status: 'active', revisit: '', draft: '2026-03-07', final: '2026-03-10' },
   );
   assert.throws(() => taskMonthMove(task, '2026-13'));
+});
+
+void test('single-date tasks sort alongside drafts and finals instead of at the bottom', () => {
+  const tasks = [
+    createEntity('task', 'business', {
+      title: 'Later draft',
+      draft: '2026-09-14',
+    }),
+    createEntity('task', 'business', {
+      title: 'Store hours',
+      final: '2026-09-09',
+      routine: true,
+    }),
+    createEntity('task', 'business', {
+      title: 'Pinned later task',
+      final: '2026-09-30',
+      pinned: true,
+    }),
+    createEntity('task', 'business', {
+      title: 'Planned reminder',
+      plannedDate: '2026-09-10',
+    }),
+  ];
+  for (const sort of ['next', 'draft', 'final']) {
+    assert.deepEqual(
+      [...tasks].sort((a, b) => compareTasks(a, b, sort)).map((t) => t.title),
+      ['Pinned later task', 'Store hours', 'Planned reminder', 'Later draft'],
+    );
+  }
+});
+void test('new or rescheduled tasks restore date order, while manual moves and completion do not', () => {
+  const task = createEntity('task', 'business', {
+    title: 'Existing',
+    final: '2026-09-20',
+  });
+  const added = createEntity('task', 'business', {
+    title: 'New',
+    final: '2026-09-09',
+  });
+  assert.equal(hasNewScheduledWork([task], [task, added]), true);
+  assert.equal(
+    hasNewScheduledWork([task], [{ ...task, draft: '2026-09-08' }]),
+    true,
+  );
+  assert.equal(hasNewScheduledWork([task], [{ ...task, order: 0 }]), false);
+  assert.equal(
+    hasNewScheduledWork([task], [{ ...task, notes: 'Edit', pinned: true }]),
+    false,
+  );
+  assert.equal(
+    hasNewScheduledWork(
+      [task],
+      [{ ...task, status: 'completed', finalDone: true }],
+    ),
+    false,
+  );
+  assert.equal(
+    hasNewScheduledWork(
+      [],
+      [createEntity('note', 'business', { title: 'Note' })],
+    ),
+    false,
+  );
+  assert.equal(
+    hasNewScheduledWork(
+      [],
+      [createEntity('task', 'business', { title: 'Back burner' })],
+    ),
+    false,
+  );
+  assert.equal(
+    hasNewScheduledWork([], [{ ...added, status: 'postponed' }]),
+    false,
+  );
+  assert.equal(
+    hasNewScheduledWork([], [{ ...added, deletedAt: '2026-09-09T10:00:00Z' }]),
+    false,
+  );
 });
