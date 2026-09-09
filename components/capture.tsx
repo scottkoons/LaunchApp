@@ -270,22 +270,19 @@ export function Capture({
         ) : (
           <p className="empty-inline">Your next thought belongs here.</p>
         )}
-        {quickNotes(records, scope).filter((note) => note.archived).length >
-          0 && (
+        {completed.length > 0 && (
           <div className="completed-captures">
             <h3>Completed notes</h3>
-            {quickNotes(records, scope)
-              .filter((note) => note.archived)
-              .map((note) => (
-                <QuickNoteRow
-                  key={note.id}
-                  note={note}
-                  store={store}
-                  onOpen={openNote}
-                  onDelete={deleteNote}
-                  notify={notify}
-                />
-              ))}
+            {completed.map((note) => (
+              <QuickNoteRow
+                key={note.id}
+                note={note}
+                store={store}
+                onOpen={openNote}
+                onDelete={deleteNote}
+                notify={notify}
+              />
+            ))}
           </div>
         )}
       </section>
