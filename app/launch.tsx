@@ -1,5 +1,12 @@
 'use client';
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import {
   SidebarProvider,
   Sidebar,
@@ -1866,6 +1873,30 @@ function MonthlyNote({
     baseline = useRef(noteValue),
     latest = useRef(noteValue);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    if (input.current) fitMonthlyNote(input.current);
+  }, [text]);
+  useEffect(() => {
+    const element = input.current;
+    if (!element) return;
+    let width = element.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (element.clientWidth !== width) {
+        width = element.clientWidth;
+        fitMonthlyNote(element);
+      }
+    });
+    observer.observe(element);
+    let active = true;
+    void document.fonts.ready.then(() => {
+      if (active) fitMonthlyNote(element);
+    });
+    return () => {
+      active = false;
+      observer.disconnect();
+    };
+  }, []);
   useEffect(() => {
     const draft = localStorage.getItem(key);
     if (draft !== null) {
@@ -1923,10 +1954,11 @@ function MonthlyNote({
         Notes for this month
       </label>
       <textarea
+        ref={input}
         id={'month-notes-' + month}
         aria-label={`Notes for ${monthLabel(month)}`}
         value={text}
-        placeholder="Meeting notes, decisions, or anything to remember for this month…"
+        placeholder="Meeting notes for this month"
         onChange={(e) => {
           const value = e.target.value;
           setText(value);
@@ -1945,6 +1977,13 @@ function MonthlyNote({
       </p>
     </section>
   );
+}
+function fitMonthlyNote(element: HTMLTextAreaElement) {
+  element.style.height = 'auto';
+  const style = getComputedStyle(element);
+  const border =
+    parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+  element.style.height = `${Math.ceil(element.scrollHeight + border)}px`;
 }
 function ReferenceCard({
   entity,
