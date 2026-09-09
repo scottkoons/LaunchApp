@@ -12,7 +12,7 @@
     "lint": "oxlint",
     "format": "oxfmt",
     "db:generate": "drizzle-kit generate",
-    "test": "tsx --test tests/model.test.ts tests/store.test.ts tests/note-swipe.test.ts",
+    "test": "tsx --test tests/model.test.ts tests/store.test.ts tests/note-swipe.test.ts tests/reminders.test.ts",
     "test:api": "tsx --test tests/api.test.ts",
     "typecheck": "tsc --noEmit",
     "format:check": "oxfmt --check",

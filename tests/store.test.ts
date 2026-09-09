@@ -358,3 +358,40 @@ void test('postpone and month-drop undo restore dates without rolling back newer
     '2026-08-15',
   );
 });
+
+void test('reminder snooze, acknowledgement, and undo persist offline without changing newer notes', async () => {
+  Object.defineProperty(globalThis, 'navigator', {
+    value: { onLine: false },
+    configurable: true,
+  });
+  const account = 'reminder-' + crypto.randomUUID();
+  const store = new LaunchStore(account);
+  await store.init();
+  const task = createEntity('task', 'business', {
+    title: 'Order mugs',
+    plannedDate: '2026-09-10',
+    reminderAt: '2026-09-10T16:00:00.000Z',
+    reminderZone: 'America/Denver',
+  });
+  await store.add(task);
+  const later = '2026-09-11T16:00:00.000Z';
+  const snoozed = await store.change(task, {
+    reminderAt: later,
+    plannedDate: '2026-09-11',
+    reminderAcknowledgedAt: '',
+  });
+  await store.change(snoozed, { notes: 'Keep these details' });
+  const undone = await store.undoLast();
+  assert.equal(undone?.reminderAt, task.reminderAt);
+  assert.equal(undone?.plannedDate, task.plannedDate);
+  assert.equal(undone?.notes, 'Keep these details');
+  await store.change(undone!, { reminderAcknowledgedAt: task.reminderAt });
+  const reloaded = new LaunchStore(account);
+  await reloaded.init();
+  assert.equal(reloaded.data.records.length, 1);
+  assert.equal(
+    reloaded.data.records[0].reminderAcknowledgedAt,
+    task.reminderAt,
+  );
+  assert.ok(reloaded.data.queue.length > 0);
+});

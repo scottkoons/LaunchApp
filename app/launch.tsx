@@ -92,6 +92,7 @@ import {
 } from '@/lib/model';
 import { Pick, Attachments } from '@/components/launch-controls';
 import { TaskEditor } from '@/components/task-editor';
+import { ReminderAlerts, TodayReminders } from '@/components/reminder-alerts';
 import { Capture } from '@/components/capture';
 import { Calendar } from '@/components/calendar';
 const Reports = lazy(() =>
@@ -427,7 +428,9 @@ export default function Launch({
           : view === 'backburner'
             ? t.status === 'active' && !workDate(t)
             : view === 'today'
-              ? t.status === 'active' && nextDate(t) && nextDate(t) <= day()
+              ? t.status === 'active' &&
+                (nextDate(t) || t.plannedDate) &&
+                (nextDate(t) || t.plannedDate!) <= day()
               : t.status === 'active' && !!workDate(t),
     )
     .filter(
@@ -537,7 +540,7 @@ export default function Launch({
       notify(
         destination === 'postponed'
           ? 'Task postponed. Dates kept; deadline warnings paused.'
-          : `Moved to ${monthLabel(destination)}. ${updated.draft ? `Draft ${pretty(updated.draft)} · ` : ''}${updated.final ? `Final ${pretty(updated.final)}` : pretty(updated.review)}${updated.repeat && updated.repeat !== 'none' ? ' · This occurrence only.' : ''}`,
+          : `Moved to ${monthLabel(destination)}. ${updated.draft ? `Draft ${pretty(updated.draft)} · ` : ''}${updated.final ? `Final ${pretty(updated.final)}` : pretty(updated.review || updated.plannedDate)}${updated.repeat && updated.repeat !== 'none' ? ' · This occurrence only.' : ''}`,
         () => void undoLast(),
       );
     } catch (error) {
@@ -966,6 +969,13 @@ export default function Launch({
                       </button>
                     )}
                   </div>
+                  {isDashboard && (
+                    <TodayReminders
+                      records={records}
+                      scope={scope}
+                      onOpen={open}
+                    />
+                  )}
                   {isDashboard && todayEvents.length > 0 && (
                     <section
                       className="day-calendar"
@@ -1078,13 +1088,13 @@ export default function Launch({
                       <p className="hint">
                         {isDashboard
                           ? view === 'today'
-                            ? 'Overdue work and today’s unfinished deadlines.'
+                            ? 'Today’s planned tasks and unfinished deadlines.'
                             : 'What needs attention, followed by what’s coming next.'
                           : view === 'backburner'
                             ? 'No deadlines needed. Add dates to bring an idea into your task list.'
                             : view === 'postponed'
                               ? 'Original deadlines are kept. Review them before resuming.'
-                              : 'Overdue tasks and today’s unfinished deadlines.'}
+                              : 'Today’s planned tasks and unfinished deadlines.'}
                       </p>
                     )}
                     <div className="list-tools">
@@ -1760,6 +1770,15 @@ export default function Launch({
           </div>
         </SheetContent>
       </Sheet>
+      {ready && (
+        <ReminderAlerts
+          records={records}
+          store={store}
+          onOpen={open}
+          onComplete={complete}
+          notify={notify}
+        />
+      )}
       {toast && (
         <div className="toast" aria-live="polite">
           <Check />

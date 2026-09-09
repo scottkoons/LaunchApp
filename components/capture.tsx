@@ -1,6 +1,8 @@
 'use client';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { ArrowUpRight, Camera } from 'lucide-react';
+import { ReminderPicker } from './reminder-picker';
+import { reminderDay } from '@/lib/reminders';
 import { SwipeNote } from './swipe-note';
 import { Attachments } from './launch-controls';
 import {
@@ -29,6 +31,8 @@ export function Capture({
 }) {
   const key = `launch-capture-${store.account}-${scope}`;
   const [text, setText] = useState(''),
+    [reminderAt, setReminderAt] = useState(''),
+    [reminderZone, setReminderZone] = useState(''),
     [ids, setIds] = useState<string[]>([]),
     [busy, setBusy] = useState(false),
     [loaded, setLoaded] = useState(false);
@@ -59,6 +63,8 @@ export function Capture({
       const draft = JSON.parse(localStorage.getItem(key) || '{}');
       setText(draft.text || '');
       setIds(draft.ids || []);
+      setReminderAt(draft.reminderAt || '');
+      setReminderZone(draft.reminderZone || '');
     } catch {}
     setLoaded(true);
   }, [key]);
@@ -68,12 +74,15 @@ export function Capture({
   useEffect(() => {
     if (loaded) {
       try {
-        localStorage.setItem(key, JSON.stringify({ text, ids }));
+        localStorage.setItem(
+          key,
+          JSON.stringify({ text, ids, reminderAt, reminderZone }),
+        );
       } catch {
         draftStorageError();
       }
     }
-  }, [text, ids, key, loaded]);
+  }, [text, ids, reminderAt, reminderZone, key, loaded]);
   async function save() {
     if (saving.current || uploading.current || (!text.trim() && !ids.length))
       return;
@@ -81,17 +90,34 @@ export function Capture({
     setBusy(true);
     try {
       await store.add(
-        createEntity('note', scope, {
+        createEntity(reminderAt ? 'task' : 'note', scope, {
           title: text.trim().split('\n')[0].slice(0, 120) || 'Photo note',
           notes: text.trim(),
           files: ids,
-          report: false,
+          report: !!reminderAt && scope === 'business',
+          routine: !!reminderAt,
+          reminderAt,
+          reminderZone,
+          ...(reminderAt
+            ? {
+                plannedDate: reminderDay({
+                  reminderAt,
+                  reminderZone,
+                } as Entity),
+              }
+            : {}),
         }),
       );
       setText('');
       setIds([]);
+      setReminderAt('');
+      setReminderZone('');
       localStorage.removeItem(key);
-      notify('Note captured.');
+      notify(
+        reminderAt
+          ? 'Task saved with a reminder inside Launch.'
+          : 'Note captured.',
+      );
       input.current?.focus();
     } catch (e) {
       notify((e as Error).message);
@@ -142,6 +168,23 @@ export function Capture({
             }
           }}
         />
+        <ReminderPicker
+          task={{ reminderAt, reminderZone }}
+          disabled={busy || filesBusy}
+          onChange={(at, zone) => {
+            setReminderAt(at);
+            setReminderZone(zone);
+          }}
+        />
+        {reminderAt && (
+          <p className="hint">
+            This will become one task on your dashboard
+            {scope === 'business'
+              ? ' and be included in marketing reports'
+              : ''}
+            .
+          </p>
+        )}
         <div className="capture-actions">
           <input
             hidden
@@ -167,7 +210,7 @@ export function Capture({
             disabled={busy || filesBusy || (!text.trim() && !ids.length)}
             onClick={() => void save()}
           >
-            {busy ? 'Saving…' : 'Save note'}
+            {busy ? 'Saving…' : reminderAt ? 'Save task' : 'Save note'}
             <ArrowUpRight />
           </button>
         </div>

@@ -32,6 +32,10 @@ export type Entity = {
   finalDone?: boolean;
   routine?: boolean;
   completedAt?: string;
+  plannedDate?: string;
+  reminderAt?: string;
+  reminderZone?: string;
+  reminderAcknowledgedAt?: string;
   revisit?: string;
   reportNote?: string;
   repeat?: 'none' | 'weekly' | 'monthly' | 'quarterly';
@@ -203,7 +207,7 @@ export function milestones(t: Entity) {
   ].filter((x) => x.date) as { key: string; date: string; done: boolean }[];
 }
 export function workDate(t: Entity) {
-  return t.final || t.draft || t.review || '';
+  return t.final || t.draft || t.review || t.plannedDate || '';
 }
 function monthKeys(from: string, to: string) {
   const keys: string[] = [];
@@ -228,7 +232,7 @@ export function compareTasks(
   if (sort === 'manual') return (a.order || 0) - (b.order || 0);
   const value = (t: Entity) =>
     sort === 'next'
-      ? nextDate(t)
+      ? nextDate(t) || t.plannedDate || '9999'
       : String(t[sort as 'title' | 'notes' | 'draft' | 'final'] || '9999');
   return value(a).localeCompare(value(b)) * direction;
 }
@@ -266,7 +270,10 @@ export function taskMonthMove(
       patch[field] = day(date);
     }
   }
-  if (!task.draft && !task.final) patch.review = target;
+  if (!task.draft && !task.final) {
+    if (task.review) patch.review = target;
+    else patch.plannedDate = target;
+  }
   return patch;
 }
 
@@ -455,11 +462,19 @@ export function dashboardGroups(tasks: Entity[], today = day()) {
       items: active.filter((t) => nextDate(t) === today),
     },
     {
+      key: 'planned',
+      label: 'Planned for today',
+      items: active.filter(
+        (t) => !nextDate(t) && t.plannedDate && t.plannedDate <= today,
+      ),
+    },
+    {
       key: 'next',
       label: 'Next 7 days',
-      items: active.filter(
-        (t) => nextDate(t) > today && nextDate(t) <= addDays(today, 7),
-      ),
+      items: active.filter((t) => {
+        const date = nextDate(t) || t.plannedDate || '';
+        return date > today && date <= addDays(today, 7);
+      }),
     },
   ];
 }
@@ -594,7 +609,7 @@ export function makeReport(
       (t) =>
         t.status !== 'completed' &&
         t.status !== 'postponed' &&
-        [t.draft, t.final, t.review, t.publication].some((d) =>
+        [t.draft, t.final, t.review, t.publication, t.plannedDate].some((d) =>
           inRange(d, options.from, options.to),
         ),
     ),
@@ -734,6 +749,9 @@ export function spawnOccurrence(t: Entity, date: string): Entity {
     seriesId: t.seriesId || t.id,
     occurrence: date,
     repeatAnchor: anchor,
+    reminderAt: '',
+    reminderZone: '',
+    reminderAcknowledgedAt: '',
     report:
       (t.reportSchedule || [])
         .filter((r) => r.from <= date)
@@ -748,7 +766,13 @@ export function spawnOccurrence(t: Entity, date: string): Entity {
     updatedAt: now(),
     version: 0,
   };
-  for (const key of ['draft', 'final', 'review', 'publication'] as const)
+  for (const key of [
+    'draft',
+    'final',
+    'review',
+    'publication',
+    'plannedDate',
+  ] as const)
     if (t[key]) copy[key] = addDays(t[key]!, delta);
   return copy;
 }
@@ -812,6 +836,7 @@ export function validateEntity(e: Entity) {
     'final',
     'review',
     'publication',
+    'plannedDate',
     'date',
     'endDate',
     'revisit',
@@ -825,6 +850,29 @@ export function validateEntity(e: Entity) {
       (!/^\d{4}-\d{2}-\d{2}$/.test(e[k]!) || day(parseDay(e[k]!)) !== e[k])
     )
       throw new Error('Invalid date');
+  for (const field of ['reminderAt', 'reminderAcknowledgedAt'] as const) {
+    if (e[field] !== undefined && typeof e[field] !== 'string')
+      throw new Error('Invalid reminder time.');
+    if (
+      e[field] &&
+      (typeof e[field] !== 'string' ||
+        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(e[field]!) ||
+        !Number.isFinite(Date.parse(e[field]!)) ||
+        new Date(e[field]!).toISOString() !== e[field])
+    )
+      throw new Error('Invalid reminder time.');
+  }
+  if (e.reminderAt && (e.kind !== 'task' || !e.reminderZone))
+    throw new Error('Reminders need a task and a time zone.');
+  if (e.reminderZone !== undefined && typeof e.reminderZone !== 'string')
+    throw new Error('Choose a valid reminder time zone.');
+  if (e.reminderZone) {
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: e.reminderZone });
+    } catch {
+      throw new Error('Choose a valid reminder time zone.');
+    }
+  }
   if (
     e.repeatDays !== undefined &&
     (!Array.isArray(e.repeatDays) ||

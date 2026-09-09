@@ -341,3 +341,58 @@ void test('malformed operations are rejected and explicit personal report backup
   });
   assert.equal(collision.status, 400);
 });
+
+void test('reminders round-trip through authenticated persistence and malformed times fail', async () => {
+  const item = createEntity('task', 'business', {
+    title: 'TEST: timed reminder',
+    plannedDate: '2026-09-10',
+    reminderAt: '2026-09-10T16:00:00.000Z',
+    reminderZone: 'America/Denver',
+  });
+  const saved = (await add(item)).entity;
+  const read = (await (await request('/api/sync')).json()) as {
+    records: Entity[];
+  };
+  assert.equal(
+    read.records.find((e) => e.id === item.id)?.reminderAt,
+    item.reminderAt,
+  );
+  const send = (patch: Partial<Entity>, baseValues: Partial<Entity>) =>
+    request('/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: uid(),
+        entityId: item.id,
+        kind: 'task',
+        patch,
+        base: baseValues,
+      }),
+    });
+  const invalid = await send(
+    { reminderAt: 'tomorrow at 10' },
+    { reminderAt: saved.reminderAt },
+  );
+  assert.equal(invalid.status, 400);
+  const acknowledge = await send(
+    { reminderAcknowledgedAt: item.reminderAt },
+    { reminderAcknowledgedAt: saved.reminderAcknowledgedAt },
+  );
+  assert.equal(acknowledge.status, 200);
+  const readAgain = (await (await request('/api/sync')).json()) as {
+    records: Entity[];
+  };
+  assert.equal(
+    readAgain.records.find((e) => e.id === item.id)?.reminderAcknowledgedAt,
+    item.reminderAt,
+  );
+  assert.equal(
+    (
+      await send(
+        { deletedAt: new Date().toISOString() },
+        { deletedAt: saved.deletedAt },
+      )
+    ).status,
+    200,
+  );
+});

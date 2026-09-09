@@ -206,7 +206,15 @@ export class LaunchStore {
     const latest = this.data.records.find((e) => e.id === entity.id) || entity;
     const next = validateEntity({ ...latest, ...patch, updatedAt: now() });
     if (remember) {
-      const keys: (keyof Entity)[] = ['deletedAt', 'draftDone', 'finalDone'];
+      const keys: (keyof Entity)[] = [
+        'deletedAt',
+        'draftDone',
+        'finalDone',
+        'reminderAt',
+        'reminderZone',
+        'reminderAcknowledgedAt',
+        'plannedDate',
+      ];
       if ('status' in patch)
         keys.push(
           'status',
@@ -220,6 +228,10 @@ export class LaunchStore {
         after: Partial<Entity> = {};
       const defaults = {
         deletedAt: null,
+        reminderAt: '',
+        reminderZone: '',
+        reminderAcknowledgedAt: '',
+        plannedDate: '',
         draftDone: false,
         finalDone: false,
         completedAt: '',

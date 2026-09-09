@@ -4040,3 +4040,120 @@ h3,
 .classic-pin svg {
   transition: transform 200ms cubic-bezier(0.25, 1, 0.5, 1);
 }
+
+/* Optional reminders share the existing task surfaces, without adding a view. */
+.reminder-picker {
+  margin: 14px 0;
+}
+.reminder-picker-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.reminder-picker-heading .text-button,
+.task-reminder {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.reminder-choices {
+  min-width: 0;
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.reminder-choices legend {
+  padding: 0 6px;
+  font-size: 13px;
+}
+.reminder-choices input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.reminder-availability {
+  max-width: 55ch;
+}
+.reminder-error {
+  color: var(--destructive);
+  font-size: 13px;
+}
+.task-reminder,
+.task-planned {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  margin: 5px 0 0 24px;
+  text-align: left;
+}
+.task-reminder svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+.task-planned {
+  display: block;
+}
+.reminder-alert {
+  position: fixed;
+  z-index: 40;
+  right: 24px;
+  bottom: 28px;
+  width: min(430px, calc(100vw - 32px));
+  padding: 18px;
+  border: 1px solid var(--primary);
+  border-radius: 14px;
+  background: var(--card);
+  color: var(--foreground);
+  box-shadow: 0 14px 50px #0005;
+}
+.reminder-alert-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.reminder-alert-title > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--primary);
+}
+.reminder-alert-title svg {
+  width: 17px;
+  height: 17px;
+}
+.reminder-alert strong {
+  font-size: 17px;
+  overflow-wrap: anywhere;
+}
+.reminder-alert .reminder-time {
+  display: block;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  margin: 8px 0 16px;
+}
+.reminder-alert .button-row,
+.reminder-choices .button-row {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+@media (max-width: 767px) {
+  .reminder-alert {
+    right: 16px;
+    bottom: calc(90px + env(safe-area-inset-bottom, 0px));
+    max-height: calc(100dvh - 180px - env(safe-area-inset-top, 0px));
+    overflow-y: auto;
+  }
+  .reminder-choices {
+    padding: 12px;
+  }
+}
+
+@media print {
+  .reminder-alert {
+    display: none;
+  }
+}

@@ -21,6 +21,8 @@ import {
   type Entity,
   type FileMeta,
 } from '@/lib/model';
+import { ReminderPicker } from './reminder-picker';
+import { reminderPatch } from '@/lib/reminders';
 import type { LaunchStore } from '@/lib/client-store';
 export function TaskEditor({
   entity,
@@ -304,6 +306,28 @@ export function TaskEditor({
           </label>
           {isTask && (
             <>
+              <ReminderPicker
+                task={draft}
+                disabled={saving || filesBusy}
+                onChange={(at, zone) => change(reminderPatch(draft, at, zone))}
+              />
+              {draft.plannedDate &&
+                !draft.draft &&
+                !draft.final &&
+                !draft.review && (
+                  <label className="field">
+                    Planned for
+                    <input
+                      type="date"
+                      value={draft.plannedDate}
+                      onChange={(e) => change({ plannedDate: e.target.value })}
+                    />
+                    <span className="hint">
+                      Where this task appears on the dashboard. This is not a
+                      deadline.
+                    </span>
+                  </label>
+                )}
               <div className="section-label">DEADLINES</div>
               <Toggle
                 checked={!!draft.routine}
@@ -747,6 +771,9 @@ export function TaskEditor({
                     reportSchedule: [],
                     status: 'active',
                     completedAt: '',
+                    reminderAt: '',
+                    reminderZone: '',
+                    reminderAcknowledgedAt: '',
                     draftDone: false,
                     finalDone: false,
                     seriesId: '',

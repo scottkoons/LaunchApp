@@ -12,6 +12,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
+  Bell,
   ArrowUp,
   ArrowDown,
   Check,
@@ -24,6 +25,7 @@ import {
   Repeat2,
   Paperclip,
 } from 'lucide-react';
+import { reminderLabel, reminderPending } from '@/lib/reminders';
 import { day, dateStatus, pretty, type Entity } from '@/lib/model';
 
 type Props = {
@@ -291,6 +293,17 @@ function TaskRow({
             </span>
           )}
         </div>
+        {reminderPending(task) && (
+          <button className="task-reminder" onClick={() => onOpen(task)}>
+            <Bell />
+            {reminderLabel(task)}
+          </button>
+        )}
+        {task.plannedDate && !task.draft && !task.final && !task.review && (
+          <button className="task-planned" onClick={() => onOpen(task)}>
+            Planned · {pretty(task.plannedDate)}
+          </button>
+        )}
         <button className="classic-mobile-note" onClick={() => onOpen(task)}>
           {task.notes}
         </button>

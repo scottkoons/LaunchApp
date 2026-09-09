@@ -12,6 +12,7 @@ import {
   type Entity,
   type Scope,
 } from '@/lib/model';
+import { reminderDay, reminderLabel, reminderPending } from '@/lib/reminders';
 import { Pick } from './launch-controls';
 export function downloadBlob(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
@@ -39,6 +40,9 @@ export function Calendar({
   const start = addDays(month, -parseDay(month).getDay());
   const events = records.filter(
     (e) => e.scope === scope && !e.deletedAt && e.status !== 'postponed',
+  );
+  const reminderDates = new Map(
+    events.filter(reminderPending).map((e) => [e.id, reminderDay(e)]),
   );
   const shift = (n: number) =>
     setMonth(
@@ -87,6 +91,7 @@ export function Calendar({
               ['final', 'Finals'],
               ['review', 'Reviews'],
               ['event', 'Events'],
+              ['reminder', 'Reminders'],
             ]}
           />
           <button
@@ -106,8 +111,8 @@ export function Calendar({
         </div>
       </div>
       <p className="hint">
-        An ICS download is a calendar copy. Changes stay in Launch until you
-        export again.
+        An ICS download copies deadlines and events. Launch reminder alerts are
+        not included. Export again after changing dates.
       </p>
       <div className="calendar-grid">
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
@@ -126,6 +131,19 @@ export function Calendar({
               ? [{ e, key: 'event', date, done: false }]
               : e.kind === 'task'
                 ? [
+                    ...(reminderDates.get(e.id) === date &&
+                    (filter === 'all' || filter === 'reminder')
+                      ? [{ e, key: 'reminder', date, done: false }]
+                      : []),
+                    ...(e.plannedDate === date &&
+                    !e.draft &&
+                    !e.final &&
+                    !e.review &&
+                    reminderDates.get(e.id) !== date &&
+                    e.status !== 'completed' &&
+                    filter === 'all'
+                      ? [{ e, key: 'planned', date, done: false }]
+                      : []),
                     ...milestones(e)
                       .filter(
                         (m) =>
@@ -161,7 +179,9 @@ export function Calendar({
                 <button
                   className={
                     'calendar-entry ' +
-                    (key === 'event' || key === 'publication'
+                    (['event', 'publication', 'reminder', 'planned'].includes(
+                      key,
+                    )
                       ? 'event'
                       : dateStatus(date, done, day(), soon))
                   }
@@ -169,11 +189,15 @@ export function Calendar({
                   onClick={() => open(e)}
                 >
                   <small>
-                    {key === 'publication'
-                      ? 'Live'
-                      : key === 'event'
-                        ? e.time || 'Event'
-                        : key}
+                    {key === 'reminder'
+                      ? `Reminder · ${reminderLabel(e, true)}`
+                      : key === 'planned'
+                        ? 'Planned'
+                        : key === 'publication'
+                          ? 'Live'
+                          : key === 'event'
+                            ? e.time || 'Event'
+                            : key}
                   </small>
                   {e.title}
                   {done ? ' ✓' : ''}

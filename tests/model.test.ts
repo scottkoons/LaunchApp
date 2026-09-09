@@ -83,7 +83,7 @@ void test('dashboard groups use the next unfinished date and count a task only o
   );
   assert.deepEqual(
     groups.map((g) => g.items.map((t) => t.id)),
-    [['late-draft'], ['today'], ['next']],
+    [['late-draft'], ['today'], [], ['next']],
   );
 });
 void test('imported repeat schedules respect historical cutoff, skipped dates, and end date', () => {
