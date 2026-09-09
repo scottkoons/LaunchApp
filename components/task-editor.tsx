@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useEffectEvent, useState, useRef } from 'react';
 import {
   Sheet,
   SheetContent,
@@ -7,6 +7,12 @@ import {
   SheetTitle,
   SheetDescription,
 } from '@/components/ui/sheet';
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import { Check, Copy, Mail, Trash2 } from 'lucide-react';
 import { Attachments, Pick, Toggle } from './launch-controls';
 import {
@@ -49,8 +55,13 @@ export function TaskEditor({
   const savingRef = useRef(false);
   const [reportApply, setReportApply] = useState('one');
   const base = useRef<Entity | null>(null);
+  const creating = useRef(false);
+  const isNewEntity = useEffectEvent(
+    (id: string) => !store.data.records.some((e) => e.id === id),
+  );
   useEffect(() => {
     if (!entity) return;
+    creating.current = isNewEntity(entity.id);
     let saved = null;
     try {
       saved = JSON.parse(
@@ -154,13 +165,22 @@ export function TaskEditor({
   const recipient = records.find(
     (c) => c.id === (draft.contactId || selectedCompany?.primaryId),
   );
+  const creatingTask = isTask && creating.current;
+  const Editor = creatingTask ? Dialog : Sheet;
+  const EditorContent = creatingTask ? DialogContent : SheetContent;
+  const EditorTitle = creatingTask ? DialogTitle : SheetTitle;
+  const EditorDescription = creatingTask ? DialogDescription : SheetDescription;
   return (
-    <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent className="editor-sheet">
+    <Editor open={open} onOpenChange={(v) => !v && onClose()}>
+      <EditorContent
+        className={creatingTask ? 'task-create-modal' : 'editor-sheet'}
+      >
         <SheetHeader>
-          <SheetTitle>
+          <EditorTitle>
             {isTask
-              ? 'Task details'
+              ? creatingTask
+                ? 'Add task'
+                : 'Task details'
               : isEvent
                 ? 'Calendar event'
                 : isCompany
@@ -172,10 +192,12 @@ export function TaskEditor({
                       : draft.kind === 'reference'
                         ? 'Reference'
                         : 'Quick note'}
-          </SheetTitle>
-          <SheetDescription>
-            Changes are kept as a draft until you save.
-          </SheetDescription>
+          </EditorTitle>
+          <EditorDescription>
+            {creatingTask
+              ? 'Only a task name is required. You can add the other details now or later.'
+              : 'Changes are kept as a draft until you save.'}
+          </EditorDescription>
         </SheetHeader>
         <div className="editor-body">
           <label className="field">
@@ -377,7 +399,7 @@ export function TaskEditor({
                         onChange={(e) => change({ [key]: e.target.value })}
                       />
                     </label>
-                    {!draft.routine && (
+                    {!draft.routine && !creatingTask && (
                       <Toggle
                         checked={
                           !!draft[key === 'draft' ? 'draftDone' : 'finalDone']
@@ -755,52 +777,63 @@ export function TaskEditor({
             onChange={(files) => change({ files })}
             notify={notify}
           />
-          <div className="editor-secondary">
-            <button
-              className="text-button"
-              onClick={async () => {
-                await store.add(
-                  createEntity(draft.kind, draft.scope, {
-                    ...draft,
-                    id: uid(),
-                    title: draft.title + ' (copy)',
-                    report:
-                      draft.scope === 'business' &&
-                      (!draft.routine || draft.report),
-                    reportDefaultsVersion: 1,
-                    reportSchedule: [],
-                    status: 'active',
-                    completedAt: '',
-                    reminderAt: '',
-                    reminderZone: '',
-                    reminderAcknowledgedAt: '',
-                    draftDone: false,
-                    finalDone: false,
-                    seriesId: '',
-                    occurrence: '',
-                    repeat: 'none',
-                  }),
-                );
-                notify('Copy added.');
-              }}
-            >
-              <Copy />
-              Duplicate
-            </button>
-            {records.some((e) => e.id === draft.id) && (
+          {!creatingTask && (
+            <div className="editor-secondary">
               <button
-                className="text-button danger"
-                disabled={saving || filesBusy}
-                onClick={() => void save({ deletedAt: now() })}
+                className="text-button"
+                onClick={async () => {
+                  await store.add(
+                    createEntity(draft.kind, draft.scope, {
+                      ...draft,
+                      id: uid(),
+                      title: draft.title + ' (copy)',
+                      report:
+                        draft.scope === 'business' &&
+                        (!draft.routine || draft.report),
+                      reportDefaultsVersion: 1,
+                      reportSchedule: [],
+                      status: 'active',
+                      completedAt: '',
+                      reminderAt: '',
+                      reminderZone: '',
+                      reminderAcknowledgedAt: '',
+                      draftDone: false,
+                      finalDone: false,
+                      seriesId: '',
+                      occurrence: '',
+                      repeat: 'none',
+                    }),
+                  );
+                  notify('Copy added.');
+                }}
               >
-                <Trash2 />
-                Move to Trash
+                <Copy />
+                Duplicate
               </button>
-            )}
-          </div>
+              {records.some((e) => e.id === draft.id) && (
+                <button
+                  className="text-button danger"
+                  disabled={saving || filesBusy}
+                  onClick={() => void save({ deletedAt: now() })}
+                >
+                  <Trash2 />
+                  Move to Trash
+                </button>
+              )}
+            </div>
+          )}
         </div>
         <div className="editor-actions">
-          {isTask && draft.status !== 'completed' && (
+          {creatingTask && (
+            <button
+              className="button"
+              disabled={saving || filesBusy}
+              onClick={onClose}
+            >
+              Cancel
+            </button>
+          )}
+          {isTask && !creatingTask && draft.status !== 'completed' && (
             <button
               className="button"
               disabled={saving || filesBusy}
@@ -814,13 +847,19 @@ export function TaskEditor({
           )}
           <button
             className="button primary"
-            disabled={saving || filesBusy}
+            disabled={saving || filesBusy || !draft.title.trim()}
             onClick={() => void save()}
           >
-            {saving ? 'Saving…' : 'Save changes'}
+            {creatingTask
+              ? saving
+                ? 'Creating…'
+                : 'Create task'
+              : saving
+                ? 'Saving…'
+                : 'Save changes'}
           </button>
         </div>
-      </SheetContent>
-    </Sheet>
+      </EditorContent>
+    </Editor>
   );
 }

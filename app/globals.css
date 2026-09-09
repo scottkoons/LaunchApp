@@ -1131,9 +1131,36 @@ kbd {
   gap: 0 !important;
   background: var(--card) !important;
 }
-.editor-sheet [data-slot='sheet-header'] {
+.editor-sheet [data-slot='sheet-header'],
+.task-create-modal [data-slot='sheet-header'] {
   padding: 25px 30px 22px;
   border-bottom: 1px solid var(--border);
+}
+.task-create-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(740px, calc(100vw - var(--safe-left) - var(--safe-right) - 32px));
+  max-width: 740px;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+  background: var(--card);
+  color: var(--foreground);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+}
+.task-create-modal [data-slot='sheet-header'],
+.task-create-modal .editor-actions {
+  flex-shrink: 0;
+}
+.task-create-modal [data-slot='dialog-title'] {
+  font-size: 21px;
+}
+.task-create-modal [data-slot='dialog-description'] {
+  margin-top: 7px;
+  padding-right: 12px;
+  font-size: 13px;
+  line-height: 1.4;
 }
 [data-slot='sheet-title'] {
   font-family: Bitter, Georgia, serif;
@@ -2499,7 +2526,8 @@ details[open] > summary {
   .editor-body {
     padding: 23px 20px;
   }
-  .editor-sheet [data-slot='sheet-header'] {
+  .editor-sheet [data-slot='sheet-header'],
+  .task-create-modal [data-slot='sheet-header'] {
     padding: 22px 20px;
   }
   .editor-actions {
