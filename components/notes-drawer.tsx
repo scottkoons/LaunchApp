@@ -35,6 +35,7 @@ export function NotesDrawer({
   const [width, setWidth] = useState(310);
   const [text, setText] = useState('');
   const [loaded, setLoaded] = useState(false);
+  const [resizing, setResizing] = useState(false);
   const [busy, setBusy] = useState(false);
   const saving = useRef(false);
   const draftKey = `launch-drawer-draft-${store.account}-${scope}`;
@@ -88,7 +89,11 @@ export function NotesDrawer({
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return (
     <aside
-      className={'notes-drawer ' + (open ? 'is-open' : 'is-closed')}
+      className={
+        'notes-drawer ' +
+        (open ? 'is-open' : 'is-closed') +
+        (!loaded || resizing ? ' without-motion' : '')
+      }
       style={{ width: open ? width : 38 }}
       aria-label="Notes and agenda drawer"
     >
@@ -101,139 +106,150 @@ export function NotesDrawer({
       >
         {open ? <PanelRightClose /> : <PanelRightOpen />}
       </button>
-      {open ? (
-        <>
-          <div
-            role="separator"
-            className="notes-drawer-resize"
-            aria-orientation="vertical"
-            aria-label="Resize notes drawer"
-            aria-valuemin={250}
-            aria-valuemax={480}
-            aria-valuenow={width}
-            tabIndex={0}
-            onPointerDown={(event) =>
-              event.currentTarget.setPointerCapture(event.pointerId)
+      <>
+        <div
+          hidden={!open}
+          role="separator"
+          className="notes-drawer-resize"
+          aria-orientation="vertical"
+          aria-label="Resize notes drawer"
+          aria-valuemin={250}
+          aria-valuemax={480}
+          aria-valuenow={width}
+          tabIndex={0}
+          onPointerDown={(event) => {
+            setResizing(true);
+            event.currentTarget.setPointerCapture(event.pointerId);
+          }}
+          onPointerMove={(event) => {
+            if (event.currentTarget.hasPointerCapture(event.pointerId))
+              resize(window.innerWidth - event.clientX);
+          }}
+          onPointerUp={(event) =>
+            event.currentTarget.releasePointerCapture(event.pointerId)
+          }
+          onLostPointerCapture={() => setResizing(false)}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+              event.preventDefault();
+              resize(width + (event.key === 'ArrowLeft' ? 16 : -16));
             }
-            onPointerMove={(event) => {
-              if (event.currentTarget.hasPointerCapture(event.pointerId))
-                resize(window.innerWidth - event.clientX);
-            }}
-            onPointerUp={(event) =>
-              event.currentTarget.releasePointerCapture(event.pointerId)
-            }
-            onKeyDown={(event) => {
-              if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-                event.preventDefault();
-                resize(width + (event.key === 'ArrowLeft' ? 16 : -16));
-              }
-            }}
-          />
-          <div id="notes-drawer-content">
-            <Tabs value={tab} onValueChange={setTab}>
-              <TabsList aria-label="Notes drawer">
-                <TabsTrigger value="notes">Quick notes</TabsTrigger>
-                {scope === 'business' && (
-                  <TabsTrigger value="agenda">Agenda</TabsTrigger>
-                )}
-              </TabsList>
-            </Tabs>
-            <div className="notes-drawer-body">
-              {tab === 'notes' ? (
-                <form
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void save();
-                  }}
-                >
-                  <label className="sr-only" htmlFor="drawer-note">
-                    Add a quick note
-                  </label>
-                  <textarea
-                    id="drawer-note"
-                    disabled={busy}
-                    rows={3}
-                    value={text}
-                    onChange={(event) => setText(event.target.value)}
-                    placeholder="Something to remember…"
-                  />
-                  <div className="drawer-capture-actions">
-                    <button
-                      type="button"
-                      className="text-button"
-                      onClick={() => {
-                        onCapture(text);
-                        setText('');
-                      }}
-                    >
-                      <Paperclip /> Add files
-                    </button>
-                    <button
-                      className="button primary"
-                      disabled={!text.trim() || busy}
-                    >
-                      <Plus />
-                      {busy ? 'Saving…' : 'Add note'}
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <button className="button" onClick={onAgenda}>
-                  <Plus /> Add agenda item
-                </button>
+          }}
+        />
+        <div
+          id="notes-drawer-content"
+          style={{ width }}
+          inert={!open}
+          aria-hidden={!open}
+        >
+          <Tabs value={tab} onValueChange={setTab}>
+            <TabsList aria-label="Notes drawer">
+              <TabsTrigger value="notes">Quick notes</TabsTrigger>
+              {scope === 'business' && (
+                <TabsTrigger value="agenda">Agenda</TabsTrigger>
               )}
-              <div className="drawer-notes-list">
-                {items.map((item) => (
-                  <div className="drawer-note" key={item.id}>
+            </TabsList>
+          </Tabs>
+          <div className="notes-drawer-body">
+            {tab === 'notes' ? (
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void save();
+                }}
+              >
+                <label className="sr-only" htmlFor="drawer-note">
+                  Add a quick note
+                </label>
+                <textarea
+                  id="drawer-note"
+                  disabled={busy}
+                  rows={3}
+                  value={text}
+                  onChange={(event) => setText(event.target.value)}
+                  placeholder="Something to remember…"
+                />
+                <div className="drawer-capture-actions">
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => {
+                      onCapture(text);
+                      setText('');
+                    }}
+                  >
+                    <Paperclip /> Add files
+                  </button>
+                  <button
+                    className="button primary"
+                    disabled={!text.trim() || busy}
+                  >
+                    <Plus />
+                    {busy ? 'Saving…' : 'Add note'}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <button className="button" onClick={onAgenda}>
+                <Plus /> Add agenda item
+              </button>
+            )}
+            <div className="drawer-notes-list">
+              {items.map((item) => (
+                <div className="drawer-note" key={item.id}>
+                  <button
+                    className="drawer-note-open"
+                    onClick={() => onOpen(item)}
+                  >
+                    <span>{item.title}</span>
+                    <small>
+                      {tab === 'agenda'
+                        ? item.date
+                          ? pretty(item.date)
+                          : 'No meeting date yet'
+                        : pretty(item.createdAt)}
+                      {item.files.length > 0
+                        ? ` · ${item.files.length} attachments`
+                        : ''}
+                    </small>
+                  </button>
+                  {tab === 'notes' && (
                     <button
-                      className="drawer-note-open"
-                      onClick={() => onOpen(item)}
+                      className="classic-action"
+                      aria-label={`Archive note ${item.title}`}
+                      title="Archive note"
+                      onClick={() =>
+                        void store.change(item, { archived: true })
+                      }
                     >
-                      <span>{item.title}</span>
-                      <small>
-                        {tab === 'agenda'
-                          ? item.date
-                            ? pretty(item.date)
-                            : 'No meeting date yet'
-                          : pretty(item.createdAt)}
-                        {item.files.length > 0
-                          ? ` · ${item.files.length} attachments`
-                          : ''}
-                      </small>
+                      <Check />
                     </button>
-                    {tab === 'notes' && (
-                      <button
-                        className="classic-action"
-                        aria-label={`Archive note ${item.title}`}
-                        title="Archive note"
-                        onClick={() =>
-                          void store.change(item, { archived: true })
-                        }
-                      >
-                        <Check />
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-              {!items.length && (
-                <p className="hint">
-                  {tab === 'notes'
-                    ? 'Phone captures and quick reminders appear here.'
-                    : 'Keep the things you want to discuss here. Open an item to choose its meeting date.'}
-                </p>
-              )}
+                  )}
+                </div>
+              ))}
             </div>
+            {!items.length && (
+              <p className="hint">
+                {tab === 'notes'
+                  ? 'Phone captures and quick reminders appear here.'
+                  : 'Keep the things you want to discuss here. Open an item to choose its meeting date.'}
+              </p>
+            )}
           </div>
-        </>
-      ) : (
-        <button className="notes-drawer-rail" onClick={toggle}>
-          <MessageSquare />
-          <span>
-            {scope === 'business' ? 'QUICK NOTES / AGENDA' : 'PERSONAL NOTES'}
-          </span>
-        </button>
-      )}
+        </div>
+      </>
+      <button
+        className="notes-drawer-rail"
+        onClick={toggle}
+        inert={open}
+        aria-hidden={open}
+        tabIndex={open ? -1 : 0}
+      >
+        <MessageSquare />
+        <span>
+          {scope === 'business' ? 'QUICK NOTES / AGENDA' : 'PERSONAL NOTES'}
+        </span>
+      </button>
     </aside>
   );
 }

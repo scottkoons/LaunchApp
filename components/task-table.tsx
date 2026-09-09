@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
   SortableContext,
+  defaultAnimateLayoutChanges,
   useSortable,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
@@ -151,7 +152,17 @@ function TaskRow({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: task.id, disabled: completed || finishing });
+  } = useSortable({
+    id: task.id,
+    disabled: completed || finishing,
+    transition: { duration: 200, easing: 'cubic-bezier(0.25, 1, 0.5, 1)' },
+    animateLayoutChanges: (args) =>
+      defaultAnimateLayoutChanges(args) ||
+      (!args.isSorting &&
+        args.containerId === args.previousContainerId &&
+        args.previousItems.length > args.items.length &&
+        args.previousItems.includes(args.id)),
+  });
   const pill = (key: 'draft' | 'final') => {
     if (task.routine && key === 'draft') return null;
     const done =
@@ -175,8 +186,18 @@ function TaskRow({
             ? 'Complete to-do · Command-Z to undo'
             : `Mark ${key} ${done ? 'unfinished' : 'finished'}`
         }
-        onClick={() =>
-          task.routine
+        onClick={(event) => {
+          if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            event.currentTarget.animate(
+              [
+                { transform: 'scale(1)' },
+                { transform: 'scale(1.1)' },
+                { transform: 'scale(1)' },
+              ],
+              { duration: 150, easing: 'cubic-bezier(0.32, 0.72, 0.24, 1)' },
+            );
+          }
+          return task.routine
             ? completed
               ? onPatch(task, {
                   status: 'active',
@@ -184,8 +205,8 @@ function TaskRow({
                   finalDone: false,
                 })
               : onComplete(task)
-            : onMilestone(task, key)
-        }
+            : onMilestone(task, key);
+        }}
       >
         {done && <Check />}
         <span className="mobile-pill-label">
@@ -215,7 +236,7 @@ function TaskRow({
         (isDragging ? ' is-dragging' : '')
       }
       style={{
-        transform: CSS.Transform.toString(transform),
+        transform: CSS.Translate.toString(transform),
         transition,
         zIndex: isDragging ? 5 : undefined,
       }}

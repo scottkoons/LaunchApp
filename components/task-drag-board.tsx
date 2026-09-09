@@ -3,7 +3,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import {
   DndContext,
-  DragOverlay,
   PointerSensor,
   KeyboardSensor,
   closestCenter,
@@ -13,7 +12,6 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
-import { GripVertical } from 'lucide-react';
 import type { Entity } from '@/lib/model';
 
 type Group = { key: string; label: string; items: Entity[] };
@@ -68,7 +66,9 @@ export function TaskDragBoard({
         const tray = hits.filter((hit) => String(hit.id).startsWith('tray:'));
         if (tray.length) return tray;
         // Prefer a row to its enclosing section, so in-month reordering remains precise.
-        const rows = hits.filter((hit) => lookup.has(String(hit.id)));
+        const rows = hits.filter(
+          (hit) => hit.id !== args.active.id && lookup.has(String(hit.id)),
+        );
         return rows.length
           ? rows
           : hits.length
@@ -133,14 +133,6 @@ export function TaskDragBoard({
           ))}
         </div>
       )}
-      <DragOverlay dropAnimation={null}>
-        {dragged ? (
-          <div className="task-drag-preview">
-            <GripVertical />
-            {dragged.title}
-          </div>
-        ) : null}
-      </DragOverlay>
     </DndContext>
   );
 }
