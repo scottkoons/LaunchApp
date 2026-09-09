@@ -843,7 +843,7 @@ export default function Launch({
               <div className="page-heading">
                 <div>
                   <p className="eyebrow">
-                    {view === 'tasks' || isDashboard
+                    {ready && (view === 'tasks' || isDashboard)
                       ? new Date().toLocaleDateString('en-US', {
                           weekday: 'long',
                           month: 'long',

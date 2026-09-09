@@ -16,7 +16,10 @@
         font:
           17px/1.5 system-ui,
           sans-serif;
-        padding: 30px 22px;
+        padding: calc(30px + env(safe-area-inset-top, 0px))
+          max(22px, env(safe-area-inset-right, 0px))
+          calc(30px + env(safe-area-inset-bottom, 0px))
+          max(22px, env(safe-area-inset-left, 0px));
       }
       main {
         max-width: 560px;
