@@ -1638,7 +1638,7 @@ export default function Launch({
           )}
         </main>
         <footer className="workspace-footer">
-          <span>Launch · A little more in control.</span>
+          <span>Launch Task Organizer</span>
           <button onClick={() => setSyncOpen(true)}>
             {data.syncing ? 'Saving your changes…' : data.status}
           </button>
