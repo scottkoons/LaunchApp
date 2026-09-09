@@ -2699,14 +2699,20 @@ details[open] > summary {
 /* Grouped navigation and the compact desktop rail. */
 .sidebar-brand-row {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   padding: 8px 6px;
-  gap: 4px;
+  gap: 0;
 }
 .sidebar-brand-row .brand {
-  padding: 12px 0 18px;
-  flex: 1;
+  padding: 12px 0 16px;
+  height: 72px;
+  flex: none;
   min-width: 0;
+}
+.sidebar-header-toggle {
+  align-self: flex-start;
+  margin-left: 4px;
 }
 .sidebar-brand-row .brand-name > span {
   display: block;
@@ -2774,19 +2780,10 @@ details[open] > summary {
 [data-collapsible='icon'] .nav-count {
   display: none;
 }
-[data-collapsible='icon'] .sidebar-brand-row {
-  padding: 8px 0;
-  flex-direction: column;
-  gap: 0;
-}
 @media (min-width: 768px) {
   .mobile-navigation-toggle {
     display: none;
   }
-}
-[data-collapsible='icon'] .brand {
-  justify-content: center;
-  padding: 12px 0 16px;
 }
 [data-collapsible='icon'] [data-slot='sidebar-content'] {
   overflow-y: auto;
