@@ -1639,7 +1639,7 @@ export default function Launch({
           onClick={() => navigate('tasks')}
         >
           <LayoutDashboard />
-          Browse
+          Dashboard
         </button>
       </nav>
       <TaskEditor
