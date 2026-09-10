@@ -19,35 +19,36 @@
 }
 
 :root[data-theme='dark'] {
-  --background: #0a121b;
-  --foreground: #edf3f6;
-  --card: #101e29;
-  --sidebar: #0a111a;
-  --muted: #1b2c39;
-  --muted-foreground: #a1b3bf;
-  --faint-foreground: #8298a8;
-  --border: #2b3c49;
-  --border-strong: #456071;
-  --primary: #90c7d8;
-  --primary-foreground: #0b202a;
-  --accent: #1b3442;
-  --label-foreground: #a1b3bf;
-  --month-header: #172834;
-  --month-columns: #10212e;
+  color-scheme: dark;
+  --primary: #e8922d;
+  --background: #0d1117;
+  --foreground: #e6edf3;
+  --card: #1c2128;
+  --sidebar: #161b22;
+  --muted: #262c36;
+  --muted-foreground: #8b949e;
+  --faint-foreground: #6e7681;
+  --primary-foreground: #0d1117;
+  --border: #30363d;
+  --border-strong: #484f58;
+  --accent: rgba(232, 146, 45, 0.15);
+  --label-foreground: var(--faint-foreground);
+  --month-header: #161b22;
+  --month-columns: rgba(22, 27, 34, 0.6);
   --month-shadow: var(--panel-shadow);
-  --selection: #2a5264;
-  --selection-foreground: #f0f6f8;
-  --calendar-outside: #0c1822;
-  --event-background: #263345;
-  --event-foreground: #cbd9e5;
-  --destructive: #f38496;
-  --green: #63c3a2;
-  --yellow: #e5c06d;
-  --blue: #80bddc;
-  --canvas: #123d4b;
-  --button-face: #dceaf0;
-  --button-ink: #132733;
-  --input-surface: #0b1721;
+  --selection: rgba(232, 146, 45, 0.35);
+  --selection-foreground: #e6edf3;
+  --calendar-outside: #161b22;
+  --event-background: rgba(167, 139, 250, 0.18);
+  --event-foreground: #d1d5db;
+  --destructive: #f43f5e;
+  --green: #10b981;
+  --yellow: #fbbf24;
+  --blue: #38bdf8;
+  --canvas: #0d1117;
+  --button-face: var(--primary);
+  --button-ink: var(--primary-foreground);
+  --input-surface: var(--background);
 }
 :root[data-theme='space'] {
   --background: #10192b;
@@ -333,6 +334,83 @@ html[data-theme] .topbar {
   background: transparent;
   border-bottom-color: color-mix(in oklab, var(--border) 60%, transparent);
 }
+
+/* A single moving button makes the active workspace immediately clear. */
+.workspace-switch {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  flex: 0 0 auto;
+  width: 208px;
+  height: 44px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--input-surface);
+  box-shadow: inset 0 1px 3px
+    color-mix(in oklab, var(--background) 35%, transparent);
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.workspace-switch-thumb {
+  position: absolute;
+  z-index: -1;
+  inset: 4px auto 4px 4px;
+  width: calc((100% - 8px) / 2);
+  border-radius: 10px;
+  background: var(--button-face);
+  box-shadow:
+    inset 0 1px color-mix(in oklab, var(--button-ink) 5%, transparent),
+    0 1px 3px color-mix(in oklab, var(--background) 25%, transparent);
+  transform: translateX(calc(var(--switch-position) * 100%));
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+}
+.workspace-switch-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted-foreground);
+  font: 500 13px/1 var(--font-sans);
+  cursor: pointer;
+  touch-action: pan-y;
+  transition: color 120ms ease;
+}
+.workspace-switch-option:hover {
+  color: var(--foreground);
+}
+.workspace-switch-option[data-highlighted] {
+  color: var(--button-ink);
+  font-weight: 600;
+}
+.workspace-switch-option input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+  touch-action: pan-y;
+}
+.workspace-switch-option:has(input:focus-visible) {
+  outline: 2px solid var(--primary);
+  outline-offset: 5px;
+}
+.workspace-switch[data-dragging] .workspace-switch-thumb {
+  transition: none;
+}
+.workspace-switch[data-dragging] .workspace-switch-option {
+  cursor: grabbing;
+}
 html[data-theme]
   :is(
     .task-create-modal,
@@ -360,8 +438,8 @@ html[data-theme] .dropzone {
   background: var(--input-surface);
 }
 html[data-theme] .theme-swatch.dark {
-  background: #101e29;
-  border-color: #90c7d8;
+  background: #1c2128;
+  border-color: #e8922d;
 }
 html[data-theme] .theme-swatch.space {
   background: #18243a;
@@ -415,6 +493,9 @@ html[data-theme] .theme-swatch.light {
   }
 }
 @media (max-width: 767px) {
+  .workspace-switch {
+    width: 188px;
+  }
   html[data-theme] body {
     background: var(--background);
   }
@@ -430,6 +511,10 @@ html[data-theme] .theme-swatch.light {
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .workspace-switch-thumb,
+  .workspace-switch-option {
+    transition: none;
+  }
   html[data-theme] :is(.button, .secondary, .pick) {
     transition: none;
   }

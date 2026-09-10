@@ -22,6 +22,7 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { WorkspaceSwitch } from '@/components/workspace-switch';
 
 import {
   Sheet,
@@ -248,7 +249,7 @@ export default function Launch({
   }, []);
   useEffect(() => {
     const color =
-      theme === 'light' ? '#f1f5f7' : theme === 'dark' ? '#0a121b' : '#10192b';
+      theme === 'light' ? '#f1f5f7' : theme === 'dark' ? '#0d1117' : '#10192b';
     document
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute('content', color);
@@ -847,18 +848,13 @@ export default function Launch({
         <header className="topbar">
           <div className="topbar-left">
             <NavigationToggle className="mobile-navigation-toggle" />
-            <Tabs
+            <WorkspaceSwitch
               value={scope}
-              onValueChange={(v) => {
-                setScope(v as Scope);
+              onChange={(next) => {
+                setScope(next);
                 setQuery('');
               }}
-            >
-              <TabsList aria-label="Workspace">
-                <TabsTrigger value="business">Business</TabsTrigger>
-                <TabsTrigger value="personal">Personal</TabsTrigger>
-              </TabsList>
-            </Tabs>
+            />
           </div>
           <div className="topbar-right">
             <button
