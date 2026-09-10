@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import './dashboard-theme.css';
 
 // Configure the framework's viewport instead of adding a second <meta> tag.
 // iOS needs viewport-fit=cover to report the safe-area insets used by our shell.

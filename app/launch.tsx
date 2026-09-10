@@ -248,7 +248,7 @@ export default function Launch({
   }, []);
   useEffect(() => {
     const color =
-      theme === 'light' ? '#f4f5f7' : theme === 'dark' ? '#0d1117' : '#0f172a';
+      theme === 'light' ? '#f1f5f7' : theme === 'dark' ? '#0a121b' : '#10192b';
     document
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute('content', color);
