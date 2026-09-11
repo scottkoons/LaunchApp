@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { OriginalAudio } from './original-audio';
 import { Camera, Check, ImagePlus, Mic, Square, Undo2 } from 'lucide-react';
 import { notePlan, processCapture, saveMedia } from '@/lib/capture-client';
+import { reminderLabel } from '@/lib/reminders';
 import type { LaunchStore } from '@/lib/client-store';
 import type { Entity, Scope } from '@/lib/model';
 
@@ -82,7 +83,9 @@ export function SmartCapture({
     setResult({ sourceId, items });
     notify(
       items.length === 1
-        ? `${items[0].kind === 'agenda' ? 'Agenda item' : items[0].kind === 'task' ? 'Task' : 'Note'} saved.`
+        ? items[0].reminderAt
+          ? `Reminder set for ${reminderLabel(items[0])}.`
+          : `${items[0].kind === 'agenda' ? 'Agenda item' : items[0].kind === 'task' ? 'Task' : 'Note'} saved.`
         : `${items.length} items saved.`,
       () => void undo(sourceId),
     );
@@ -262,8 +265,13 @@ export function SmartCapture({
         <p>
           {recording
             ? 'Tap stop when finished. Keep Launch open · up to 3 minutes.'
-            : '“Add a task to call Sonos tomorrow.”'}
+            : '“Remind me tomorrow at 9 AM to call Sonos.”'}
         </p>
+        {!recording && (
+          <p className="voice-reminder-example">
+            Or say “Set an alarm in 30 minutes to check the oven.”
+          </p>
+        )}
         <div className="smart-photo-actions">
           <button
             className="button"
@@ -318,27 +326,42 @@ export function SmartCapture({
           <strong>
             <Check /> Saved to Launch
           </strong>
-          {result.items.map((item) => (
-            <button
-              key={item.id}
-              className="capture-result-item"
-              onClick={() =>
-                openItem(
-                  store.data.records.find((e) => e.id === item.id) || item,
-                )
-              }
-            >
-              <span>{item.title}</span>
-              <small>
-                {item.kind === 'task'
-                  ? `Task${item.final ? ' · Final: ' + item.final : ''}`
-                  : item.kind === 'agenda'
-                    ? 'Meeting agenda'
-                    : 'Quick note'}{' '}
-                · Edit
-              </small>
-            </button>
-          ))}
+          {result.items.map((saved) => {
+            const item =
+              records.find((record) => record.id === saved.id) || saved;
+            return (
+              <button
+                key={item.id}
+                className="capture-result-item"
+                onClick={() =>
+                  openItem(
+                    store.data.records.find((e) => e.id === item.id) || item,
+                  )
+                }
+              >
+                <span>{item.title}</span>
+                <small>
+                  {item.kind === 'task'
+                    ? `Task${item.final ? ' · Final: ' + item.final : ''}`
+                    : item.kind === 'agenda'
+                      ? 'Meeting agenda'
+                      : 'Quick note'}{' '}
+                  · Edit
+                </small>
+                {item.reminderAt && (
+                  <small className="capture-reminder-time">
+                    Reminder · {reminderLabel(item)}
+                  </small>
+                )}
+              </button>
+            );
+          })}
+          {result.items.some((item) => item.reminderAt) && (
+            <small className="hint">
+              This reminder appears inside Launch. Phone alerts while Launch is
+              closed aren’t connected yet.
+            </small>
+          )}
           <button
             className="text-button"
             onClick={() => void undo(result.sourceId)}
@@ -471,7 +494,7 @@ function CaptureReview({
           value={clarification}
           disabled={busy || saving}
           onChange={(e) => setClarification(e.target.value)}
-          placeholder="Make this a task due tomorrow"
+          placeholder="Remind me tomorrow at 9 AM"
           maxLength={2000}
         />
       </label>

@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react';
 import { agendaItems, agendaOrderChanges } from './agenda';
 import {
   captureFingerprint,
-  reminderInstant,
+  captureReminderAt,
+  localTime,
   validatePlan,
   type CapturePlan,
 } from './capture-intent';
@@ -402,9 +403,7 @@ export class LaunchStore {
     if (plan.question || !plan.items.length)
       throw new Error('Answer the capture question first.');
     const destinations = plan.items.map((item, index) => {
-      const reminderAt = item.reminderLocal
-        ? reminderInstant(item.reminderLocal, source.capture!.timeZone)
-        : '';
+      const reminderAt = captureReminderAt(item, source.capture!);
       if (reminderAt && Date.parse(reminderAt) <= Date.now())
         throw new Error(
           'That reminder time has passed. Choose a future time, or save without a reminder.',
@@ -416,7 +415,11 @@ export class LaunchStore {
           title: item.title,
           notes: item.notes,
           files: [...source.files],
-          final: item.dueDate || item.reminderLocal.slice(0, 10),
+          final: item.dueDate,
+          plannedDate:
+            !item.dueDate && reminderAt
+              ? localTime(reminderAt, source.capture!.timeZone).slice(0, 10)
+              : '',
           draft: '',
           routine: item.kind === 'task',
           date: item.meetingDate,

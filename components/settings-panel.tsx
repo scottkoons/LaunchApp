@@ -249,9 +249,11 @@ export function SettingsPanel({
           <span>
             Voice & photo capture
             <small>
-              Tap the microphone in Capture to speak a note or give task and
-              agenda instructions. Scan a photo to extract its text. Originals
-              stay attached; reconnect and tap Process for offline captures.
+              Tap the microphone in Capture to speak a note, task, agenda item,
+              or reminder: “Remind me tomorrow at 9 AM” or “in 30 minutes.” The
+              saved result shows the reminder time. Reminders currently appear
+              inside Launch. Scan a photo to extract its text. Originals stay
+              attached; reconnect and tap Process for offline captures.
             </small>
           </span>
           <Check />

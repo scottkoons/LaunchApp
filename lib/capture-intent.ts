@@ -4,6 +4,8 @@ type CaptureItem = {
   notes: string;
   dueDate: string;
   reminderLocal: string;
+  // Elapsed time from recording, independent of clock changes and processing delay.
+  reminderOffsetMinutes?: number;
   meetingDate: string;
 };
 export type CapturePlan = { items: CaptureItem[]; question: string };
@@ -83,6 +85,15 @@ export function reminderInstant(value: string, zone: string) {
     );
   return candidates[0];
 }
+export function captureReminderAt(item: CaptureItem, capture: CaptureState) {
+  if (item.reminderOffsetMinutes)
+    return new Date(
+      Date.parse(capture.capturedAt) + item.reminderOffsetMinutes * 60000,
+    ).toISOString();
+  return item.reminderLocal
+    ? reminderInstant(item.reminderLocal, capture.timeZone)
+    : '';
+}
 export function validatePlan(value: unknown): CapturePlan {
   const plan = value as CapturePlan;
   if (JSON.stringify(value)?.length > 90000)
@@ -118,7 +129,13 @@ export function validatePlan(value: unknown): CapturePlan {
         typeof item.reminderLocal !== 'string' ||
         (item.reminderLocal &&
           !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(item.reminderLocal)) ||
-        (item.kind !== 'task' && (item.dueDate || item.reminderLocal)) ||
+        (item.reminderOffsetMinutes !== undefined &&
+          (typeof item.reminderOffsetMinutes !== 'number' ||
+            !Number.isFinite(item.reminderOffsetMinutes) ||
+            item.reminderOffsetMinutes < 0 ||
+            item.reminderOffsetMinutes > 525600)) ||
+        (item.kind !== 'task' &&
+          (item.dueDate || item.reminderLocal || item.reminderOffsetMinutes)) ||
         (item.kind !== 'agenda' && item.meetingDate)
       )
         throw new Error('The suggested item needs a clearer title or date.');
@@ -128,6 +145,9 @@ export function validatePlan(value: unknown): CapturePlan {
         notes: item.notes,
         dueDate: item.dueDate,
         reminderLocal: item.reminderLocal,
+        ...(item.reminderOffsetMinutes !== undefined
+          ? { reminderOffsetMinutes: item.reminderOffsetMinutes }
+          : {}),
         meetingDate: item.meetingDate,
       };
     }),
@@ -182,6 +202,11 @@ export const captureSchema = {
           notes: { type: 'string' },
           dueDate: { type: 'string' },
           reminderLocal: { type: 'string' },
+          reminderOffsetMinutes: {
+            type: 'number',
+            minimum: 0,
+            maximum: 525600,
+          },
           meetingDate: { type: 'string' },
         },
         required: [
@@ -190,6 +215,7 @@ export const captureSchema = {
           'notes',
           'dueDate',
           'reminderLocal',
+          'reminderOffsetMinutes',
           'meetingDate',
         ],
       },

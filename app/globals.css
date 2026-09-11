@@ -1775,6 +1775,13 @@ details[open] > summary {
 .capture-result-item small {
   color: var(--muted-foreground);
 }
+.capture-result-item .capture-reminder-time {
+  color: var(--primary);
+  font-weight: 600;
+}
+.voice-capture-controls > .voice-reminder-example {
+  font-size: 12px;
+}
 .capture-review label {
   display: flex;
   flex-direction: column;

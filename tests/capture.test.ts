@@ -5,6 +5,7 @@ import {
   reminderInstant,
   localTime,
   validateCapture,
+  captureReminderAt,
   type CaptureState,
 } from '../lib/capture-intent';
 import { interpretCapture, transcribeMedia } from '../lib/capture-ai';
@@ -179,4 +180,118 @@ void test('photo text cannot become commands without a separate user direction',
   assert.equal(plan.items[0].kind, 'note');
   assert.equal(plan.items[0].notes, transcript);
   assert.equal(plan.items[0].dueDate, '');
+});
+void test('relative spoken alarms retain elapsed time across midnight and clock changes', () => {
+  const item = { ...task, reminderOffsetMinutes: 30 };
+  assert.equal(
+    captureReminderAt(item, {
+      ...source,
+      capturedAt: '2026-09-11T05:45:32.000Z',
+    }),
+    '2026-09-11T06:15:32.000Z',
+  );
+  // The repeated 1 AM hour is unambiguous when the user specifies elapsed time.
+  assert.equal(
+    captureReminderAt(item, {
+      ...source,
+      capturedAt: '2026-11-01T07:45:00.000Z',
+    }),
+    '2026-11-01T08:15:00.000Z',
+  );
+  for (const offset of [-1, Infinity, NaN, '30', 525601])
+    assert.throws(() =>
+      validatePlan({
+        question: '',
+        items: [{ ...task, reminderOffsetMinutes: offset }],
+      }),
+    );
+});
+void test('spoken duration alarms do not require AM/PM and use the recording instant', async () => {
+  const mock = (async () =>
+    Response.json({
+      status: 'completed',
+      output: [
+        {
+          content: [
+            {
+              type: 'output_text',
+              text: JSON.stringify({
+                question: '',
+                items: [{ ...task, dueDate: '', reminderOffsetMinutes: 90 }],
+              }),
+            },
+          ],
+        },
+      ],
+    })) as typeof fetch;
+  const plan = await interpretCapture(
+    'test-key',
+    {
+      ...source,
+      transcript: 'Set an alarm in an hour and a half to check the oven.',
+    },
+    mock,
+  );
+  assert.equal(plan.question, '');
+  assert.equal(plan.items[0].reminderLocal, '2026-09-11T01:00');
+  assert.equal(
+    captureReminderAt(plan.items[0], source),
+    '2026-09-11T07:00:00.000Z',
+  );
+  assert.equal(plan.items[0].dueDate, '');
+});
+void test('a model clarification for an unsupported trigger is preserved', async () => {
+  const question =
+    'Location reminders are not available. What date and time should I use?';
+  const mock = (async () =>
+    Response.json({
+      status: 'completed',
+      output: [
+        {
+          content: [
+            {
+              type: 'output_text',
+              text: JSON.stringify({
+                question,
+                items: [{ ...task, reminderLocal: '2026-09-11T09:00' }],
+              }),
+            },
+          ],
+        },
+      ],
+    })) as typeof fetch;
+  const plan = await interpretCapture(
+    'test-key',
+    {
+      ...source,
+      transcript: 'Remind me when I get home to call Sonos.',
+    },
+    mock,
+  );
+  assert.equal(plan.question, question);
+});
+void test('an alarm request without a saved trigger cannot silently become an ordinary task', async () => {
+  const mock = (async () =>
+    Response.json({
+      status: 'completed',
+      output: [
+        {
+          content: [
+            {
+              type: 'output_text',
+              text: JSON.stringify({ question: '', items: [task] }),
+            },
+          ],
+        },
+      ],
+    })) as typeof fetch;
+  const plan = await interpretCapture(
+    'test-key',
+    {
+      ...source,
+      transcript: 'Set an alarm tomorrow to call Sonos.',
+    },
+    mock,
+  );
+  assert.match(plan.question, /What time/);
 });

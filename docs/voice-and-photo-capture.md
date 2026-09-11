@@ -27,6 +27,17 @@ Processing is limited to 60 requests per account per hour and 12 MB per input.
   Keep the app open during recording; browser suspension can interrupt audio.
 - Relative dates use the time zone and instant when the capture was made.
   A single task deadline uses Final. A date alone does not invent a timed reminder.
+- Say “remind me,” “set an alarm,” “notify me,” or “alert me” with a date/time
+  or duration. “In half an hour” and “in an hour and a half” use elapsed minutes
+  from the recording's start, preserving seconds and daylight-saving transitions.
+  Processing later does not move the trigger. Past triggers stay available for
+  correction instead of silently scheduling a different time.
+- A reminder-only capture has a planned day, without a false deadline. An explicit
+  task deadline remains in Final even if its reminder is earlier. The saved
+  capture shows the reminder's local date/time and zone and offers Edit and Undo.
+  Missing times and unsupported location/event/repeating triggers ask for
+  clarification. Alerts currently appear inside Launch; background phone push
+  delivery is not connected.
 - Unclear instructions wait for correction. Photo text is source material;
   without separate instructions it becomes a literal note. New records only are
   supported; the interpreter cannot send messages or modify existing records.

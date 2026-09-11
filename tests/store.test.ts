@@ -2,6 +2,78 @@ import { quickNotes } from '../lib/notes';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import 'fake-indexeddb/auto';
+void test('voice alarms persist the trigger, retain notes, and keep reminders separate from deadlines', async () => {
+  Object.defineProperty(globalThis, 'navigator', {
+    value: { onLine: false },
+    configurable: true,
+  });
+  const store = new LaunchStore('voice-alarm-' + crypto.randomUUID());
+  await store.init();
+  const capturedAt = new Date(Date.now() + 86400000).toISOString();
+  const source = await store.add(
+    createEntity('note', 'personal', {
+      title: 'Voice recording',
+      notes: 'Check the oven. The bread needs another half hour.',
+      capture: {
+        type: 'voice',
+        state: 'review',
+        capturedAt,
+        timeZone: 'America/Denver',
+        instruction: '',
+      },
+    }),
+  );
+  const plan = {
+    question: '',
+    items: [
+      {
+        kind: 'task' as const,
+        title: 'Check the oven',
+        notes: source.notes,
+        dueDate: '',
+        reminderLocal: '',
+        reminderOffsetMinutes: 30,
+        meetingDate: '',
+      },
+    ],
+  };
+  const [alarm] = await store.applyCapture(source.id, plan);
+  const expected = new Date(Date.parse(capturedAt) + 1800000).toISOString();
+  assert.equal(alarm.reminderAt, expected);
+  assert.equal(alarm.reminderZone, 'America/Denver');
+  assert.equal(alarm.final, '');
+  assert.ok(alarm.plannedDate);
+  assert.equal(alarm.notes, source.notes);
+  const reopened = new LaunchStore(store.account);
+  await reopened.init();
+  assert.equal(
+    reopened.data.records.find((e) => e.id === alarm.id)?.reminderAt,
+    expected,
+  );
+  await reopened.undoCapture(source.id);
+  assert.equal(
+    reopened.data.records.find((e) => e.id === source.id)?.archived,
+    false,
+  );
+  const [withDeadline] = await reopened.applyCapture(source.id, {
+    ...plan,
+    items: [{ ...plan.items[0], dueDate: '2030-09-20' }],
+  });
+  assert.equal(withDeadline.final, '2030-09-20');
+  assert.equal(withDeadline.draft, '');
+  assert.equal(withDeadline.reminderAt, expected);
+  const expired = await store.add(
+    createEntity('note', 'personal', {
+      title: 'Offline recording',
+      capture: { ...source.capture!, capturedAt: '2020-01-01T00:00:00Z' },
+    }),
+  );
+  await assert.rejects(store.applyCapture(expired.id, plan), /time has passed/);
+  assert.notEqual(
+    store.data.records.find((e) => e.id === expired.id)?.archived,
+    true,
+  );
+});
 void test('voice capture originals survive offline restart; tasks use Final; apply is idempotent and undo preserves originals', async () => {
   Object.defineProperty(globalThis, 'navigator', {
     value: { onLine: false },
