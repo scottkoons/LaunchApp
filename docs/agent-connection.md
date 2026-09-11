@@ -1,8 +1,11 @@
 # Grok Bot connection
 
-In Launch Settings, create a Grok Bot connection. In Grok Bot's MCP settings,
-choose Add MCP Server, switch to JSON, and paste the generated configuration.
-Keep this configuration in the connector's settings, not in an agent chat.
+In Launch Settings, create a Grok Bot connection. For an MCP client with private
+HTTP header settings, import the generated JSON there. Grok Bot 0.47.0's
+Authorize card supports OAuth, not these fixed headers; its visible Add MCP
+Server form belongs to team sharing. Scott's private connection instead uses
+Grok Bot's secure secret cards and a persistent stdio proxy, as recorded in
+[Grok Bot setup](grok-bot-setup.md). Keep credentials out of ordinary chat.
 
 The remote streamable HTTP endpoint is `/api/mcp`. It provides `add_task`,
 `add_note`, `add_agenda_item`, and `get_launch_context`. Only explicitly requested
