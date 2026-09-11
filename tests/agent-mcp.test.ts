@@ -240,6 +240,20 @@ void test('MCP client negotiates tools and persists scoped, idempotent records w
     'agenda',
   );
   sqlite
+    .prepare('DELETE FROM records WHERE id=?')
+    .run((saved.structuredContent as Record<string, string>).id);
+  const removedRetry = await client.callTool({
+    name: 'add_task',
+    arguments: args,
+  });
+  assert.equal(removedRetry.isError, true);
+  assert.equal(
+    sqlite
+      .prepare('SELECT COUNT(*) AS n FROM records WHERE id=?')
+      .get((saved.structuredContent as Record<string, string>).id)?.n,
+    0,
+  );
+  sqlite
     .prepare('UPDATE agent_connections SET revoked_at=? WHERE id=?')
     .run(new Date().toISOString(), connection.id);
   assert.equal(

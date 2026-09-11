@@ -62,15 +62,19 @@ export async function saveAgentItem(
   const read = () =>
     db
       .prepare(
-        'SELECT a.fingerprint,r.body,r.version FROM agent_requests a JOIN records r ON r.owner=a.owner AND r.id=a.entity_id WHERE a.connection_id=? AND a.request_id=? AND a.owner=?',
+        'SELECT a.fingerprint,r.body,r.version FROM agent_requests a LEFT JOIN records r ON r.owner=a.owner AND r.id=a.entity_id WHERE a.connection_id=? AND a.request_id=? AND a.owner=?',
       )
       .bind(connection.id, args.request_id, connection.owner)
-      .first<{ fingerprint: string; body: string; version: number }>();
+      .first<{ fingerprint: string; body: string | null; version: number }>();
   const existing = await read();
   const receipt = (row: NonNullable<typeof existing>) => {
     if (row.fingerprint !== fingerprint)
       throw new Error(
         'This request_id already belongs to different content. Use a new request_id for a new item.',
+      );
+    if (!row.body)
+      throw new Error(
+        'This item was already created and later removed. Use a new request_id only if the user wants to recreate it.',
       );
     const entity = { ...JSON.parse(row.body), version: row.version } as Entity;
     if (entity.deletedAt)
