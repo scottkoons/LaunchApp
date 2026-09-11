@@ -2,8 +2,12 @@
   "name": "launch-phone-reminders",
   "main": "scheduler.ts",
   "compatibility_date": "2026-09-11",
-  "workers_dev": false,
-  "triggers": { "crons": ["* * * * *"] },
+  "workers_dev": true,
+  "triggers": { "crons": [] },
+  "durable_objects": {
+    "bindings": [{ "name": "CLOCK", "class_name": "ReminderClock" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ReminderClock"] }],
   "vars": {
     "SITE_URL": "https://launch-scott-planner.scottkoons.chatgpt.site",
   },

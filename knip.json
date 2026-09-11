@@ -4,6 +4,7 @@
     "app/layout.tsx",
     "app/api/**/route.ts",
     "next.config.ts",
+    "notifications/scheduler.ts",
     "tests/**/*.ts",
     "scripts/verify-import.ts",
     "public/*.js"
@@ -16,6 +17,7 @@
     "db/**/*.ts",
     "tests/**/*.ts",
     "scripts/**/*.ts",
+    "notifications/**/*.ts",
     "*.{ts,mjs}",
     "public/*.js",
     "app/**/*.css"
