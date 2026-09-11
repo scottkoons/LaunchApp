@@ -189,6 +189,18 @@ html[data-theme] .button.primary {
   font-weight: 600;
   box-shadow: inset 0 1px color-mix(in oklab, var(--button-ink) 5%, transparent);
 }
+html[data-theme] .button.primary kbd {
+  color: inherit;
+  background: color-mix(in oklab, currentColor 7%, transparent);
+  border-color: color-mix(in oklab, currentColor 30%, transparent);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
 html[data-theme] .button.primary:hover:not(:disabled) {
   background: color-mix(in oklab, var(--button-face) 92%, var(--button-ink));
   border-color: var(--button-face);

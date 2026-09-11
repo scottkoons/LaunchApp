@@ -153,6 +153,7 @@ export default function Launch({
     [reportRequest, setReportRequest] = useState(0),
     [scope, setScope] = useState<Scope>('business'),
     [theme, setTheme] = useState('space'),
+    [isApple, setIsApple] = useState(false),
     [sidebarOpen, setSidebarOpen] = useState(true),
     [mode, setMode] = useState('grouped'),
     [dashboardMode, setDashboardMode] = useState('grouped'),
@@ -244,6 +245,7 @@ export default function Launch({
     toastTimer.current = setTimeout(() => setToast(null), undo ? 10000 : 6000);
   }
   useEffect(() => {
+    setIsApple(/Mac|iPhone|iPad|iPod/.test(navigator.platform));
     setSidebarOpen(localStorage.getItem('launch-sidebar-open') !== 'false');
     const savedRatio = Number(localStorage.getItem('launch-column-ratio'));
     if (savedRatio >= 0.1 && savedRatio <= 0.9) setColumnRatio(savedRatio);
@@ -1013,8 +1015,14 @@ export default function Launch({
                 {view !== 'settings' && (
                   <button
                     className="button primary"
-                    aria-keyshortcuts={isTaskView ? 'Control+t' : undefined}
-                    title={isTaskView ? 'Add task (Control-T)' : undefined}
+                    aria-keyshortcuts={
+                      isTaskView ? 'Meta+t Control+t' : undefined
+                    }
+                    title={
+                      isTaskView
+                        ? `Add task (${isApple ? '⌘T' : 'Ctrl+T'})`
+                        : undefined
+                    }
                     onClick={() =>
                       view === 'notes'
                         ? setCaptureOpen(true)
@@ -1037,7 +1045,9 @@ export default function Launch({
                           : view === 'meetings'
                             ? 'Agenda item'
                             : 'Add task'}
-                    {isTaskView && <kbd>Ctrl T</kbd>}
+                    {isTaskView && (
+                      <kbd aria-hidden="true">{isApple ? '⌘T' : 'Ctrl T'}</kbd>
+                    )}
                   </button>
                 )}
               </div>
