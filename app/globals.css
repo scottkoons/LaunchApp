@@ -6218,6 +6218,17 @@ h3,
   gap: 16px;
 }
 
+.task-due-time {
+  max-width: 260px;
+}
+.desktop-speak-button {
+  min-width: 150px;
+}
+.calendar-cell:focus-within,
+.calendar-cell:hover {
+  background: color-mix(in srgb, var(--card) 92%, var(--primary));
+}
+
 .todo-editor-modal {
   max-height: calc(100dvh - 32px);
 }

@@ -27,12 +27,14 @@ export function Calendar({
   scope,
   open,
   addEvent,
+  addTask,
   soon,
 }: {
   records: Entity[];
   scope: Scope;
   open: (e: Entity) => void;
   addEvent: (date: string) => void;
+  addTask: (date: string) => void;
   soon: number;
 }) {
   const [month, setMonth] = useState(day().slice(0, 7) + '-01'),
@@ -111,8 +113,9 @@ export function Calendar({
         </div>
       </div>
       <p className="hint">
-        An ICS download copies deadlines and events. Launch reminder alerts are
-        not included. Export again after changing dates.
+        Double-click any day to add a task for that date. Choose a due time in
+        the task editor. An ICS download copies deadlines and events; reminder
+        alerts are not included.
       </p>
       <div className="calendar-grid">
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
@@ -167,6 +170,12 @@ export function Calendar({
                 (date === day() ? 'today' : '')
               }
               key={date}
+              onDoubleClick={(event) => {
+                // Double-clicking an existing event should open that event,
+                // not create a second task behind it.
+                if (event.target !== event.currentTarget) return;
+                addTask(date);
+              }}
             >
               <button
                 className="date-number"

@@ -31,7 +31,8 @@ import {
 import { deliveryRecipient } from '@/lib/address-book';
 import { ReminderPicker } from './reminder-picker';
 import { ReferenceThumbnailEditor } from './reference-thumbnail';
-import { reminderPatch } from '@/lib/reminders';
+import { reminderInput, reminderPatch } from '@/lib/reminders';
+import { reminderInstant } from '@/lib/capture-intent';
 import type { LaunchStore } from '@/lib/client-store';
 export function TaskEditor({
   entity,
@@ -407,6 +408,35 @@ export function TaskEditor({
               </div>
             ))}
           </div>
+          {draft.routine && draft.final && (
+            <label className="field task-due-time">
+              Due time (optional)
+              <input
+                type="time"
+                value={draft.dueAt ? reminderInput(draft.dueAt).slice(11) : ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (!value) {
+                    change({ dueAt: '', dueZone: '' });
+                    return;
+                  }
+                  try {
+                    const zone =
+                      Intl.DateTimeFormat().resolvedOptions().timeZone;
+                    change({
+                      dueAt: reminderInstant(`${draft.final}T${value}`, zone),
+                      dueZone: zone,
+                    });
+                  } catch (error) {
+                    notify((error as Error).message);
+                  }
+                }}
+              />
+              <span className="hint">
+                The task remains on this date and can have a separate reminder.
+              </span>
+            </label>
+          )}
           {draft.draft && draft.final && draft.final < draft.draft && (
             <p className="inline-warning">
               Final due date must be on or after the draft due date.

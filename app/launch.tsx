@@ -73,6 +73,7 @@ import {
   Trash2,
   Sun,
   Moon,
+  Mic,
   Rocket,
   X,
   FileText,
@@ -630,6 +631,7 @@ export default function Launch({
         scope={scope}
         open={open}
         addEvent={(date) => add('event', { date })}
+        addTask={(date) => add('task', { final: date, routine: true })}
         soon={soon}
       />
     ) : (
@@ -924,10 +926,11 @@ export default function Launch({
             </button>
             <button
               onClick={() => setCaptureOpen(true)}
-              className="button quick-button"
+              className="button quick-button desktop-speak-button"
+              aria-label="Push to speak"
             >
-              <CaptureIcon />
-              {scope === 'personal' ? 'Capture' : 'Quick note'}
+              <Mic />
+              Push to speak
               <kbd>N</kbd>
             </button>
           </div>
