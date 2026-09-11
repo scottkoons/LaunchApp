@@ -1,4 +1,5 @@
 'use client';
+import { BulkSelection, SelectionCheckbox } from '@/components/bulk-selection';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { ArrowUpRight } from 'lucide-react';
 import { SmartCapture } from './smart-capture';
@@ -228,55 +229,64 @@ export function Capture({
           them to the meeting agenda.
         </p>
       </div>
-      <section className="recent-captures">
-        <div className="section-heading">
-          <h2>Recently captured</h2>
-          <span>{recent.length}</span>
-        </div>
-        {recent.length ? (
-          recent.map((n) => (
-            <SwipeNote
-              key={n.id}
-              note={n}
-              revealed={revealedNote === n.id}
-              onReveal={(show) => setRevealedNote(show ? n.id : null)}
-              onOpen={() => openNote(n)}
-              onToggle={async () => {
-                try {
-                  await store.change(n, { archived: !n.archived });
-                } catch (error) {
-                  notify((error as Error).message);
-                }
-              }}
-              onDelete={async () => {
-                try {
-                  await deleteNote(n);
-                  setRevealedNote(null);
-                } catch (error) {
-                  notify((error as Error).message);
-                }
-              }}
-            />
-          ))
-        ) : (
-          <p className="empty-inline">Your next thought belongs here.</p>
-        )}
-        {completed.length > 0 && (
-          <div className="completed-captures">
-            <h3>Completed notes</h3>
-            {completed.map((note) => (
-              <QuickNoteRow
-                key={note.id}
-                note={note}
-                store={store}
-                onOpen={openNote}
-                onDelete={deleteNote}
-                notify={notify}
-              />
-            ))}
+      <BulkSelection
+        key={scope}
+        items={[...recent, ...completed]}
+        store={store}
+        notify={notify}
+      >
+        <section className="recent-captures">
+          <div className="section-heading">
+            <h2>Recently captured</h2>
+            <span>{recent.length}</span>
           </div>
-        )}
-      </section>
+          {recent.length ? (
+            recent.map((n) => (
+              <div key={n.id} className="bulk-capture-row">
+                <SelectionCheckbox item={n} />
+                <SwipeNote
+                  note={n}
+                  revealed={revealedNote === n.id}
+                  onReveal={(show) => setRevealedNote(show ? n.id : null)}
+                  onOpen={() => openNote(n)}
+                  onToggle={async () => {
+                    try {
+                      await store.change(n, { archived: !n.archived });
+                    } catch (error) {
+                      notify((error as Error).message);
+                    }
+                  }}
+                  onDelete={async () => {
+                    try {
+                      await deleteNote(n);
+                      setRevealedNote(null);
+                    } catch (error) {
+                      notify((error as Error).message);
+                    }
+                  }}
+                />
+              </div>
+            ))
+          ) : (
+            <p className="empty-inline">Your next thought belongs here.</p>
+          )}
+          {completed.length > 0 && (
+            <div className="completed-captures">
+              <h3>Completed notes</h3>
+              {completed.map((note) => (
+                <QuickNoteRow
+                  key={note.id}
+                  note={note}
+                  store={store}
+                  onOpen={openNote}
+                  onDelete={deleteNote}
+                  notify={notify}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      </BulkSelection>
     </div>
   );
 }

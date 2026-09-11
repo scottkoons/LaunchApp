@@ -1,4 +1,5 @@
 'use client';
+import { BulkSelection, SelectionCheckbox } from '@/components/bulk-selection';
 import {
   lazy,
   Suspense,
@@ -1312,99 +1313,110 @@ export default function Launch({
                       />
                     </label>
                   </div>
-                  <div className="notes-grid">
-                    {quickNotes(scoped, scope, query).map((n) => (
-                      <article
-                        className={`note-card${n.archived ? ' is-complete' : ''}`}
-                        key={n.id}
-                      >
-                        <p className="note-date">
-                          {new Date(n.createdAt).toLocaleString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            hour: 'numeric',
-                            minute: '2-digit',
-                          })}
-                        </p>
-                        <button className="note-title" onClick={() => open(n)}>
-                          {n.title}
-                        </button>
-                        <p className="note-body">
-                          {n.notes !== n.title ? n.notes : ''}
-                        </p>
-                        {n.files.length > 0 && (
-                          <span className="hint">
-                            {n.files.length} attachment
-                            {n.files.length > 1 ? 's' : ''}
-                          </span>
-                        )}
-                        <div className="note-actions">
+                  <BulkSelection
+                    key={`${scope}-${query}`}
+                    items={quickNotes(scoped, scope, query)}
+                    store={store}
+                    notify={notify}
+                  >
+                    <div className="notes-grid">
+                      {quickNotes(scoped, scope, query).map((n) => (
+                        <article
+                          className={`note-card${n.archived ? ' is-complete' : ''}`}
+                          key={n.id}
+                        >
+                          <SelectionCheckbox item={n} />
+                          <p className="note-date">
+                            {new Date(n.createdAt).toLocaleString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit',
+                            })}
+                          </p>
                           <button
-                            className="icon-button"
-                            aria-label={`Edit note: ${n.title}`}
-                            title="Edit note"
+                            className="note-title"
                             onClick={() => open(n)}
                           >
-                            <Pencil />
+                            {n.title}
                           </button>
-                          <button
-                            className="text-button"
-                            onClick={() =>
-                              add('task', {
-                                title: n.title,
-                                notes: n.notes,
-                                files: n.files,
-                                sourceId: n.id,
-                              })
-                            }
-                          >
-                            Make task
-                            <ArrowUpRight />
-                          </button>
-                          {scope === 'business' && (
+                          <p className="note-body">
+                            {n.notes !== n.title ? n.notes : ''}
+                          </p>
+                          {n.files.length > 0 && (
+                            <span className="hint">
+                              {n.files.length} attachment
+                              {n.files.length > 1 ? 's' : ''}
+                            </span>
+                          )}
+                          <div className="note-actions">
+                            <button
+                              className="icon-button"
+                              aria-label={`Edit note: ${n.title}`}
+                              title="Edit note"
+                              onClick={() => open(n)}
+                            >
+                              <Pencil />
+                            </button>
                             <button
                               className="text-button"
                               onClick={() =>
-                                add('agenda', {
+                                add('task', {
                                   title: n.title,
                                   notes: n.notes,
                                   files: n.files,
-                                  date: day(),
                                   sourceId: n.id,
-                                  report: true,
                                 })
                               }
                             >
-                              Agenda item
+                              Make task
+                              <ArrowUpRight />
                             </button>
-                          )}
-                          <button
-                            className="icon-button"
-                            aria-pressed={!!n.archived}
-                            aria-label={
-                              n.archived ? 'Uncheck note' : 'Complete note'
-                            }
-                            onClick={() =>
-                              void store
-                                .change(n, { archived: !n.archived })
-                                .catch((error) =>
-                                  notify((error as Error).message),
-                                )
-                            }
-                          >
-                            <Check />
-                          </button>
-                          <button
-                            className="icon-button"
-                            aria-label="Trash note"
-                            onClick={() => void trash(n)}
-                          >
-                            <Trash2 />
-                          </button>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
+                            {scope === 'business' && (
+                              <button
+                                className="text-button"
+                                onClick={() =>
+                                  add('agenda', {
+                                    title: n.title,
+                                    notes: n.notes,
+                                    files: n.files,
+                                    date: day(),
+                                    sourceId: n.id,
+                                    report: true,
+                                  })
+                                }
+                              >
+                                Agenda item
+                              </button>
+                            )}
+                            <button
+                              className="icon-button"
+                              aria-pressed={!!n.archived}
+                              aria-label={
+                                n.archived ? 'Uncheck note' : 'Complete note'
+                              }
+                              onClick={() =>
+                                void store
+                                  .change(n, { archived: !n.archived })
+                                  .catch((error) =>
+                                    notify((error as Error).message),
+                                  )
+                              }
+                            >
+                              <Check />
+                            </button>
+                            <button
+                              className="icon-button"
+                              aria-label="Trash note"
+                              onClick={() => void trash(n)}
+                            >
+                              <Trash2 />
+                            </button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </BulkSelection>
                   {!quickNotes(scoped, scope).length && (
                     <Empty
                       title="Catch the thought."

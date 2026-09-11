@@ -6076,3 +6076,50 @@ h3,
 .address-header-actions .button.primary {
   color: #fff;
 }
+
+/* Shared selection controls for notes and meeting agenda. */
+.bulk-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 10px 0;
+  margin-bottom: 8px;
+}
+.bulk-toolbar > span {
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+.bulk-toolbar button {
+  min-height: 36px;
+}
+.bulk-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 36px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.bulk-checkbox input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+.bulk-capture-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bulk-capture-row .swipe-note {
+  flex: 1;
+  min-width: 0;
+}
+.note-card:has(.bulk-checkbox input:checked),
+.quick-note-row:has(.bulk-checkbox input:checked),
+.agenda-drawer-row:has(.bulk-checkbox input:checked) {
+  outline: 1px solid var(--primary);
+  outline-offset: -1px;
+}

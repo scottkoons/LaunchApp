@@ -1,4 +1,5 @@
 'use client';
+import { BulkSelection, SelectionCheckbox } from '@/components/bulk-selection';
 
 import { useRef, useState } from 'react';
 import {
@@ -38,7 +39,7 @@ type Props = {
   store: LaunchStore;
   onOpen: (item: Entity) => void;
   onDelete: (item: Entity) => Promise<void>;
-  notify: (text: string) => void;
+  notify: (text: string, undo?: () => void) => void;
 };
 
 export function AgendaDrawer({
@@ -128,158 +129,169 @@ export function AgendaDrawer({
           <Plus />
         </button>
       </form>
-      <DndContext
-        sensors={sensors}
-        collisionDetection={(args) => {
-          const source = active.find((item) => item.id === args.active.id);
-          return closestCenter({
-            ...args,
-            droppableContainers: args.droppableContainers.filter(
-              (container) =>
-                !!active.find((item) => item.id === container.id)?.important ===
-                !!source?.important,
-            ),
-          });
-        }}
-        onDragEnd={({ active: dragged, over }) => {
-          if (over && over.id !== dragged.id)
-            void run(async () => {
-              await store.reorderAgenda(
-                scope,
-                String(dragged.id),
-                String(over.id),
-              );
-              notify('Agenda order saved.');
-            });
-        }}
-        accessibility={{
-          screenReaderInstructions: {
-            draggable:
-              'Press Space to pick up an agenda item, use the arrow keys to move it, then press Space to drop or Escape to cancel. Important items stay at the top.',
-          },
-        }}
+      <BulkSelection
+        key={`${scope}-${showDiscussed}`}
+        items={[...active, ...(showDiscussed ? discussed : [])]}
+        store={store}
+        notify={notify}
       >
-        <SortableContext
-          items={active.map((item) => item.id)}
-          strategy={verticalListSortingStrategy}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={(args) => {
+            const source = active.find((item) => item.id === args.active.id);
+            return closestCenter({
+              ...args,
+              droppableContainers: args.droppableContainers.filter(
+                (container) =>
+                  !!active.find((item) => item.id === container.id)
+                    ?.important === !!source?.important,
+              ),
+            });
+          }}
+          onDragEnd={({ active: dragged, over }) => {
+            if (over && over.id !== dragged.id)
+              void run(async () => {
+                await store.reorderAgenda(
+                  scope,
+                  String(dragged.id),
+                  String(over.id),
+                );
+                notify('Agenda order saved.');
+              });
+          }}
+          accessibility={{
+            screenReaderInstructions: {
+              draggable:
+                'Press Space to pick up an agenda item, use the arrow keys to move it, then press Space to drop or Escape to cancel. Important items stay at the top.',
+            },
+          }}
         >
-          <ul className="agenda-drawer-list" aria-label="Active agenda items">
-            {active.map((item) => (
-              <AgendaRow
-                key={item.id}
-                item={item}
-                disabled={busy}
-                onOpen={() => onOpen(item)}
-                onFlag={() =>
-                  void run(async () => {
-                    await store.change(item, { important: !item.important });
-                  })
-                }
-                onDiscuss={() => mark(item, true)}
-                onDelete={() => void run(() => onDelete(item))}
-              />
-            ))}
-          </ul>
-        </SortableContext>
-      </DndContext>
-      {!active.length && (
-        <p className="hint agenda-empty">
-          Nothing on the agenda yet. Add what you want to discuss at the next
-          meeting.
-        </p>
-      )}
-      {discussed.length > 0 && (
-        <section className="agenda-discussed">
-          <button
-            className="agenda-discussed-toggle"
-            aria-expanded={showDiscussed}
-            aria-controls="discussed-agenda-items"
-            onClick={() => {
-              setShowDiscussed(!showDiscussed);
-              setConfirmClear(false);
-            }}
+          <SortableContext
+            items={active.map((item) => item.id)}
+            strategy={verticalListSortingStrategy}
           >
-            <ChevronRight className={showDiscussed ? 'is-open' : ''} />
-            <span>Discussed</span>
-            <span className="agenda-discussed-count">{discussed.length}</span>
-          </button>
-          {showDiscussed && (
-            <div id="discussed-agenda-items">
-              <ul
-                className="agenda-drawer-list"
-                aria-label="Discussed agenda items"
-              >
-                {discussed.map((item) => (
-                  <li key={item.id} className="agenda-drawer-row is-discussed">
-                    <button
-                      className="agenda-row-title"
-                      onClick={() => onOpen(item)}
+            <ul className="agenda-drawer-list" aria-label="Active agenda items">
+              {active.map((item) => (
+                <AgendaRow
+                  key={item.id}
+                  item={item}
+                  disabled={busy}
+                  onOpen={() => onOpen(item)}
+                  onFlag={() =>
+                    void run(async () => {
+                      await store.change(item, { important: !item.important });
+                    })
+                  }
+                  onDiscuss={() => mark(item, true)}
+                  onDelete={() => void run(() => onDelete(item))}
+                />
+              ))}
+            </ul>
+          </SortableContext>
+        </DndContext>
+        {!active.length && (
+          <p className="hint agenda-empty">
+            Nothing on the agenda yet. Add what you want to discuss at the next
+            meeting.
+          </p>
+        )}
+        {discussed.length > 0 && (
+          <section className="agenda-discussed">
+            <button
+              className="agenda-discussed-toggle"
+              aria-expanded={showDiscussed}
+              aria-controls="discussed-agenda-items"
+              onClick={() => {
+                setShowDiscussed(!showDiscussed);
+                setConfirmClear(false);
+              }}
+            >
+              <ChevronRight className={showDiscussed ? 'is-open' : ''} />
+              <span>Discussed</span>
+              <span className="agenda-discussed-count">{discussed.length}</span>
+            </button>
+            {showDiscussed && (
+              <div id="discussed-agenda-items">
+                <ul
+                  className="agenda-drawer-list"
+                  aria-label="Discussed agenda items"
+                >
+                  {discussed.map((item) => (
+                    <li
+                      key={item.id}
+                      className="agenda-drawer-row is-discussed"
                     >
-                      {item.title}
-                    </button>
-                    <div className="agenda-row-actions">
+                      <SelectionCheckbox item={item} />
                       <button
-                        disabled={busy}
-                        className="agenda-row-action"
-                        aria-label={`Restore ${item.title} to active agenda`}
-                        title="Restore to active agenda"
-                        onClick={() => mark(item, false)}
+                        className="agenda-row-title"
+                        onClick={() => onOpen(item)}
                       >
-                        <Undo2 />
+                        {item.title}
+                      </button>
+                      <div className="agenda-row-actions">
+                        <button
+                          disabled={busy}
+                          className="agenda-row-action"
+                          aria-label={`Restore ${item.title} to active agenda`}
+                          title="Restore to active agenda"
+                          onClick={() => mark(item, false)}
+                        >
+                          <Undo2 />
+                        </button>
+                        <button
+                          disabled={busy}
+                          className="agenda-row-action is-delete"
+                          aria-label={`Delete agenda item: ${item.title}`}
+                          title="Delete"
+                          onClick={() => void run(() => onDelete(item))}
+                        >
+                          <Trash2 />
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <div className="agenda-clear">
+                  {confirmClear ? (
+                    <>
+                      <p>Move {discussed.length} discussed items to Trash?</p>
+                      <button
+                        className="text-button"
+                        disabled={busy}
+                        onClick={() => setConfirmClear(false)}
+                      >
+                        Cancel
                       </button>
                       <button
+                        className="text-button danger"
                         disabled={busy}
-                        className="agenda-row-action is-delete"
-                        aria-label={`Delete agenda item: ${item.title}`}
-                        title="Delete"
-                        onClick={() => void run(() => onDelete(item))}
+                        onClick={() =>
+                          void run(async () => {
+                            for (const item of discussed)
+                              await store.change(item, { deletedAt: now() });
+                            setConfirmClear(false);
+                            notify('Discussed items moved to Trash.');
+                          })
+                        }
                       >
-                        <Trash2 />
+                        Clear discussed
                       </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-              <div className="agenda-clear">
-                {confirmClear ? (
-                  <>
-                    <p>Move {discussed.length} discussed items to Trash?</p>
+                    </>
+                  ) : (
                     <button
                       className="text-button"
                       disabled={busy}
-                      onClick={() => setConfirmClear(false)}
+                      onClick={() => setConfirmClear(true)}
                     >
-                      Cancel
+                      Clear discussed ({discussed.length})
                     </button>
-                    <button
-                      className="text-button danger"
-                      disabled={busy}
-                      onClick={() =>
-                        void run(async () => {
-                          for (const item of discussed)
-                            await store.change(item, { deletedAt: now() });
-                          setConfirmClear(false);
-                          notify('Discussed items moved to Trash.');
-                        })
-                      }
-                    >
-                      Clear discussed
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    className="text-button"
-                    disabled={busy}
-                    onClick={() => setConfirmClear(true)}
-                  >
-                    Clear discussed ({discussed.length})
-                  </button>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
-          )}
-        </section>
-      )}
+            )}
+          </section>
+        )}
+      </BulkSelection>
     </div>
   );
 }
@@ -318,6 +330,7 @@ function AgendaRow({
       }}
       className={`agenda-drawer-row${item.important ? ' is-important' : ''}${isDragging ? ' is-dragging' : ''}`}
     >
+      <SelectionCheckbox item={item} />
       <button
         ref={setActivatorNodeRef}
         {...attributes}

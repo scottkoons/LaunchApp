@@ -148,6 +148,11 @@ export class LaunchStore {
     entityId: string;
     before: Partial<Entity>;
     after: Partial<Entity>;
+    related?: {
+      entityId: string;
+      before: Partial<Entity>;
+      after: Partial<Entity>;
+    }[];
   }[] = [];
   undoing = false;
   get canUndo() {
@@ -293,29 +298,63 @@ export class LaunchStore {
     void this.sync();
     return next;
   }
+  async trashMany(items: Entity[]) {
+    const ids = new Set(items.map((item) => item.id));
+    const current = this.data.records.filter(
+      (item) =>
+        ids.has(item.id) &&
+        !item.deletedAt &&
+        (item.kind === 'note' || item.kind === 'agenda'),
+    );
+    if (!current.length) return 0;
+    const deletedAt = now();
+    const actions = current.map((item) => ({
+      entityId: item.id,
+      before: { deletedAt: null },
+      after: { deletedAt },
+    }));
+    // Queue the whole selection before yielding, so one undo restores the batch.
+    const writes = current.map((item) =>
+      this.change(item, { deletedAt }, false),
+    );
+    this.undoHistory.push({ ...actions[0], related: actions.slice(1) });
+    if (this.undoHistory.length > 50) this.undoHistory.shift();
+    await Promise.all(writes);
+    return current.length;
+  }
   async undoLast() {
     if (this.undoing) return null;
     const action = this.undoHistory.at(-1);
     if (!action) return null;
-    const current = this.data.records.find((e) => e.id === action.entityId);
+    const actions = [action, ...(action.related || [])];
+    const records = actions.map((entry) =>
+      this.data.records.find((e) => e.id === entry.entityId),
+    );
     if (
-      !current ||
-      Object.entries(action.after).some(
-        ([key, value]) =>
-          JSON.stringify(current[key as keyof Entity]) !==
-          JSON.stringify(value),
+      actions.some(
+        (entry, index) =>
+          !records[index] ||
+          Object.entries(entry.after).some(
+            ([key, value]) =>
+              JSON.stringify(records[index]![key as keyof Entity]) !==
+              JSON.stringify(value),
+          ),
       )
     ) {
       this.undoHistory.pop();
       throw new Error(
-        'This item has changed since that action. Open it to review its latest state.',
+        'An item has changed since that action. Open Trash to review its latest state.',
       );
     }
     this.undoing = true;
     this.undoHistory.pop();
     try {
-      const restored = await this.change(current, action.before, false);
-      return restored;
+      const restored = await Promise.all(
+        actions.map((entry, index) =>
+          this.change(records[index]!, entry.before, false),
+        ),
+      );
+      return restored[0];
     } finally {
       this.undoing = false;
     }

@@ -1,4 +1,5 @@
 'use client';
+import { SelectionCheckbox } from '@/components/bulk-selection';
 import { useRef, useState } from 'react';
 import { Check, Pencil, Trash2 } from 'lucide-react';
 import type { Entity } from '@/lib/model';
@@ -15,7 +16,7 @@ export function QuickNoteRow({
   store: LaunchStore;
   onOpen: (note: Entity) => void;
   onDelete: (note: Entity) => Promise<void>;
-  notify: (text: string) => void;
+  notify: (text: string, undo?: () => void) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const pending = useRef(false);
@@ -34,6 +35,7 @@ export function QuickNoteRow({
   }
   return (
     <article className={`quick-note-row${note.archived ? ' is-complete' : ''}`}>
+      <SelectionCheckbox item={note} />
       <button className="quick-note-copy" onClick={() => onOpen(note)}>
         <span className="quick-note-title">{note.title}</span>
         <small>

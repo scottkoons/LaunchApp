@@ -1,4 +1,5 @@
 'use client';
+import { BulkSelection } from '@/components/bulk-selection';
 /* oxlint-disable jsx-a11y/prefer-tag-over-role -- This is a focusable WAI-ARIA window-splitter control, not a static thematic hr. */
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -30,7 +31,7 @@ export function NotesDrawer({
   onOpen: (item: Entity) => void;
   onCapture: (text: string) => void;
   onDelete: (item: Entity) => Promise<void>;
-  notify: (text: string) => void;
+  notify: (text: string, undo?: () => void) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState('notes');
@@ -205,18 +206,25 @@ export function NotesDrawer({
                     </button>
                   </div>
                 </form>
-                <div className="drawer-notes-list">
-                  {items.map((item) => (
-                    <QuickNoteRow
-                      key={item.id}
-                      note={item}
-                      store={store}
-                      onOpen={onOpen}
-                      onDelete={onDelete}
-                      notify={notify}
-                    />
-                  ))}
-                </div>
+                <BulkSelection
+                  key={scope}
+                  items={items}
+                  store={store}
+                  notify={notify}
+                >
+                  <div className="drawer-notes-list">
+                    {items.map((item) => (
+                      <QuickNoteRow
+                        key={item.id}
+                        note={item}
+                        store={store}
+                        onOpen={onOpen}
+                        onDelete={onDelete}
+                        notify={notify}
+                      />
+                    ))}
+                  </div>
+                </BulkSelection>
                 {!items.length && (
                   <p className="hint">
                     Phone captures and quick reminders appear here.

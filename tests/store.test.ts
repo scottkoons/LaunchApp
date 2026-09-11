@@ -1023,3 +1023,77 @@ void test('address book profiles, primary contacts and attachment labels persist
     'New specifications',
   );
 });
+
+void test('bulk trash deletes only selected notes and agenda items and undoes the entire batch', async () => {
+  Object.defineProperty(globalThis, 'navigator', {
+    value: { onLine: false },
+    configurable: true,
+  });
+  const store = new LaunchStore('bulk-trash-' + crypto.randomUUID());
+  await store.init();
+  const note = await store.add(
+    createEntity('note', 'business', {
+      title: 'Selected note',
+      archived: true,
+    }),
+  );
+  const agenda = await store.add(
+    createEntity('agenda', 'business', {
+      title: 'Selected agenda',
+      status: 'completed',
+    }),
+  );
+  const untouched = await store.add(
+    createEntity('note', 'personal', { title: 'Keep this' }),
+  );
+  const task = await store.add(
+    createEntity('task', 'business', { title: 'Task is not eligible' }),
+  );
+  assert.equal(await store.trashMany([note, agenda, note, task]), 2);
+  assert.ok(store.data.records.find((e) => e.id === note.id)?.deletedAt);
+  assert.ok(store.data.records.find((e) => e.id === agenda.id)?.deletedAt);
+  assert.ok(!store.data.records.find((e) => e.id === untouched.id)?.deletedAt);
+  assert.ok(!store.data.records.find((e) => e.id === task.id)?.deletedAt);
+  const reopened = new LaunchStore(store.account);
+  await reopened.init();
+  assert.ok(reopened.data.records.find((e) => e.id === note.id)?.deletedAt);
+  await store.change(
+    store.data.records.find((e) => e.id === note.id)!,
+    { notes: 'Later edit retained' },
+  );
+  await store.undoLast();
+  assert.ok(!store.data.records.find((e) => e.id === note.id)?.deletedAt);
+  assert.ok(!store.data.records.find((e) => e.id === agenda.id)?.deletedAt);
+  assert.equal(
+    store.data.records.find((e) => e.id === note.id)?.archived,
+    true,
+  );
+  assert.equal(
+    store.data.records.find((e) => e.id === note.id)?.notes,
+    'Later edit retained',
+  );
+  assert.equal(
+    store.data.records.find((e) => e.id === agenda.id)?.status,
+    'completed',
+  );
+  assert.equal(await store.trashMany([]), 0);
+});
+
+void test('bulk undo refuses the whole batch if one deletion has changed', async () => {
+  const store = new LaunchStore('bulk-conflict-' + crypto.randomUUID());
+  await store.init();
+  const first = await store.add(
+    createEntity('note', 'business', { title: 'First' }),
+  );
+  const second = await store.add(
+    createEntity('agenda', 'business', { title: 'Second' }),
+  );
+  await store.trashMany([first, second]);
+  await store.change(
+    store.data.records.find((e) => e.id === second.id)!,
+    { deletedAt: null },
+    false,
+  );
+  await assert.rejects(store.undoLast(), /changed since that action/);
+  assert.ok(store.data.records.find((e) => e.id === first.id)?.deletedAt);
+});
