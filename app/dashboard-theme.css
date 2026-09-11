@@ -9,7 +9,6 @@
   --radius-xl: 18px;
   --control-radius: 10px;
   --panel-radius: 16px;
-  --shell-radius: 28px;
   --control-highlight: color-mix(in oklab, var(--foreground) 6%, transparent);
   --panel-shadow: 0 2px 8px
     color-mix(in oklab, var(--background) 24%, transparent);
@@ -45,7 +44,6 @@
   --green: #10b981;
   --yellow: #fbbf24;
   --blue: #38bdf8;
-  --canvas: #0d1117;
   --button-face: var(--primary);
   --button-ink: var(--primary-foreground);
   --input-surface: var(--background);
@@ -76,7 +74,6 @@
   --green: #66c7a5;
   --yellow: #e9c46e;
   --blue: #87b9ee;
-  --canvas: #263b59;
   --input-surface: #111c2f;
 }
 :root[data-theme='light'] {
@@ -105,7 +102,6 @@
   --green: #237859;
   --yellow: #886312;
   --blue: #28688f;
-  --canvas: #c4dbe4;
   --input-surface: #f9fbfd;
   --button-face: #203f53;
   --button-ink: #f2f8fc;
@@ -114,7 +110,7 @@
 /* One clear type hierarchy across themes, including portaled editors. */
 html[data-theme] body {
   font-family: var(--font-sans);
-  background: var(--canvas);
+  background: var(--background);
 }
 html[data-theme]
   :is(
@@ -450,44 +446,8 @@ html[data-theme] .theme-swatch.light {
   border-color: #27637d;
 }
 
-/* The reference's rounded outer frame, without changing the page's scroll behavior. */
+/* Keep the app flush with the window, with no decorative outer frame. */
 @media (min-width: 768px) {
-  html[data-theme] [data-slot='sidebar-wrapper'] {
-    width: calc(100% - 24px);
-    min-height: calc(100svh - 24px);
-    margin: 12px;
-    border: 1px solid var(--border);
-    border-radius: var(--shell-radius);
-    background: var(--background);
-    align-items: stretch;
-  }
-  html[data-theme] [data-slot='sidebar']:not([data-mobile]) {
-    position: sticky;
-    top: 12px;
-    height: calc(100svh - 24px);
-    flex-shrink: 0;
-    border-radius: 27px 0 0 27px;
-  }
-  html[data-theme] [data-slot='sidebar-container'] {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    height: 100%;
-    border-radius: inherit;
-    overflow: hidden;
-  }
-  html[data-theme] [data-slot='sidebar-inner'] {
-    border-radius: inherit;
-  }
-  html[data-theme] .notes-drawer {
-    top: 12px;
-    height: calc(100dvh - 24px);
-    border-radius: 0 27px 27px 0;
-  }
-  html[data-theme] .workspace {
-    padding-bottom: 4px;
-  }
   html[data-theme] .page {
     padding-top: 24px;
   }
