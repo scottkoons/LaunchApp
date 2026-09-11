@@ -3,6 +3,7 @@ type CaptureItem = {
   title: string;
   notes: string;
   dueDate: string;
+  dueLocal?: string;
   reminderLocal: string;
   // Elapsed time from recording, independent of clock changes and processing delay.
   reminderOffsetMinutes?: number;
@@ -124,6 +125,13 @@ export function validatePlan(value: unknown): CapturePlan {
         item.notes.length > 20000 ||
         typeof item.dueDate !== 'string' ||
         (item.dueDate && !validDay(item.dueDate)) ||
+        (item.dueLocal !== undefined &&
+          (typeof item.dueLocal !== 'string' ||
+            (item.dueLocal &&
+              (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(item.dueLocal) ||
+                !validDay(item.dueLocal.slice(0, 10)) ||
+                (item.dueDate &&
+                  item.dueDate !== item.dueLocal.slice(0, 10)))))) ||
         typeof item.meetingDate !== 'string' ||
         (item.meetingDate && !validDay(item.meetingDate)) ||
         typeof item.reminderLocal !== 'string' ||
@@ -135,7 +143,10 @@ export function validatePlan(value: unknown): CapturePlan {
             item.reminderOffsetMinutes < 0 ||
             item.reminderOffsetMinutes > 525600)) ||
         (item.kind !== 'task' &&
-          (item.dueDate || item.reminderLocal || item.reminderOffsetMinutes)) ||
+          (item.dueDate ||
+            item.dueLocal ||
+            item.reminderLocal ||
+            item.reminderOffsetMinutes)) ||
         (item.kind !== 'agenda' && item.meetingDate)
       )
         throw new Error('The suggested item needs a clearer title or date.');
@@ -144,6 +155,7 @@ export function validatePlan(value: unknown): CapturePlan {
         title: item.title.trim(),
         notes: item.notes,
         dueDate: item.dueDate,
+        ...(item.dueLocal !== undefined ? { dueLocal: item.dueLocal } : {}),
         reminderLocal: item.reminderLocal,
         ...(item.reminderOffsetMinutes !== undefined
           ? { reminderOffsetMinutes: item.reminderOffsetMinutes }
@@ -201,6 +213,7 @@ export const captureSchema = {
           title: { type: 'string' },
           notes: { type: 'string' },
           dueDate: { type: 'string' },
+          dueLocal: { type: 'string' },
           reminderLocal: { type: 'string' },
           reminderOffsetMinutes: {
             type: 'number',
@@ -214,6 +227,7 @@ export const captureSchema = {
           'title',
           'notes',
           'dueDate',
+          'dueLocal',
           'reminderLocal',
           'reminderOffsetMinutes',
           'meetingDate',

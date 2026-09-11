@@ -55,3 +55,11 @@ Live synthetic voice and image requests and the browser capture flow were
 verified locally, including permission denial, offline/reload recovery, and a
 390-pixel phone viewport. Physical iPhone microphone behavior still needs a
 device check after deployment.
+
+## Personal checklist and due times
+
+Personal To-Dos combines existing tasks and notes without migrating or deleting records. New Personal captures are notes with optional due and reminder fields. Converted source captures remain stored but are omitted from the checklist to avoid displaying the same action twice. Completion is shared across the checklist, capture, and reminder alert.
+
+The phone navigation has three destinations: Capture in the current workspace, Today in Business, and To-Dos in Personal.
+
+Timed actions store `dueAt` and `dueZone` separately from `reminderAt` and `reminderZone`. Capture plans can include `dueLocal` as well as a date. Explicit reminder times are retained even when later than the due time. Relative advance warnings use the due time; conflicting instructions should request clarification. The visible reminder shows remaining or elapsed minutes. Alarms remain in-app alerts; background/closed-app push is not implemented.

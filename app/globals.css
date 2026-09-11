@@ -6123,3 +6123,101 @@ h3,
   outline: 1px solid var(--primary);
   outline-offset: -1px;
 }
+
+.personal-todos {
+  max-width: 1000px;
+}
+.todo-add,
+.todo-filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.todo-add > input {
+  flex: 1;
+  min-width: 150px;
+}
+.todo-filters > input {
+  flex: 1;
+  min-width: 150px;
+}
+.todo-filters label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.todo-filters > span {
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+.todo-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.todo-list > li {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.todo-list > li > input {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  accent-color: var(--primary);
+}
+.todo-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+  text-align: left;
+  background: none;
+  border: 0;
+  color: inherit;
+}
+.todo-copy > span {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+.todo-copy strong {
+  overflow-wrap: anywhere;
+}
+.todo-copy small {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  color: var(--muted-foreground);
+}
+.todo-copy small span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.todo-copy small svg {
+  width: 13px;
+  height: 13px;
+}
+.todo-list .is-done strong {
+  text-decoration: line-through;
+  color: var(--muted-foreground);
+}
+.todo-dates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.todo-editor-modal {
+  max-height: calc(100dvh - 32px);
+}

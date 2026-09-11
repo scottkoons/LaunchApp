@@ -4,6 +4,7 @@ import { agendaItems, agendaOrderChanges } from './agenda';
 import {
   captureFingerprint,
   captureReminderAt,
+  reminderInstant,
   localTime,
   validatePlan,
   type CapturePlan,
@@ -304,7 +305,9 @@ export class LaunchStore {
       (item) =>
         ids.has(item.id) &&
         !item.deletedAt &&
-        (item.kind === 'note' || item.kind === 'agenda'),
+        (item.kind === 'note' ||
+          item.kind === 'agenda' ||
+          (item.kind === 'task' && item.scope === 'personal')),
     );
     if (!current.length) return 0;
     const deletedAt = now();
@@ -448,24 +451,41 @@ export class LaunchStore {
           'That reminder time has passed. Choose a future time, or save without a reminder.',
         );
       return validateEntity(
-        createEntity(item.kind, source.scope, {
-          id: `${source.id}-capture-${index}-${item.kind}`,
-          sourceId: source.id,
-          title: item.title,
-          notes: item.notes,
-          files: [...source.files],
-          final: item.dueDate,
-          plannedDate:
-            !item.dueDate && reminderAt
-              ? localTime(reminderAt, source.capture!.timeZone).slice(0, 10)
-              : '',
-          draft: '',
-          routine: item.kind === 'task',
-          date: item.meetingDate,
-          reminderAt,
-          reminderZone: reminderAt ? source.capture!.timeZone : '',
-          deletedAt: null,
-        }),
+        createEntity(
+          source.scope === 'personal' ? 'note' : item.kind,
+          source.scope,
+          {
+            id: `${source.id}-capture-${index}-${item.kind}`,
+            sourceId: source.id,
+            title: item.title,
+            notes: item.notes,
+            files: [...source.files],
+            final:
+              item.dueDate ||
+              item.dueLocal?.slice(0, 10) ||
+              (source.scope === 'personal' ? item.meetingDate : '') ||
+              '',
+            ...(item.dueLocal
+              ? {
+                  dueAt: reminderInstant(
+                    item.dueLocal,
+                    source.capture!.timeZone,
+                  ),
+                  dueZone: source.capture!.timeZone,
+                }
+              : {}),
+            plannedDate:
+              !item.dueDate && reminderAt
+                ? localTime(reminderAt, source.capture!.timeZone).slice(0, 10)
+                : '',
+            draft: '',
+            routine: item.kind === 'task',
+            date: item.meetingDate,
+            reminderAt,
+            reminderZone: reminderAt ? source.capture!.timeZone : '',
+            deletedAt: null,
+          },
+        ),
       );
     });
     const resultHashes = await Promise.all(

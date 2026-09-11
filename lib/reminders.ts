@@ -13,10 +13,12 @@ export function reminderDay(task: Pick<Entity, 'reminderAt' | 'reminderZone'>) {
 }
 export function reminderPending(task: Entity) {
   return (
-    task.kind === 'task' &&
+    (task.kind === 'task' ||
+      (task.kind === 'note' && task.scope === 'personal')) &&
     !task.deletedAt &&
     !task.archived &&
-    task.status === 'active' &&
+    task.status !== 'completed' &&
+    task.status !== 'postponed' &&
     !!task.reminderAt &&
     task.reminderAcknowledgedAt !== task.reminderAt
   );

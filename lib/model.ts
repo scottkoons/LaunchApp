@@ -49,6 +49,8 @@ export type Entity = {
   routine?: boolean;
   completedAt?: string;
   plannedDate?: string;
+  dueAt?: string;
+  dueZone?: string;
   reminderAt?: string;
   reminderZone?: string;
   reminderAcknowledgedAt?: string;
@@ -829,6 +831,8 @@ export function spawnOccurrence(t: Entity, date: string): Entity {
     seriesId: t.seriesId || t.id,
     occurrence: date,
     repeatAnchor: anchor,
+    dueAt: '',
+    dueZone: '',
     reminderAt: '',
     reminderZone: '',
     reminderAcknowledgedAt: '',
@@ -976,7 +980,11 @@ export function validateEntity(e: Entity) {
       (!/^\d{4}-\d{2}-\d{2}$/.test(e[k]!) || day(parseDay(e[k]!)) !== e[k])
     )
       throw new Error('Invalid date');
-  for (const field of ['reminderAt', 'reminderAcknowledgedAt'] as const) {
+  for (const field of [
+    'reminderAt',
+    'reminderAcknowledgedAt',
+    'dueAt',
+  ] as const) {
     if (e[field] !== undefined && typeof e[field] !== 'string')
       throw new Error('Invalid reminder time.');
     if (
@@ -988,8 +996,23 @@ export function validateEntity(e: Entity) {
     )
       throw new Error('Invalid reminder time.');
   }
-  if (e.reminderAt && (e.kind !== 'task' || !e.reminderZone))
+  if (
+    e.reminderAt &&
+    ((e.kind !== 'task' && !(e.kind === 'note' && e.scope === 'personal')) ||
+      !e.reminderZone)
+  )
     throw new Error('Reminders need a task and a time zone.');
+  if (e.dueAt && (!e.dueZone || !['task', 'note'].includes(e.kind)))
+    throw new Error('Due times need a to-do and a time zone.');
+  if (e.dueZone !== undefined && typeof e.dueZone !== 'string')
+    throw new Error('Invalid due time zone.');
+  if (e.dueZone) {
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: e.dueZone });
+    } catch {
+      throw new Error('Invalid due time zone.');
+    }
+  }
   if (e.reminderZone !== undefined && typeof e.reminderZone !== 'string')
     throw new Error('Choose a valid reminder time zone.');
   if (e.reminderZone) {

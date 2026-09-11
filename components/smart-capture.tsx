@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { OriginalAudio } from './original-audio';
 import { Camera, Check, ImagePlus, Mic, Square, Undo2 } from 'lucide-react';
 import { notePlan, processCapture, saveMedia } from '@/lib/capture-client';
+import { todoDueLabel } from '@/lib/personal-todos';
 import { reminderLabel } from '@/lib/reminders';
 import type { LaunchStore } from '@/lib/client-store';
 import type { Entity, Scope } from '@/lib/model';
@@ -85,7 +86,7 @@ export function SmartCapture({
       items.length === 1
         ? items[0].reminderAt
           ? `Reminder set for ${reminderLabel(items[0])}.`
-          : `${items[0].kind === 'agenda' ? 'Agenda item' : items[0].kind === 'task' ? 'Task' : 'Note'} saved.`
+          : `${items[0].scope === 'personal' ? 'To-do' : items[0].kind === 'agenda' ? 'Agenda item' : items[0].kind === 'task' ? 'Task' : 'Note'} saved.`
         : `${items.length} items saved.`,
       () => void undo(sourceId),
     );
@@ -341,13 +342,16 @@ export function SmartCapture({
               >
                 <span>{item.title}</span>
                 <small>
-                  {item.kind === 'task'
-                    ? `Task${item.final ? ' · Final: ' + item.final : ''}`
-                    : item.kind === 'agenda'
-                      ? 'Meeting agenda'
-                      : 'Quick note'}{' '}
+                  {item.scope === 'personal'
+                    ? 'To-do'
+                    : item.kind === 'task'
+                      ? `Task${item.final ? ' · Final: ' + item.final : ''}`
+                      : item.kind === 'agenda'
+                        ? 'Meeting agenda'
+                        : 'Quick note'}{' '}
                   · Edit
                 </small>
+                {item.dueAt && <small>Due · {todoDueLabel(item)}</small>}
                 {item.reminderAt && (
                   <small className="capture-reminder-time">
                     Reminder · {reminderLabel(item)}

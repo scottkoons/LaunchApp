@@ -93,23 +93,27 @@ export function Capture({
     setBusy(true);
     try {
       await store.add(
-        createEntity(reminderAt ? 'task' : 'note', scope, {
-          title: text.trim().split('\n')[0].slice(0, 120) || 'Photo note',
-          notes: text.trim(),
-          files: ids,
-          report: !!reminderAt && scope === 'business',
-          routine: !!reminderAt,
-          reminderAt,
-          reminderZone,
-          ...(reminderAt
-            ? {
-                plannedDate: reminderDay({
-                  reminderAt,
-                  reminderZone,
-                } as Entity),
-              }
-            : {}),
-        }),
+        createEntity(
+          scope === 'personal' ? 'note' : reminderAt ? 'task' : 'note',
+          scope,
+          {
+            title: text.trim().split('\n')[0].slice(0, 120) || 'Photo note',
+            notes: text.trim(),
+            files: ids,
+            report: !!reminderAt && scope === 'business',
+            routine: !!reminderAt,
+            reminderAt,
+            reminderZone,
+            ...(reminderAt
+              ? {
+                  plannedDate: reminderDay({
+                    reminderAt,
+                    reminderZone,
+                  } as Entity),
+                }
+              : {}),
+          },
+        ),
       );
       setText('');
       setIds([]);
@@ -117,9 +121,11 @@ export function Capture({
       setReminderZone('');
       localStorage.removeItem(key);
       notify(
-        reminderAt
-          ? 'Task saved with a reminder inside Launch.'
-          : 'Note captured.',
+        scope === 'personal'
+          ? 'To-do saved to your personal list.'
+          : reminderAt
+            ? 'Task saved with a reminder inside Launch.'
+            : 'Note captured.',
       );
       input.current?.focus();
     } catch (e) {
@@ -191,7 +197,9 @@ export function Capture({
         />
         {reminderAt && (
           <p className="hint">
-            This will become one task on your dashboard
+            {scope === 'personal'
+              ? 'This to-do will appear on your personal list'
+              : 'This will become one task on your dashboard'}
             {scope === 'business'
               ? ' and be included in marketing reports'
               : ''}
@@ -204,7 +212,13 @@ export function Capture({
             disabled={busy || filesBusy || (!text.trim() && !ids.length)}
             onClick={() => void save()}
           >
-            {busy ? 'Saving…' : reminderAt ? 'Save task' : 'Save note'}
+            {busy
+              ? 'Saving…'
+              : scope === 'personal'
+                ? 'Save to-do'
+                : reminderAt
+                  ? 'Save task'
+                  : 'Save note'}
             <ArrowUpRight />
           </button>
         </div>
@@ -225,8 +239,9 @@ export function Capture({
           />
         </details>
         <p className="hint">
-          Private notes stay out of reports until you make them a task or add
-          them to the meeting agenda.
+          {scope === 'personal'
+            ? 'Everything you capture appears in To-Dos. Add a reminder or check it off whenever you like.'
+            : 'Private notes stay out of reports until you make them a task or add them to the meeting agenda.'}
         </p>
       </div>
       <BulkSelection

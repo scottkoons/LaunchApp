@@ -1,4 +1,7 @@
 'use client';
+import { PersonalTodos } from '@/components/personal-todos';
+import { TodoEditor } from '@/components/todo-editor';
+import { todoCompletion } from '@/lib/personal-todos';
 import { BulkSelection, SelectionCheckbox } from '@/components/bulk-selection';
 import {
   lazy,
@@ -269,6 +272,7 @@ export default function Launch({
     localStorage.setItem('launch-theme', t);
   }
   function navigate(v: string) {
+    window.scrollTo({ top: 0, behavior: 'instant' });
     if (v === 'meetings') setReportRequest((n) => n + 1);
     if (['grouped', 'flat', 'calendar'].includes(v)) {
       setView('tasks');
@@ -420,6 +424,7 @@ export default function Launch({
     setEditorOpen(true);
   }
   function add(kind: Entity['kind'], extra: Partial<Entity> = {}) {
+    if (scope === 'personal' && kind === 'task') kind = 'note';
     open(
       createEntity(kind, kind === 'agenda' ? 'business' : scope, {
         ...(kind === 'task' ? { routine: true } : {}),
@@ -432,6 +437,11 @@ export default function Launch({
     );
   }
   async function complete(t: Entity) {
+    if (t.scope === 'personal') {
+      await store.change(t, todoCompletion(t, true));
+      notify('To-do completed.', () => void undoLast());
+      return;
+    }
     if (completionTimers.current.has(t.id)) return;
     animateCompletion(t);
     try {
@@ -751,44 +761,71 @@ export default function Launch({
         </SidebarHeader>
         <SidebarContent>
           <nav aria-label="Main navigation">
-            {NAV_GROUPS.map((group) => (
+            {NAV_GROUPS.filter(
+              (group) =>
+                scope !== 'personal' ||
+                group.items.some((id) =>
+                  ['dashboard', 'completed', 'reference', 'contacts'].includes(
+                    id,
+                  ),
+                ),
+            ).map((group) => (
               <SidebarGroup className="launch-nav-group" key={group.label}>
                 <SidebarGroupLabel className="nav-label">
-                  {group.label}
+                  {scope === 'personal' && group.label === 'TASKS'
+                    ? 'TO-DOS'
+                    : group.label}
                 </SidebarGroupLabel>
                 <SidebarMenu>
-                  {group.items.map((id) => {
-                    const [v, label, Icon] = NAV.find(([key]) => key === id)!;
-                    const accessibleLabel =
-                      v === 'dashboard'
-                        ? `${label}, ${overdue} overdue, ${upcoming} upcoming`
-                        : v === 'notes' && notes.length
-                          ? `${label}, ${notes.length} notes`
-                          : label;
-                    return (
-                      <SidebarMenuItem key={v}>
-                        <NavItem
-                          label={accessibleLabel}
-                          active={
-                            view === v || (view === 'tasks' && mode === v)
-                          }
-                          onClick={() => navigate(v)}
-                        >
-                          <Icon />
-                          <span className="nav-text">{label}</span>
-                          {v === 'notes' && notes.length > 0 && (
-                            <b className="nav-count">{notes.length}</b>
-                          )}
-                          {v === 'dashboard' && overdue > 0 && (
-                            <b className="nav-count red">{overdue}</b>
-                          )}
-                          {v === 'dashboard' && upcoming > 0 && (
-                            <b className="nav-count amber">{upcoming}</b>
-                          )}
-                        </NavItem>
-                      </SidebarMenuItem>
-                    );
-                  })}
+                  {group.items
+                    .filter(
+                      (id) =>
+                        scope !== 'personal' ||
+                        [
+                          'dashboard',
+                          'completed',
+                          'reference',
+                          'contacts',
+                        ].includes(id),
+                    )
+                    .map((id) => {
+                      const [v, originalLabel, Icon] = NAV.find(
+                        ([key]) => key === id,
+                      )!;
+                      const label =
+                        scope === 'personal' && v === 'dashboard'
+                          ? 'To-Dos'
+                          : originalLabel;
+                      const accessibleLabel =
+                        v === 'dashboard' && scope === 'business'
+                          ? `${label}, ${overdue} overdue, ${upcoming} upcoming`
+                          : v === 'notes' && notes.length
+                            ? `${label}, ${notes.length} notes`
+                            : label;
+                      return (
+                        <SidebarMenuItem key={v}>
+                          <NavItem
+                            label={accessibleLabel}
+                            active={
+                              view === v || (view === 'tasks' && mode === v)
+                            }
+                            onClick={() => navigate(v)}
+                          >
+                            <Icon />
+                            <span className="nav-text">{label}</span>
+                            {v === 'notes' && notes.length > 0 && (
+                              <b className="nav-count">{notes.length}</b>
+                            )}
+                            {v === 'dashboard' && overdue > 0 && (
+                              <b className="nav-count red">{overdue}</b>
+                            )}
+                            {v === 'dashboard' && upcoming > 0 && (
+                              <b className="nav-count amber">{upcoming}</b>
+                            )}
+                          </NavItem>
+                        </SidebarMenuItem>
+                      );
+                    })}
                 </SidebarMenu>
               </SidebarGroup>
             ))}
@@ -863,6 +900,7 @@ export default function Launch({
               onChange={(next) => {
                 setScope(next);
                 setQuery('');
+                if (view !== 'capture') navigate('dashboard');
               }}
             />
           </div>
@@ -889,7 +927,8 @@ export default function Launch({
               className="button quick-button"
             >
               <CaptureIcon />
-              Quick note<kbd>N</kbd>
+              {scope === 'personal' ? 'Capture' : 'Quick note'}
+              <kbd>N</kbd>
             </button>
           </div>
         </header>
@@ -905,6 +944,38 @@ export default function Launch({
               openNote={open}
               deleteNote={trash}
             />
+          ) : scope === 'personal' &&
+            [
+              'dashboard',
+              'tasks',
+              'notes',
+              'today',
+              'completed',
+              'backburner',
+              'postponed',
+            ].includes(view) ? (
+            <>
+              <div className="page-heading">
+                <div>
+                  <p className="eyebrow">PERSONAL</p>
+                  <h1>
+                    {view === 'completed' ? 'Completed to-dos' : 'To-Dos'}
+                  </h1>
+                </div>
+                <button className="button primary" onClick={() => add('note')}>
+                  <Plus />
+                  Add to-do
+                </button>
+              </div>
+              <PersonalTodos
+                key={view}
+                records={records}
+                store={store}
+                onOpen={open}
+                notify={notify}
+                completedOnly={view === 'completed'}
+              />
+            </>
           ) : (
             <>
               <div className="page-heading" hidden={view === 'contacts'}>
@@ -1561,32 +1632,34 @@ export default function Launch({
           </button>
         </footer>
       </div>
-      <NotesDrawer
-        key={scope}
-        scope={scope}
-        records={live}
-        store={store}
-        onOpen={open}
-        onCapture={(text) => {
-          if (text.trim()) {
-            const key = `launch-capture-${account}-${scope}`;
-            let draft: { text?: string; ids?: string[] } = {};
-            try {
-              draft = JSON.parse(localStorage.getItem(key) || '{}');
-            } catch {}
-            localStorage.setItem(
-              key,
-              JSON.stringify({
-                ...draft,
-                text: [draft.text, text.trim()].filter(Boolean).join('\n\n'),
-              }),
-            );
-          }
-          setCaptureOpen(true);
-        }}
-        onDelete={trash}
-        notify={notify}
-      />
+      {scope === 'business' && (
+        <NotesDrawer
+          key={scope}
+          scope={scope}
+          records={live}
+          store={store}
+          onOpen={open}
+          onCapture={(text) => {
+            if (text.trim()) {
+              const key = `launch-capture-${account}-${scope}`;
+              let draft: { text?: string; ids?: string[] } = {};
+              try {
+                draft = JSON.parse(localStorage.getItem(key) || '{}');
+              } catch {}
+              localStorage.setItem(
+                key,
+                JSON.stringify({
+                  ...draft,
+                  text: [draft.text, text.trim()].filter(Boolean).join('\n\n'),
+                }),
+              );
+            }
+            setCaptureOpen(true);
+          }}
+          onDelete={trash}
+          notify={notify}
+        />
+      )}
       <nav className="mobile-bottom" aria-label="Phone navigation">
         <button
           className={view === 'capture' ? 'active' : ''}
@@ -1596,21 +1669,41 @@ export default function Launch({
           Capture
         </button>
         <button
-          className={view === 'today' ? 'active' : ''}
-          onClick={() => navigate('today')}
+          className={scope === 'business' && view === 'today' ? 'active' : ''}
+          onClick={() => {
+            setScope('business');
+            setQuery('');
+            navigate('today');
+          }}
         >
           <CheckCheck />
           Today
         </button>
         <button
-          className={view !== 'capture' && view !== 'today' ? 'active' : ''}
-          onClick={() => navigate('tasks')}
+          className={scope === 'personal' && view !== 'capture' ? 'active' : ''}
+          onClick={() => {
+            setScope('personal');
+            setQuery('');
+            navigate('dashboard');
+          }}
         >
-          <LayoutDashboard />
-          Dashboard
+          <CheckCheck />
+          To-Dos
         </button>
       </nav>
-      {editorOpen && editor?.kind === 'note' && (
+      {editorOpen &&
+        editor?.scope === 'personal' &&
+        ['note', 'task'].includes(editor.kind) && (
+          <TodoEditor
+            key={editor.id}
+            item={editor}
+            store={store}
+            files={files}
+            onClose={() => setEditorOpen(false)}
+            notify={notify}
+          />
+        )}
+      {editorOpen && editor?.kind === 'note' && editor.scope !== 'personal' && (
         <NoteEditor
           key={editor.id}
           note={editor}
@@ -1646,6 +1739,7 @@ export default function Launch({
         entity={editor}
         open={
           editorOpen &&
+          !(editor?.scope === 'personal' && editor.kind === 'task') &&
           !['note', 'company', 'contact'].includes(editor?.kind || '')
         }
         onClose={() => setEditorOpen(false)}

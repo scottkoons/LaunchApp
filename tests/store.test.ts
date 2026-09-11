@@ -1097,3 +1097,102 @@ void test('bulk undo refuses the whole batch if one deletion has changed', async
   await assert.rejects(store.undoLast(), /changed since that action/);
   assert.ok(store.data.records.find((e) => e.id === first.id)?.deletedAt);
 });
+
+void test('personal checklist includes old notes and tasks, retains completion and separate due/alarm times', async () => {
+  const { personalTodos, todoCompletion, todoDone, todoCountdown } =
+    await import('../lib/personal-todos');
+  const { dueReminders } = await import('../lib/reminders');
+  const store = new LaunchStore('personal-todos-' + crypto.randomUUID());
+  await store.init();
+  const note = await store.add(
+    createEntity('note', 'personal', {
+      title: 'Groceries',
+      dueAt: '2030-09-11T16:00:00.000Z',
+      dueZone: 'America/Denver',
+      final: '2030-09-11',
+      reminderAt: '2030-09-11T15:45:00.000Z',
+      reminderZone: 'America/Denver',
+    }),
+  );
+  const oldTask = await store.add(
+    createEntity('task', 'personal', { title: 'Old task' }),
+  );
+  await store.add(createEntity('note', 'business', { title: 'Business note' }));
+  assert.equal(personalTodos(store.data.records).length, 2);
+  assert.deepEqual(
+    dueReminders(store.data.records, Date.parse('2030-09-11T15:45:00Z')).map(
+      (e) => e.id,
+    ),
+    [note.id],
+  );
+  assert.match(
+    todoCountdown(note, Date.parse('2030-09-11T15:45:00Z')),
+    /15 minutes left/,
+  );
+  assert.match(
+    todoCountdown(note, Date.parse('2030-09-11T16:45:00Z')),
+    /45 minutes ago/,
+  );
+  await store.change(note, todoCompletion(note, true));
+  assert.equal(
+    dueReminders(store.data.records, Date.parse('2030-09-11T17:00:00Z')).length,
+    0,
+  );
+  const reopened = new LaunchStore(store.account);
+  await reopened.init();
+  assert.ok(todoDone(reopened.data.records.find((e) => e.id === note.id)!));
+  await store.undoLast();
+  assert.equal(
+    store.data.records.find((e) => e.id === note.id)?.dueAt,
+    note.dueAt,
+  );
+  assert.equal(await store.trashMany([note, oldTask]), 2);
+  await store.undoLast();
+  assert.equal(personalTodos(store.data.records).length, 2);
+});
+
+void test('spoken personal capture saves due time independently, hides duplicate original, and survives restart', async () => {
+  const { personalTodos } = await import('../lib/personal-todos');
+  const store = new LaunchStore('personal-capture-' + crypto.randomUUID());
+  await store.init();
+  const source = await store.add(
+    createEntity('note', 'personal', {
+      title: 'Original groceries recording',
+      capture: {
+        type: 'voice',
+        state: 'review',
+        capturedAt: '2030-09-10T15:00:00.000Z',
+        timeZone: 'America/Denver',
+        instruction: '',
+      },
+    }),
+  );
+  const [item] = await store.applyCapture(source.id, {
+    question: '',
+    items: [
+      {
+        kind: 'task',
+        title: 'Pick up groceries',
+        notes: '',
+        dueDate: '2030-09-11',
+        dueLocal: '2030-09-11T10:00',
+        reminderLocal: '2030-09-11T10:45',
+        meetingDate: '',
+      },
+    ],
+  });
+  assert.equal(item.dueAt, '2030-09-11T16:00:00.000Z');
+  assert.equal(item.reminderAt, '2030-09-11T16:45:00.000Z');
+  const reopened = new LaunchStore(store.account);
+  await reopened.init();
+  assert.deepEqual(
+    personalTodos(reopened.data.records).map((e) => e.id),
+    [item.id],
+  );
+  assert.ok(reopened.data.records.find((e) => e.id === source.id));
+  await reopened.undoCapture(source.id);
+  assert.deepEqual(
+    personalTodos(reopened.data.records).map((e) => e.id),
+    [source.id],
+  );
+});

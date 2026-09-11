@@ -1,4 +1,5 @@
 'use client';
+import { todoCountdown } from '@/lib/personal-todos';
 import { useEffect, useState } from 'react';
 import { Bell, Check, X } from 'lucide-react';
 import {
@@ -109,6 +110,7 @@ export function ReminderAlerts({
       </div>
       <output aria-live="polite" aria-atomic="true">
         <strong>{task.title}</strong>
+        {task.dueAt && <span>{todoCountdown(task, clock)}</span>}
         <span className="reminder-time">
           {reminderLabel(task)}
           {due.length > 1 ? ` · ${due.length - 1} more to review` : ''}
@@ -137,7 +139,7 @@ export function ReminderAlerts({
           1 hour
         </button>
         <button className="text-button" onClick={() => onOpen(task)}>
-          Open task
+          {task.scope === 'personal' ? 'Open to-do' : 'Open task'}
         </button>
       </div>
     </aside>
