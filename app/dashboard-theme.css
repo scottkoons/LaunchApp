@@ -504,3 +504,14 @@ html[data-theme] .theme-swatch.light {
     border: 0;
   }
 }
+.agent-setup {
+  margin-top: 1.25rem;
+}
+.agent-setup textarea {
+  width: 100%;
+  max-width: 100%;
+  resize: vertical;
+  font-family: monospace;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}

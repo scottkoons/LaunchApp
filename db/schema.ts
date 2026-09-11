@@ -42,3 +42,27 @@ export const files = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.owner, t.id] })],
 );
+export const agentConnections = sqliteTable(
+  'agent_connections',
+  {
+    id: text('id').primaryKey(),
+    owner: text('owner').notNull(),
+    name: text('name').notNull(),
+    tokenHash: text('token_hash').notNull().unique(),
+    createdAt: text('created_at').notNull(),
+    revokedAt: text('revoked_at'),
+  },
+  (t) => [index('idx_agent_connections_owner').on(t.owner)],
+);
+export const agentRequests = sqliteTable(
+  'agent_requests',
+  {
+    connectionId: text('connection_id').notNull(),
+    requestId: text('request_id').notNull(),
+    owner: text('owner').notNull(),
+    entityId: text('entity_id').notNull(),
+    fingerprint: text('fingerprint').notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.connectionId, t.requestId] })],
+);

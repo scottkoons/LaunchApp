@@ -15,6 +15,7 @@ import { Pick } from './launch-controls';
 import { createEntity, now, type Entity, type FileMeta } from '@/lib/model';
 import { downloadBlob } from './calendar';
 import type { LaunchStore } from '@/lib/client-store';
+import { AgentConnections } from './agent-connections';
 export function SettingsPanel({
   store,
   records,
@@ -290,6 +291,7 @@ export function SettingsPanel({
           <Cloud />
         </div>
       </section>
+      <AgentConnections notify={notify} />
       <section className="settings-section">
         <h2>Your data stays yours.</h2>
         <p className="hint">
