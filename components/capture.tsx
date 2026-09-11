@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
-import { ArrowUpRight, Camera } from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
+import { SmartCapture } from './smart-capture';
 import { ReminderPicker } from './reminder-picker';
 import { reminderDay } from '@/lib/reminders';
 import { QuickNoteRow } from './quick-note-row';
@@ -27,7 +28,7 @@ export function Capture({
   store: LaunchStore;
   files: FileMeta[];
   records: Entity[];
-  notify: (s: string) => void;
+  notify: (s: string, undo?: () => void) => void;
   openNote: (e: Entity) => void;
   deleteNote: (e: Entity) => Promise<void>;
 }) {
@@ -58,8 +59,7 @@ export function Capture({
       fileBusy(false);
     }
   }
-  const input = useRef<HTMLTextAreaElement>(null),
-    photo = useRef<HTMLInputElement>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     try {
       const draft = JSON.parse(localStorage.getItem(key) || '{}');
@@ -143,15 +143,24 @@ export function Capture({
           {scope === 'personal' ? 'PERSONAL' : 'BUSINESS'}
         </p>
         <h1>Quick capture</h1>
-        <p>Type a note, use your keyboard’s microphone, or add a photo.</p>
+        <p>Speak a thought, give a direction, or capture text from a photo.</p>
       </div>
       <div className="capture-composer">
-        <p className="capture-help desktop-dictation">
-          Type a note or dictate with Wispr Flow.
-        </p>
-        <p className="capture-help phone-dictation">
-          Tap below, then use the microphone on your iPhone keyboard to speak
-          your note.
+        <SmartCapture
+          key={scope}
+          scope={scope}
+          store={store}
+          records={records}
+          instruction={text}
+          onSaved={(saved) =>
+            setText((current) => (current === saved ? '' : current))
+          }
+          notify={notify}
+          openItem={openNote}
+        />
+        <p className="capture-help">
+          Or type a note. You can also add directions here before scanning a
+          photo.
         </p>
         <textarea
           ref={input}
@@ -189,25 +198,6 @@ export function Capture({
           </p>
         )}
         <div className="capture-actions">
-          <input
-            hidden
-            ref={photo}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={(e) => {
-              void addFiles(Array.from(e.target.files || []));
-              e.target.value = '';
-            }}
-          />
-          <button
-            className="button"
-            disabled={busy || filesBusy}
-            onClick={() => photo.current?.click()}
-          >
-            <Camera />
-            Photo
-          </button>
           <button
             className="button primary"
             disabled={busy || filesBusy || (!text.trim() && !ids.length)}
@@ -234,7 +224,8 @@ export function Capture({
           />
         </details>
         <p className="hint">
-          Private notes stay out of reports until you add them to a meeting.
+          Private notes stay out of reports until you make them a task or add
+          them to the meeting agenda.
         </p>
       </div>
       <section className="recent-captures">

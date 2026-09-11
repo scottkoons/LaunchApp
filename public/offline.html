@@ -81,6 +81,26 @@
         color: #172333;
         border: 0;
       }
+      #mic {
+        display: block;
+        width: 112px;
+        height: 112px;
+        border-radius: 50%;
+        background: #eeb05e;
+        color: #18283a;
+        margin: 24px auto 12px;
+        border: 0;
+      }
+      #mic svg {
+        width: 36px;
+        height: 36px;
+      }
+      #mic[aria-pressed='true'] {
+        background: #f08080;
+      }
+      #mic-label {
+        text-align: center;
+      }
       label {
         display: block;
         margin: 20px 0 8px;
@@ -115,7 +135,28 @@
       </header>
       <p>Offline · capture is still here.</p>
       <h1>Keep the thought.</h1>
-      <p>Use your keyboard’s microphone to dictate, or type a quick note.</p>
+      <p>
+        Record now. Reconnect to transcribe your words and follow your
+        directions.
+      </p>
+      <button
+        id="mic"
+        aria-label="Record a voice note"
+        aria-pressed="false"
+        disabled
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          aria-hidden="true"
+        >
+          <rect x="9" y="2" width="6" height="12" rx="3" />
+          <path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3" />
+        </svg>
+      </button>
+      <p id="mic-label">Tap to speak · up to 3 minutes</p>
       <select id="scope" aria-label="Workspace">
         <option value="business">Business</option>
         <option value="personal">Personal</option></select
@@ -124,7 +165,7 @@
         placeholder="What do you want to remember?"
         aria-label="Quick note"
       ></textarea
-      ><label for="photo">Add a photo or file</label
+      ><label for="photo">Add a photo to transcribe, or attach files</label
       ><input id="photo" type="file" multiple />
       <div>
         <button class="primary" id="save">Save on this device</button
@@ -140,6 +181,6 @@
       </p>
       <div id="tasks"></div>
     </main>
-    <script src="/offline.js" defer></script>
+    <script src="/offline.js?v=capture-1" defer></script>
   </body>
 </html>

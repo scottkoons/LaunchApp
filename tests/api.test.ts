@@ -396,3 +396,54 @@ void test('reminders round-trip through authenticated persistence and malformed 
     200,
   );
 });
+
+void test('address book profile and attachment metadata round trip through authenticated sync', async () => {
+  const sign = await fetch(base + '/signin-with-chatgpt?return_to=/', {
+    redirect: 'manual',
+  });
+  cookie = sign.headers.get('set-cookie')!.split(';')[0];
+  const company = createEntity('company', 'business', {
+    title: 'QA contacts API',
+    website: 'example.test',
+    address: '1 Main',
+    portraitId: 'portrait',
+    files: ['portrait', 'brief'],
+    fileLabels: { brief: 'Specifications' },
+  });
+  const person = createEntity('contact', 'business', {
+    title: 'QA Contact API',
+    firstName: 'QA',
+    lastName: 'Contact API',
+    jobTitle: 'Publisher',
+    companyName: company.title,
+    companyId: company.id,
+  });
+  company.primaryId = person.id;
+  await add(company);
+  await add(person);
+  const response = await request('/api/sync');
+  const saved = (await response.json()) as { records: Entity[] };
+  assert.equal(
+    saved.records.find((e) => e.id === company.id)?.fileLabels?.brief,
+    'Specifications',
+  );
+  assert.equal(
+    saved.records.find((e) => e.id === person.id)?.jobTitle,
+    'Publisher',
+  );
+  for (const entity of [company, person]) {
+    const removed = await request('/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: uid(),
+        entityId: entity.id,
+        kind: entity.kind,
+        patch: { deletedAt: new Date().toISOString() },
+        base: {},
+        createdAt: entity.createdAt,
+      }),
+    });
+    assert.equal(removed.status, 200);
+  }
+});

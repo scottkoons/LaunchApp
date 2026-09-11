@@ -2,16 +2,253 @@ import { quickNotes } from '../lib/notes';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import 'fake-indexeddb/auto';
+void test('voice capture originals survive offline restart; tasks use Final; apply is idempotent and undo preserves originals', async () => {
+  Object.defineProperty(globalThis, 'navigator', {
+    value: { onLine: false },
+    configurable: true,
+  });
+  const store = new LaunchStore('voice-capture-' + crypto.randomUUID());
+  await store.init();
+  const files = await store.addFiles([
+    new File(['original audio'], 'note.webm', { type: 'audio/webm' }),
+  ]);
+  const source = await store.add(
+    createEntity('note', 'personal', {
+      title: 'Voice recording',
+      files,
+      notes: 'Call Sonos tomorrow. Ask about speakers.',
+      capture: {
+        type: 'voice',
+        state: 'review',
+        capturedAt: '2026-09-10T15:00:00.000Z',
+        timeZone: 'America/Denver',
+        instruction: '',
+        transcript: 'Call Sonos tomorrow. Ask about speakers.',
+      },
+    }),
+  );
+  const plan = {
+    question: '',
+    items: [
+      {
+        kind: 'task' as const,
+        title: 'Call Sonos',
+        notes: 'Ask about speakers.',
+        dueDate: '2026-09-11',
+        reminderLocal: '',
+        meetingDate: '',
+      },
+      {
+        kind: 'agenda' as const,
+        title: 'Marketing',
+        notes: 'Review the campaign\nDiscuss the budget',
+        dueDate: '',
+        reminderLocal: '',
+        meetingDate: '',
+      },
+    ],
+  };
+  const items = await store.applyCapture(source.id, plan);
+  assert.equal(items[0].final, '2026-09-11');
+  assert.equal(items[0].draft, '');
+  assert.equal(items[0].reminderAt, '');
+  assert.equal(items[0].scope, 'personal');
+  assert.equal(items[0].report, false);
+  assert.equal(items[1].notes, 'Review the campaign\nDiscuss the budget');
+  assert.deepEqual(items[0].files, files);
+  assert.equal((await store.applyCapture(source.id, plan)).length, 2);
+  assert.equal(store.data.records.length, 3);
+  const restarted = new LaunchStore(store.account);
+  await restarted.init();
+  assert.equal(
+    restarted.data.records.find((e) => e.id === source.id)?.archived,
+    true,
+  );
+  assert.equal(restarted.data.uploads[0].blob.size, 14);
+  // Server sync changes metadata timestamps without changing the saved content.
+  restarted.data.records = restarted.data.records.map((e) =>
+    e.sourceId === source.id
+      ? {
+          ...e,
+          updatedAt: '2026-09-11T12:00:00.000Z',
+          version: 1,
+          reportDefaultsVersion: 1,
+        }
+      : e,
+  );
+  await restarted.undoCapture(source.id);
+  assert.equal(
+    restarted.data.records.find((e) => e.id === source.id)?.archived,
+    false,
+  );
+  assert.equal(restarted.data.records.filter((e) => !e.deletedAt).length, 1);
+  assert.equal(
+    restarted.data.records.find((e) => e.id === source.id)?.capture?.transcript,
+    source.notes,
+  );
+  await restarted.applyCapture(source.id, plan);
+  assert.equal(restarted.data.records.filter((e) => !e.deletedAt).length, 3);
+  const remote = new Map<string, Entity>();
+  for (const op of restarted.data.queue) {
+    const merged = mergePatch(
+      remote.get(op.entityId),
+      JSON.parse(JSON.stringify(op)),
+    );
+    assert.deepEqual(merged.conflicts, []);
+    remote.set(op.entityId, validateEntity(merged.entity!));
+  }
+  assert.equal(remote.get(source.id)?.capture?.state, 'done');
+  const saved = restarted.data.records.find((e) => e.id === items[0].id)!;
+  await restarted.change(saved, {
+    title: 'Manually edited',
+    updatedAt: '2099-01-01T00:00:00.000Z',
+  });
+  await assert.rejects(restarted.undoCapture(source.id), /has changed/);
+});
+void test('custom reference thumbnails survive offline restart, replacement and reset without replacing attachments', async () => {
+  Object.defineProperty(globalThis, 'navigator', {
+    value: { onLine: false },
+    configurable: true,
+  });
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: { getItem: () => null, setItem: () => {} },
+    configurable: true,
+  });
+  const store = new LaunchStore('reference-thumbnail-' + crypto.randomUUID());
+  await store.init();
+  const original = await store.addFiles([
+    new File(['original'], 'screenshot.png', { type: 'image/png' }),
+  ]);
+  const [fileId] = await store.addFiles([
+    new File(['thumbnail'], 'cover.png', { type: 'image/png' }),
+  ]);
+  const reference = await store.add(
+    createEntity('reference', 'business', {
+      title: 'Reference with a cover',
+      files: original,
+      thumbnail: { type: 'image', fileId },
+    }),
+  );
+  const restarted = new LaunchStore(store.account);
+  await restarted.init();
+  const loaded = restarted.data.records.find(
+    (item) => item.id === reference.id,
+  )!;
+  assert.deepEqual(loaded.thumbnail, { type: 'image', fileId });
+  assert.deepEqual(loaded.files, original);
+  assert.equal(
+    restarted.data.uploads.find((item) => item.meta.id === fileId)?.blob.size,
+    9,
+  );
+  const withIcon = await restarted.change(loaded, {
+    thumbnail: { type: 'icon', icon: 'star' },
+  });
+  const reset = await restarted.change(withIcon, { thumbnail: null });
+  assert.deepEqual(reset.files, original);
+  const remote = new Map<string, Entity>();
+  for (const op of restarted.data.queue) {
+    const result = mergePatch(
+      remote.get(op.entityId),
+      JSON.parse(JSON.stringify(op)),
+    );
+    assert.deepEqual(result.conflicts, []);
+    remote.set(op.entityId, validateEntity(result.entity!));
+  }
+  assert.equal(remote.get(reference.id)?.thumbnail, null);
+  assert.deepEqual(remote.get(reference.id)?.files, original);
+  const finalStore = new LaunchStore(store.account);
+  await finalStore.init();
+  assert.equal(
+    finalStore.data.records.find((item) => item.id === reference.id)?.thumbnail,
+    null,
+  );
+});
 import { LaunchStore } from '../lib/client-store';
+import { agendaItems } from '../lib/agenda';
 import {
-  validateEntity,
   createEntity,
   mergePatch,
   taskMonthMove,
+  validateEntity,
   type Entity,
   type Operation,
   type FileMeta,
 } from '../lib/model';
+void test('agenda order, discussion state and trash persist offline with safe undo', async () => {
+  Object.defineProperty(globalThis, 'navigator', {
+    value: { onLine: false },
+    configurable: true,
+  });
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: { getItem: () => null, setItem: () => {} },
+    configurable: true,
+  });
+  const store = new LaunchStore('agenda-controls-' + crypto.randomUUID());
+  await store.init();
+  const first = await store.add(
+    createEntity('agenda', 'business', {
+      title: 'First',
+      order: 10,
+      notes: 'Original notes',
+      files: ['photo-id'],
+    }),
+  );
+  const second = await store.add(
+    createEntity('agenda', 'business', { title: 'Second', order: 20 }),
+  );
+  const flagged = await store.add(
+    createEntity('agenda', 'business', {
+      title: 'Flagged',
+      order: 30,
+      important: true,
+    }),
+  );
+  await store.reorderAgenda('business', second.id, first.id);
+  const restarted = new LaunchStore(store.account);
+  await restarted.init();
+  assert.deepEqual(
+    agendaItems(restarted.data.records, 'business').map((item) => item.id),
+    [flagged.id, second.id, first.id],
+  );
+  const remote = new Map<string, Entity>();
+  for (const op of restarted.data.queue) {
+    const merged = mergePatch(remote.get(op.entityId), op);
+    assert.deepEqual(merged.conflicts, []);
+    remote.set(op.entityId, merged.entity!);
+  }
+  assert.deepEqual(
+    agendaItems([...remote.values()], 'business').map((item) => item.id),
+    [flagged.id, second.id, first.id],
+  );
+  const current = restarted.data.records.find((item) => item.id === first.id)!;
+  const discussed = await restarted.change(current, {
+    status: 'completed',
+    archived: true,
+    completedAt: '2026-09-09T12:00:00.000Z',
+  });
+  assert.equal(
+    agendaItems(restarted.data.records, 'business', true)[0].id,
+    first.id,
+  );
+  await restarted.change(discussed, { notes: 'New notes after discussion' });
+  const restored = await restarted.undoLast();
+  assert.equal(restored?.archived, false);
+  assert.equal(restored?.status, 'active');
+  assert.equal(restored?.notes, 'New notes after discussion');
+  assert.deepEqual(restored?.files, ['photo-id']);
+  await restarted.change(restored!, { deletedAt: '2026-09-09T13:00:00.000Z' });
+  assert.ok(
+    !agendaItems(restarted.data.records, 'business').some(
+      (item) => item.id === first.id,
+    ),
+  );
+  await restarted.undoLast();
+  assert.ok(
+    agendaItems(restarted.data.records, 'business').some(
+      (item) => item.id === first.id,
+    ),
+  );
+});
 void test('single-date creation and edits persist Final locally and in the sync operation', async () => {
   Object.defineProperty(globalThis, 'navigator', {
     value: { onLine: false },
@@ -66,6 +303,70 @@ void test('single-date creation and edits persist Final locally and in the sync 
   assert.equal(undone?.status, 'active');
   assert.equal(undone?.final, '2026-09-10');
   assert.equal(undone?.finalDone, false);
+});
+void test('saving a task or agenda item archives its source note and preserves both offline', async () => {
+  Object.defineProperty(globalThis, 'navigator', {
+    value: { onLine: false },
+    configurable: true,
+  });
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: { getItem: () => null, setItem: () => {} },
+    configurable: true,
+  });
+  for (const kind of ['task', 'agenda'] as const) {
+    const account = 'note-conversion-' + crypto.randomUUID();
+    const store = new LaunchStore(account);
+    await store.init();
+    const note = createEntity('note', 'business', {
+      title: 'Menu planning',
+      notes: 'Confirm menu\n\nAssign signs',
+      files: ['photo-id'],
+    });
+    await store.add(note);
+    const destination = createEntity(kind, 'business', {
+      title: note.title,
+      notes: note.notes,
+      files: note.files,
+      sourceId: note.id,
+      report: true,
+      date: kind === 'agenda' ? '2026-09-09' : '',
+    });
+    // Opening or canceling the draft does not archive the note.
+    assert.equal(
+      store.data.records.find((e) => e.id === note.id)?.archived,
+      undefined,
+    );
+    assert.equal(store.data.records.length, 1);
+    await assert.rejects(store.addFromNote({ ...destination, title: '' }));
+    assert.equal(store.data.records.length, 1);
+    assert.equal(store.data.records[0].archived, undefined);
+    await store.addFromNote(destination);
+    const restarted = new LaunchStore(account);
+    await restarted.init();
+    assert.equal(restarted.data.records.length, 2);
+    const original = restarted.data.records.find((e) => e.id === note.id)!;
+    const saved = restarted.data.records.find((e) => e.id === destination.id)!;
+    assert.equal(original.archived, true);
+    assert.equal(original.deletedAt, undefined);
+    assert.equal(original.notes, note.notes);
+    assert.equal(saved.kind, kind);
+    assert.equal(saved.title, note.title);
+    assert.equal(saved.notes, note.notes);
+    assert.deepEqual(saved.files, note.files);
+    assert.equal(saved.report, true);
+    assert.equal(restarted.data.queue.at(-2)?.entityId, saved.id);
+    assert.equal(restarted.data.queue.at(-1)?.entityId, original.id);
+    // The same queued operations produce a visible destination before archiving remotely.
+    const remote = new Map<string, Entity>();
+    for (const op of restarted.data.queue) {
+      const result = mergePatch(remote.get(op.entityId), op);
+      assert.deepEqual(result.conflicts, []);
+      remote.set(op.entityId, result.entity!);
+      if (remote.get(note.id)?.archived) assert.ok(remote.has(destination.id));
+    }
+    assert.equal(remote.get(note.id)?.archived, true);
+    assert.equal(remote.get(destination.id)?.notes, note.notes);
+  }
 });
 void test('offline note and photo survive restart, sync once, and retain conflicting edits', async () => {
   let online = false;
@@ -577,5 +878,76 @@ void test('checked notes stay visible at the bottom and can be unchecked or dele
   assert.equal(
     quickNotes(restarted.data.records, 'business', 'first')[0]?.id,
     first.id,
+  );
+});
+
+void test('address book profiles, primary contacts and attachment labels persist offline and survive undo', async () => {
+  Object.defineProperty(globalThis, 'navigator', {
+    value: { onLine: false },
+    configurable: true,
+  });
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: { getItem: () => null, setItem: () => {} },
+    configurable: true,
+  });
+  const store = new LaunchStore('address-book-' + crypto.randomUUID());
+  await store.init();
+  const [portrait, attachment] = await store.addFiles([
+    new File(['photo'], 'logo.png', { type: 'image/png' }),
+    new File(['document'], 'brief.pdf', { type: 'application/pdf' }),
+  ]);
+  const company = await store.add(
+    createEntity('company', 'business', {
+      title: 'Acme',
+      website: 'acme.test',
+      address: '1 Main',
+      email: 'office@acme.test',
+      files: [portrait, attachment],
+      portraitId: portrait,
+      fileLabels: { [attachment]: 'Specifications' },
+    }),
+  );
+  const person = await store.add(
+    createEntity('contact', 'business', {
+      title: 'Pat Lee',
+      firstName: 'Pat',
+      lastName: 'Lee',
+      jobTitle: 'Publisher',
+      companyId: company.id,
+    }),
+  );
+  const assigned = await store.change(company, { primaryId: person.id });
+  await store.change(assigned, { notes: 'Changed on another tab' });
+  const updated = await store.change(assigned, {
+    website: '',
+    fileLabels: { [attachment]: 'New specifications' },
+  });
+  assert.equal(updated.notes, 'Changed on another tab');
+  await store.change(person, { deletedAt: '2026-09-09T12:00:00.000Z' });
+  await store.undoLast();
+  const next = new LaunchStore(store.account);
+  await next.init();
+  const loaded = next.data.records.find((e) => e.id === company.id)!;
+  assert.equal(loaded.portraitId, portrait);
+  assert.equal(loaded.fileLabels?.[attachment], 'New specifications');
+  assert.equal(loaded.primaryId, person.id);
+  assert.equal(loaded.website, '');
+  assert.equal(
+    next.data.records.find((e) => e.id === person.id)?.deletedAt,
+    null,
+  );
+  const remote = new Map<string, Entity>();
+  for (const op of next.data.queue) {
+    const merged = mergePatch(
+      remote.get(op.entityId),
+      JSON.parse(JSON.stringify(op)),
+    );
+    assert.deepEqual(merged.conflicts, []);
+    remote.set(op.entityId, validateEntity(merged.entity!));
+  }
+  assert.equal(remote.get(company.id)?.portraitId, portrait);
+  assert.equal(
+    remote.get(company.id)?.fileLabels?.[attachment],
+    'New specifications',
   );
 });

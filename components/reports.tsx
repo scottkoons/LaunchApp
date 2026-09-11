@@ -29,6 +29,8 @@ import {
 import { createPdf } from '@/lib/pdf';
 import { PdfPreview, type PdfPreviewHandle } from './pdf-preview';
 import { Pick, Toggle } from './launch-controls';
+import { AgendaNotes } from './agenda-notes';
+import { agendaItems } from '@/lib/agenda';
 import type { LaunchStore } from '@/lib/client-store';
 type Preview = {
   url: string;
@@ -77,9 +79,7 @@ export function Reports({
   const histories = records
     .filter((e) => e.kind === 'meeting' && !e.deletedAt)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const agenda = records.filter(
-    (e) => e.kind === 'agenda' && e.scope === 'business' && !e.deletedAt,
-  );
+  const agenda = agendaItems(records, 'business');
   const set = (patch: Partial<ReportOptions>) =>
     setOptions((o) => ({ ...o, ...patch }));
   useEffect(
@@ -284,7 +284,7 @@ export function Reports({
       <div className="report-hub">
         <section>
           <div className="section-heading">
-            <h2>Discussion items</h2>
+            <h2>Meeting agenda</h2>
             <button
               className="text-button"
               onClick={() => addAgenda(options.meetingDate)}
@@ -295,18 +295,17 @@ export function Reports({
           </div>
           {agenda.length ? (
             agenda.map((a) => (
-              <button
-                className="history-row"
-                key={a.id}
-                onClick={() => open(a)}
-              >
-                <span>
-                  {a.title}
-                  <small>
-                    {a.date ? pretty(a.date) : 'Choose a meeting date'}
-                  </small>
-                </span>
-              </button>
+              <div className="agenda-item" key={a.id}>
+                <button className="history-row" onClick={() => open(a)}>
+                  <span>
+                    {a.title}
+                    <small>
+                      {a.date ? pretty(a.date) : 'Choose a meeting date'}
+                    </small>
+                  </span>
+                </button>
+                <AgendaNotes notes={a.notes} />
+              </div>
             ))
           ) : (
             <p className="hint">
@@ -414,7 +413,7 @@ export function Reports({
                 checked={options.includeAgenda !== false}
                 onChange={(v) => set({ includeAgenda: v })}
               >
-                Include discussion items
+                Include agenda items
               </Toggle>
               <Toggle
                 checked={options.monthlyNotes}
@@ -458,7 +457,7 @@ export function Reports({
             {options.includeAgenda !== false && (
               <div className="two-col">
                 <label className="field">
-                  Discussion from
+                  Agenda from
                   <input
                     type="date"
                     value={options.agendaFrom}
@@ -466,7 +465,7 @@ export function Reports({
                   />
                 </label>
                 <label className="field">
-                  Discussion through
+                  Agenda through
                   <input
                     type="date"
                     value={options.agendaTo}
@@ -515,7 +514,7 @@ export function Reports({
             <p className="hint">
               {selected.tasks.length} scheduled · {selected.completed.length}{' '}
               completed · {selected.backburner.length} unscheduled ·{' '}
-              {selected.agenda.length} discussion items
+              {selected.agenda.length} agenda items
             </p>
             {!selected.tasks.length && !selected.completed.length && (
               <p className="hint">

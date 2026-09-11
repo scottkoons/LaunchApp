@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
+  agendaNoteLines,
   monthLabel,
   reportDateStatus,
   validateReportOptions,
@@ -196,19 +197,41 @@ export function createPdf(s: ReportSnapshot) {
   table('Back burner', s.backburner);
   table('Postponed', s.postponed);
   if (s.agenda.length) {
-    title('Discussion & decisions');
-    autoTable(doc, {
-      startY: y,
-      head: [['Discussion', 'Notes / decision']],
-      body: s.agenda.map((a) => [a.title, a.notes]),
-      styles: { fontSize: 10, cellPadding: 4, overflow: 'linebreak' },
-      headStyles: { fillColor: [26, 42, 60] },
-      margin: { left: 16, right: 16, top: 20, bottom: 20 },
-      rowPageBreak: 'avoid',
-    });
-    y =
-      (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable
-        .finalY + 12;
+    title('Meeting agenda');
+    const room = (height: number) => {
+      if (y + height > doc.internal.pageSize.getHeight() - 20) {
+        doc.addPage();
+        y = 22;
+      }
+    };
+    for (const item of s.agenda) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(22, 36, 52);
+      const heading = doc.splitTextToSize(item.title, width() - 32) as string[];
+      const bullets = agendaNoteLines(item.notes);
+      room(Math.min(heading.length * 5 + (bullets.length ? 7 : 0), 225));
+      for (const line of heading) {
+        room(5);
+        doc.text(line, 16, y);
+        y += 5;
+      }
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(34, 45, 57);
+      for (const bullet of bullets) {
+        const lines = doc.splitTextToSize(bullet, width() - 39) as string[];
+        room(Math.min(lines.length * 5, 225));
+        for (let i = 0; i < lines.length; i++) {
+          room(5);
+          if (i === 0) doc.text('•', 18, y);
+          doc.text(lines[i], 23, y);
+          y += 5;
+        }
+        y += 1.5;
+      }
+      y += 7;
+    }
   }
   if (s.options.calendar) {
     const allOverflow: { month: string; items: string[] }[] = [];

@@ -1,12 +1,21 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { agendaItems, agendaOrderChanges } from './agenda';
+import {
+  captureFingerprint,
+  reminderInstant,
+  validatePlan,
+  type CapturePlan,
+} from './capture-intent';
 import {
   now,
+  createEntity,
   uid,
   validateEntity,
   type Entity,
   type Operation,
   type FileMeta,
+  type Scope,
 } from './model';
 type Cache = {
   records: Entity[];
@@ -310,6 +319,30 @@ export class LaunchStore {
       this.undoing = false;
     }
   }
+  async reorderAgenda(scope: Scope, id: string, target: string) {
+    const changes = agendaOrderChanges(
+      agendaItems(this.data.records, scope),
+      id,
+      target,
+    );
+    if (!changes.length) return;
+    const updatedAt = now();
+    for (const { item, order } of changes) {
+      this.data.records = this.data.records.map((record) =>
+        record.id === item.id ? { ...record, order, updatedAt } : record,
+      );
+      this.data.queue.push({
+        id: uid(),
+        entityId: item.id,
+        kind: 'agenda',
+        patch: { order, updatedAt },
+        base: { order: item.order },
+        createdAt: updatedAt,
+      });
+    }
+    await this.persist();
+    void this.sync();
+  }
   private queueAdd(entity: Entity) {
     validateEntity(entity);
     this.data.records.push(entity);
@@ -356,6 +389,155 @@ export class LaunchStore {
     await this.persist();
     void this.sync();
     return entity;
+  }
+  async applyCapture(sourceId: string, value: CapturePlan) {
+    const source = this.data.records.find((e) => e.id === sourceId);
+    if (!source?.capture || source.deletedAt)
+      throw new Error('Open the original capture again.');
+    if (source.capture.state === 'done')
+      return this.data.records.filter((e) =>
+        source.capture!.resultIds?.includes(e.id),
+      );
+    const plan = validatePlan(value);
+    if (plan.question || !plan.items.length)
+      throw new Error('Answer the capture question first.');
+    const destinations = plan.items.map((item, index) => {
+      const reminderAt = item.reminderLocal
+        ? reminderInstant(item.reminderLocal, source.capture!.timeZone)
+        : '';
+      if (reminderAt && Date.parse(reminderAt) <= Date.now())
+        throw new Error(
+          'That reminder time has passed. Choose a future time, or save without a reminder.',
+        );
+      return validateEntity(
+        createEntity(item.kind, source.scope, {
+          id: `${source.id}-capture-${index}-${item.kind}`,
+          sourceId: source.id,
+          title: item.title,
+          notes: item.notes,
+          files: [...source.files],
+          final: item.dueDate || item.reminderLocal.slice(0, 10),
+          draft: '',
+          routine: item.kind === 'task',
+          date: item.meetingDate,
+          reminderAt,
+          reminderZone: reminderAt ? source.capture!.timeZone : '',
+          deletedAt: null,
+        }),
+      );
+    });
+    const resultHashes = await Promise.all(
+      destinations.map(captureFingerprint),
+    );
+    // All destinations and the retained original are committed in one local transaction.
+    for (const item of destinations) {
+      if (this.data.records.some((e) => e.id === item.id && !e.deletedAt))
+        throw new Error(
+          'This capture already has saved items. Open them to edit.',
+        );
+    }
+    for (const item of destinations) {
+      const previous = this.data.records.find((e) => e.id === item.id);
+      if (!previous) this.queueAdd(item);
+      else {
+        this.data.records = this.data.records.map((e) =>
+          e.id === item.id ? item : e,
+        );
+        this.data.queue.push({
+          id: uid(),
+          entityId: item.id,
+          kind: item.kind,
+          patch: item,
+          base: previous,
+          createdAt: now(),
+        });
+      }
+    }
+    const patch = {
+      archived: true,
+      capture: {
+        ...source.capture,
+        state: 'done' as const,
+        plan,
+        resultIds: destinations.map((e) => e.id),
+        resultHashes,
+      },
+      updatedAt: now(),
+    };
+    this.data.records = this.data.records.map((e) =>
+      e.id === source.id ? { ...e, ...patch } : e,
+    );
+    this.data.queue.push({
+      id: uid(),
+      entityId: source.id,
+      kind: 'note',
+      patch,
+      base: {
+        archived: source.archived,
+        capture: source.capture,
+        updatedAt: source.updatedAt,
+      },
+      createdAt: now(),
+    });
+    await this.persist();
+    void this.sync();
+    return destinations;
+  }
+  async undoCapture(sourceId: string) {
+    const source = this.data.records.find((e) => e.id === sourceId);
+    if (source?.capture?.state !== 'done' || source.deletedAt)
+      throw new Error('Open the original capture to review it.');
+    const results = this.data.records.filter((e) =>
+      source.capture!.resultIds?.includes(e.id),
+    );
+    const fingerprints = await Promise.all(results.map(captureFingerprint));
+    if (
+      results.length !== source.capture.resultIds?.length ||
+      results.some(
+        (e, index) =>
+          e.deletedAt ||
+          this.data.records.find((current) => current.id === e.id) !== e ||
+          fingerprints[index] !==
+            source.capture!.resultHashes?.[
+              source.capture!.resultIds!.indexOf(e.id)
+            ],
+      )
+    )
+      throw new Error(
+        'A captured item has changed. Open it to edit instead of undoing.',
+      );
+    const updatedAt = now();
+    for (const entity of [...results, source]) {
+      const patch: Partial<Entity> =
+        entity.id === source.id
+          ? {
+              archived: false,
+              capture: {
+                ...source.capture,
+                state: 'review',
+                resultIds: [],
+                resultHashes: [],
+              },
+              updatedAt,
+            }
+          : { deletedAt: updatedAt, updatedAt };
+      const base = Object.fromEntries(
+        Object.keys(patch).map((key) => [key, entity[key as keyof Entity]]),
+      );
+      this.data.records = this.data.records.map((e) =>
+        e.id === entity.id ? { ...e, ...patch } : e,
+      );
+      this.data.queue.push({
+        id: uid(),
+        entityId: entity.id,
+        kind: entity.kind,
+        patch,
+        base,
+        createdAt: updatedAt,
+      });
+    }
+    await this.persist();
+    void this.sync();
   }
   async addFiles(files: File[]) {
     for (const file of files)

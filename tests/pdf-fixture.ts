@@ -22,7 +22,8 @@ const tasks = Array.from({ length: 22 }, (_, i) =>
 tasks.push(
   createEntity('agenda', 'business', {
     title: 'Discuss Oktoberfest meal planning',
-    notes: 'Confirm the menu and who will prepare the event signs.',
+    notes:
+      'Confirm the menu.\nAssign the event signs.\n\nReview the budget and confirm the final quantities with the kitchen before sending artwork to print.',
     date: '2026-09-09',
     report: true,
   }),
@@ -35,6 +36,26 @@ const options = {
   agendaTo: '2026-09-09',
 };
 mkdirSync('outputs', { recursive: true });
+const agendaSample = makeReport(
+  [
+    ...tasks.filter((item) => item.kind === 'agenda'),
+    createEntity('agenda', 'business', {
+      title: 'Long agenda item with wrapping and page breaks',
+      report: true,
+      notes: Array.from(
+        { length: 65 },
+        (_, i) =>
+          `Point ${i + 1}: ${'Review the event plan with the team. '.repeat(i === 3 ? 100 : 2)}`,
+      ).join('\n\n'),
+      date: '2026-09-09',
+    }),
+  ],
+  { ...options, calendar: false, cover: false },
+);
+writeFileSync(
+  'outputs/agenda-review.pdf',
+  Buffer.from(createPdf(agendaSample).output('arraybuffer')),
+);
 const monthlySample = makeReport(
   [
     createEntity('task', 'business', {

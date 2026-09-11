@@ -1,4 +1,5 @@
 'use client';
+import { OriginalAudio } from './original-audio';
 import { useEffect, useRef, useState } from 'react';
 import {
   Select,
@@ -17,6 +18,7 @@ import {
 import { Upload, Download, FileText, Camera, X } from 'lucide-react';
 import type { LaunchStore } from '@/lib/client-store';
 import type { FileMeta } from '@/lib/model';
+import { ImageViewer } from './image-viewer';
 export function Pick({
   value,
   onChange,
@@ -245,11 +247,23 @@ export function Attachments({
         open={!!preview}
         onOpenChange={(open) => !open && setPreview(null)}
       >
-        <DialogContent className="file-dialog">
+        <DialogContent
+          className={
+            'file-dialog' +
+            (preview?.type.startsWith('image/') ? ' image-file-dialog' : '')
+          }
+        >
           <DialogTitle>{preview?.name}</DialogTitle>
           <DialogDescription>Original attachment</DialogDescription>
           {preview?.type.startsWith('image/') ? (
-            <img src={urls[preview.id]} alt={preview.name} />
+            <ImageViewer
+              key={preview.id}
+              src={urls[preview.id] || ''}
+              alt={preview.name}
+              active={!!preview}
+            />
+          ) : preview?.type.startsWith('audio/') ? (
+            <OriginalAudio src={urls[preview.id]} aria-label={preview.name} />
           ) : preview?.type === 'application/pdf' ? (
             <iframe src={urls[preview.id]} title={preview.name} />
           ) : (

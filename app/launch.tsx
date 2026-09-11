@@ -39,6 +39,8 @@ import {
 } from '@/components/ui/dialog';
 import { TaskTable } from '@/components/task-table';
 import { TaskDragBoard, TaskDropSection } from '@/components/task-drag-board';
+import { AddressBook } from '@/components/address-book';
+import { AddressEditor } from '@/components/address-editor';
 import { NoteEditor } from '@/components/note-editor';
 import { quickNotes } from '@/lib/notes';
 import { NotesDrawer } from '@/components/notes-drawer';
@@ -69,7 +71,6 @@ import {
   Moon,
   Rocket,
   X,
-  Send,
   FileText,
 } from 'lucide-react';
 import { useLaunchStore } from '@/lib/client-store';
@@ -97,6 +98,12 @@ import {
 } from '@/lib/model';
 import { Pick, Attachments } from '@/components/launch-controls';
 import { TaskEditor } from '@/components/task-editor';
+import {
+  ReferenceThumbnail,
+  useStoredFileUrl,
+} from '@/components/reference-thumbnail';
+import { referenceOriginal } from '@/lib/reference';
+import { ImageViewer } from '@/components/image-viewer';
 import { ReminderAlerts, TodayReminders } from '@/components/reminder-alerts';
 import { Capture } from '@/components/capture';
 import { Calendar } from '@/components/calendar';
@@ -222,6 +229,7 @@ export default function Launch({
       setDirection(1);
     }
   }, [records, ready]);
+  const [addressEdit, setAddressEdit] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const settings = records.find((e) => e.kind === 'settings' && !e.deletedAt);
   const soon = settings?.soonDays ?? 2;
@@ -405,7 +413,8 @@ export default function Launch({
     'postponed',
     'today',
   ].includes(view);
-  function open(e: Entity) {
+  function open(e: Entity, edit = false) {
+    setAddressEdit(edit);
     setEditor(e);
     setEditorOpen(true);
   }
@@ -897,7 +906,7 @@ export default function Launch({
             />
           ) : (
             <>
-              <div className="page-heading">
+              <div className="page-heading" hidden={view === 'contacts'}>
                 <div>
                   <p className="eyebrow">
                     {ready && (view === 'tasks' || isDashboard)
@@ -951,8 +960,9 @@ export default function Launch({
                         : view === 'contacts'
                           ? 'Add company'
                           : view === 'meetings'
-                            ? 'Discussion item'
+                            ? 'Agenda item'
                             : 'Add task'}
+                    {isTaskView && <kbd>Ctrl T</kbd>}
                   </button>
                 )}
               </div>
@@ -1365,7 +1375,7 @@ export default function Launch({
                                 })
                               }
                             >
-                              For meeting
+                              Agenda item
                             </button>
                           )}
                           <button
@@ -1488,126 +1498,13 @@ export default function Launch({
                 </section>
               )}
               {view === 'contacts' && (
-                <>
-                  <div className="toolbar">
-                    <label className="search">
-                      <Search />
-                      <input
-                        aria-label="Search companies and contacts"
-                        placeholder="Search companies and people…"
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                      />
-                    </label>
-                    <button className="button" onClick={() => add('contact')}>
-                      <Plus />
-                      Add contact
-                    </button>
-                  </div>
-                  <div className="companies">
-                    {[
-                      ...scoped.filter((e) => e.kind === 'company'),
-                      {
-                        id: 'unassigned',
-                        title: 'Other contacts',
-                        primaryId: '',
-                      },
-                    ].map((c) => {
-                      const contacts = scoped.filter(
-                        (e) =>
-                          e.kind === 'contact' &&
-                          (c.id === 'unassigned'
-                            ? !e.companyId
-                            : e.companyId === c.id),
-                      );
-                      if (!contacts.length && c.id === 'unassigned')
-                        return null;
-                      if (
-                        query &&
-                        !`${c.title} ${contacts.map((c) => c.title + ' ' + c.email).join(' ')}`
-                          .toLowerCase()
-                          .includes(query.toLowerCase())
-                      )
-                        return null;
-                      return (
-                        <section className="company-card" key={c.id}>
-                          <div className="company-heading">
-                            <span className="company-monogram">
-                              {c.title.slice(0, 2).toUpperCase()}
-                            </span>
-                            <button
-                              onClick={() =>
-                                c.id !== 'unassigned' && open(c as Entity)
-                              }
-                            >
-                              <h2>{c.title}</h2>
-                              <p>
-                                {contacts.length} contact
-                                {contacts.length !== 1 ? 's' : ''}
-                              </p>
-                            </button>
-                            <button
-                              className="icon-button"
-                              aria-label={`Add contact to ${c.title}`}
-                              onClick={() =>
-                                add('contact', {
-                                  companyId: c.id === 'unassigned' ? '' : c.id,
-                                })
-                              }
-                            >
-                              <Plus />
-                            </button>
-                          </div>
-                          {contacts.map((p) => (
-                            <div className="contact-row" key={p.id}>
-                              <button onClick={() => open(p)}>
-                                <strong>{p.title}</strong>
-                                <small>
-                                  {p.email || p.phone || 'Add contact details'}
-                                </small>
-                              </button>
-                              {c.primaryId === p.id ? (
-                                <span className="primary-contact">Primary</span>
-                              ) : (
-                                c.id !== 'unassigned' && (
-                                  <button
-                                    className="text-button"
-                                    onClick={() =>
-                                      void store.change(c as Entity, {
-                                        primaryId: p.id,
-                                      })
-                                    }
-                                  >
-                                    Make primary
-                                  </button>
-                                )
-                              )}
-                              {p.email && (
-                                <a
-                                  className="icon-button"
-                                  aria-label={`Email ${p.title}`}
-                                  href={'mailto:' + encodeURIComponent(p.email)}
-                                >
-                                  <Send />
-                                </a>
-                              )}
-                            </div>
-                          ))}
-                        </section>
-                      );
-                    })}
-                  </div>
-                  {!scoped.some(
-                    (e) => e.kind === 'company' || e.kind === 'contact',
-                  ) && (
-                    <Empty
-                      title="A familiar face for every project."
-                      text="Keep companies and their contacts together. Choose one primary recipient for each company."
-                      action={() => add('company')}
-                      label="Add a company"
-                    />
-                  )}
-                </>
+                <AddressBook
+                  records={records}
+                  files={files}
+                  store={store}
+                  scope={scope}
+                  onOpen={open}
+                />
               )}
               {view === 'meetings' &&
                 (scope === 'personal' ? (
@@ -1675,7 +1572,6 @@ export default function Launch({
           }
           setCaptureOpen(true);
         }}
-        onAgenda={() => add('agenda', { date: day(), report: true })}
         onDelete={trash}
         notify={notify}
       />
@@ -1721,9 +1617,25 @@ export default function Launch({
           }
         />
       )}
+      {editorOpen && editor && ['company', 'contact'].includes(editor.kind) && (
+        <AddressEditor
+          key={editor.id}
+          entity={editor}
+          initialEdit={addressEdit}
+          store={store}
+          records={records}
+          files={files}
+          onClose={() => setEditorOpen(false)}
+          onDelete={trash}
+          notify={notify}
+        />
+      )}
       <TaskEditor
         entity={editor}
-        open={editorOpen && editor?.kind !== 'note'}
+        open={
+          editorOpen &&
+          !['note', 'company', 'contact'].includes(editor?.kind || '')
+        }
         onClose={() => setEditorOpen(false)}
         store={store}
         records={records}
@@ -2086,27 +1998,17 @@ function ReferenceCard({
   open: (e: Entity) => void;
   trash: (e: Entity) => void;
 }) {
-  const first = files.find((f) => entity.files.includes(f.id));
+  const first = referenceOriginal(entity, files);
   const [preview, setPreview] = useState(false);
-  const [url, setUrl] = useState('');
-  const fileId = first?.id;
-  const pending = first?.pending;
-  useEffect(() => {
-    if (!fileId) return;
-    const u = store.fileUrl(fileId);
-    setUrl(u);
-    return () => {
-      if (u.startsWith('blob:')) URL.revokeObjectURL(u);
-    };
-  }, [fileId, pending, store]);
+  const url = useStoredFileUrl(store, first);
   return (
     <article className="reference-card">
-      <button className="reference-thumb" onClick={() => setPreview(true)}>
-        {first?.type.startsWith('image/') ? (
-          <img src={url} alt={entity.title} />
-        ) : (
-          <FileText />
-        )}
+      <button
+        className="reference-thumb"
+        aria-label={first ? `Preview ${entity.title}` : `Edit ${entity.title}`}
+        onClick={() => (first ? setPreview(true) : open(entity))}
+      >
+        <ReferenceThumbnail entity={entity} files={files} store={store} />
       </button>
       <div className="reference-info">
         <button onClick={() => open(entity)}>
@@ -2125,13 +2027,23 @@ function ReferenceCard({
         </button>
       </div>
       <Dialog open={preview} onOpenChange={setPreview}>
-        <DialogContent className="file-dialog">
+        <DialogContent
+          className={
+            'file-dialog' +
+            (first?.type.startsWith('image/') ? ' image-file-dialog' : '')
+          }
+        >
           <DialogTitle>{entity.title}</DialogTitle>
           <DialogDescription>
             {entity.notes || first?.name || 'Reference'}
           </DialogDescription>
           {first?.type.startsWith('image/') ? (
-            <img src={url} alt={entity.title} />
+            <ImageViewer
+              key={first.id}
+              src={url}
+              alt={entity.title}
+              active={preview}
+            />
           ) : first?.type === 'application/pdf' ? (
             <iframe src={url} title={entity.title} />
           ) : (

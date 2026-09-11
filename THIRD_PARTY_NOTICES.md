@@ -23,3 +23,9 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Contact attachment previews
+
+- Mammoth 1.12.2 — BSD 2-Clause. [License](public/licenses/mammoth.txt).
+- DOMPurify 3.4.15 — used under Apache 2.0. [License](public/licenses/dompurify.txt).
+- SheetJS Community Edition 0.20.3 — Apache 2.0. [License](public/licenses/xlsx.txt).

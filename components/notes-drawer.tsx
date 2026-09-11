@@ -9,10 +9,11 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { createEntity, pretty, type Entity, type Scope } from '@/lib/model';
+import { createEntity, type Entity, type Scope } from '@/lib/model';
 import { QuickNoteRow } from './quick-note-row';
 import { quickNotes } from '@/lib/notes';
 import type { LaunchStore } from '@/lib/client-store';
+import { AgendaDrawer } from './agenda-drawer';
 
 export function NotesDrawer({
   scope,
@@ -20,7 +21,6 @@ export function NotesDrawer({
   store,
   onOpen,
   onCapture,
-  onAgenda,
   onDelete,
   notify,
 }: {
@@ -29,8 +29,7 @@ export function NotesDrawer({
   store: LaunchStore;
   onOpen: (item: Entity) => void;
   onCapture: (text: string) => void;
-  onAgenda: () => void;
-  onDelete: (note: Entity) => Promise<void>;
+  onDelete: (item: Entity) => Promise<void>;
   notify: (text: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -44,11 +43,16 @@ export function NotesDrawer({
   const draftKey = `launch-drawer-draft-${store.account}-${scope}`;
   useEffect(() => {
     setOpen(localStorage.getItem('launch-notes-drawer') === 'true');
+    if (
+      scope === 'business' &&
+      localStorage.getItem('launch-notes-tab') === 'agenda'
+    )
+      setTab('agenda');
     const savedWidth = Number(localStorage.getItem('launch-notes-width'));
     if (savedWidth >= 250 && savedWidth <= 480) setWidth(savedWidth);
     setText(localStorage.getItem(draftKey) || '');
     setLoaded(true);
-  }, [draftKey]);
+  }, [draftKey, scope]);
   useEffect(() => {
     if (loaded) localStorage.setItem(draftKey, text);
   }, [text, loaded, draftKey]);
@@ -82,15 +86,7 @@ export function NotesDrawer({
       setBusy(false);
     }
   }
-  const items =
-    tab === 'notes'
-      ? quickNotes(records, scope)
-      : records
-          .filter(
-            (item) =>
-              item.scope === scope && !item.archived && item.kind === 'agenda',
-          )
-          .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const items = quickNotes(records, scope);
   return (
     <aside
       className={
@@ -146,7 +142,13 @@ export function NotesDrawer({
           inert={!open}
           aria-hidden={!open}
         >
-          <Tabs value={tab} onValueChange={setTab}>
+          <Tabs
+            value={tab}
+            onValueChange={(value) => {
+              setTab(value);
+              localStorage.setItem('launch-notes-tab', value);
+            }}
+          >
             <TabsList aria-label="Notes drawer">
               <TabsTrigger value="notes">Quick notes</TabsTrigger>
               {scope === 'business' && (
@@ -155,88 +157,72 @@ export function NotesDrawer({
             </TabsList>
           </Tabs>
           <div className="notes-drawer-body">
-            {tab === 'notes' ? (
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void save();
-                }}
-              >
-                <label className="sr-only" htmlFor="drawer-note">
-                  Add a quick note
-                </label>
-                <textarea
-                  id="drawer-note"
-                  disabled={busy}
-                  rows={3}
-                  value={text}
-                  onChange={(event) => setText(event.target.value)}
-                  placeholder="Something to remember…"
-                />
-                <div className="drawer-capture-actions">
-                  <button
-                    type="button"
-                    className="text-button"
-                    onClick={() => {
-                      onCapture(text);
-                      setText('');
-                    }}
-                  >
-                    <Paperclip /> Add files
-                  </button>
-                  <button
-                    className="button primary"
-                    disabled={!text.trim() || busy}
-                  >
-                    <Plus />
-                    {busy ? 'Saving…' : 'Add note'}
-                  </button>
-                </div>
-              </form>
+            {tab === 'agenda' ? (
+              <AgendaDrawer
+                scope={scope}
+                records={records}
+                store={store}
+                onOpen={onOpen}
+                onDelete={onDelete}
+                notify={notify}
+              />
             ) : (
-              <button className="button" onClick={onAgenda}>
-                <Plus /> Add agenda item
-              </button>
-            )}
-            <div className="drawer-notes-list">
-              {items.map((item) =>
-                item.kind === 'note' ? (
-                  <QuickNoteRow
-                    key={item.id}
-                    note={item}
-                    store={store}
-                    onOpen={onOpen}
-                    onDelete={onDelete}
-                    notify={notify}
+              <>
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void save();
+                  }}
+                >
+                  <label className="sr-only" htmlFor="drawer-note">
+                    Add a quick note
+                  </label>
+                  <textarea
+                    id="drawer-note"
+                    disabled={busy}
+                    rows={3}
+                    value={text}
+                    onChange={(event) => setText(event.target.value)}
+                    placeholder="Something to remember…"
                   />
-                ) : (
-                  <div className="drawer-note" key={item.id}>
+                  <div className="drawer-capture-actions">
                     <button
-                      className="drawer-note-open"
-                      onClick={() => onOpen(item)}
+                      type="button"
+                      className="text-button"
+                      onClick={() => {
+                        onCapture(text);
+                        setText('');
+                      }}
                     >
-                      <span>{item.title}</span>
-                      <small>
-                        {tab === 'agenda'
-                          ? item.date
-                            ? pretty(item.date)
-                            : 'No meeting date yet'
-                          : pretty(item.createdAt)}
-                        {item.files.length > 0
-                          ? ` · ${item.files.length} attachments`
-                          : ''}
-                      </small>
+                      <Paperclip /> Add files
+                    </button>
+                    <button
+                      className="button primary"
+                      disabled={!text.trim() || busy}
+                    >
+                      <Plus />
+                      {busy ? 'Saving…' : 'Add note'}
                     </button>
                   </div>
-                ),
-              )}
-            </div>
-            {!items.length && (
-              <p className="hint">
-                {tab === 'notes'
-                  ? 'Phone captures and quick reminders appear here.'
-                  : 'Keep the things you want to discuss here. Open an item to choose its meeting date.'}
-              </p>
+                </form>
+                <div className="drawer-notes-list">
+                  {items.map((item) => (
+                    <QuickNoteRow
+                      key={item.id}
+                      note={item}
+                      store={store}
+                      onOpen={onOpen}
+                      onDelete={onDelete}
+                      notify={notify}
+                    />
+                  ))}
+                </div>
+                {!items.length && (
+                  <p className="hint">
+                    Phone captures and quick reminders appear here.
+                  </p>
+                )}
+              </>
             )}
           </div>
         </div>

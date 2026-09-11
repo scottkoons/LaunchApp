@@ -247,10 +247,11 @@ export function SettingsPanel({
         </div>
         <div className="setting-row">
           <span>
-            Quick dictation
+            Voice & photo capture
             <small>
-              Use Wispr Flow in the desktop text box. On iPhone, tap the note
-              field and use the keyboard microphone to turn speech into text.
+              Tap the microphone in Capture to speak a note or give task and
+              agenda instructions. Scan a photo to extract its text. Originals
+              stay attached; reconnect and tap Process for offline captures.
             </small>
           </span>
           <Check />

@@ -28,7 +28,9 @@ import {
   type Entity,
   type FileMeta,
 } from '@/lib/model';
+import { deliveryRecipient } from '@/lib/address-book';
 import { ReminderPicker } from './reminder-picker';
+import { ReferenceThumbnailEditor } from './reference-thumbnail';
 import { reminderPatch } from '@/lib/reminders';
 import type { LaunchStore } from '@/lib/client-store';
 export function TaskEditor({
@@ -53,10 +55,13 @@ export function TaskEditor({
   const [draft, setDraft] = useState<Entity | null>(null),
     [saving, setSaving] = useState(false);
   const [filesBusy, setFilesBusy] = useState(false);
+  const [thumbnailBusy, setThumbnailBusy] = useState(false);
+  const uploadsBusy = filesBusy || thumbnailBusy;
   const savingRef = useRef(false);
   const taskNameRef = useRef<HTMLInputElement>(null);
   const [reportApply, setReportApply] = useState('one');
   const base = useRef<Entity | null>(null);
+  const draftRef = useRef<Entity | null>(null);
   const creating = useRef(false);
   const isNewEntity = useEffectEvent(
     (id: string) => !store.data.records.some((e) => e.id === id),
@@ -73,19 +78,21 @@ export function TaskEditor({
     } catch {}
     setReportApply('one');
     base.current = saved?.base || structuredClone(entity);
-    setDraft(saved?.draft || saved || structuredClone(entity));
+    draftRef.current = saved?.draft || saved || structuredClone(entity);
+    setDraft(draftRef.current);
   }, [entity, store.account]);
   function change(patch: Partial<Entity>) {
-    if (!draft) return;
-    const next = { ...draft, ...patch };
+    if (!draftRef.current) return;
+    const next = { ...draftRef.current, ...patch };
+    draftRef.current = next;
     setDraft(next);
     localStorage.setItem(
-      `launch-draft-${store.account}-${draft.id}`,
+      `launch-draft-${store.account}-${next.id}`,
       JSON.stringify({ draft: next, base: base.current }),
     );
   }
   async function save(extra: Partial<Entity> = {}) {
-    if (!draft || savingRef.current || filesBusy) return;
+    if (!draft || savingRef.current || uploadsBusy) return;
     const d = normalizeTaskDeadlines({ ...draft, ...extra });
     if (d.routine && d.status === 'completed') d.finalDone = true;
     if (!d.title.trim()) {
@@ -155,6 +162,7 @@ export function TaskEditor({
   }
   if (!draft) return null;
   const isTask = draft.kind === 'task',
+    isReference = draft.kind === 'reference',
     isEvent = draft.kind === 'event',
     isContact = draft.kind === 'contact',
     isCompany = draft.kind === 'company';
@@ -166,14 +174,13 @@ export function TaskEditor({
       (!draft.companyId || e.companyId === draft.companyId),
   );
   const selectedCompany = companies.find((c) => c.id === draft.companyId);
-  const recipient = records.find(
-    (c) => c.id === (draft.contactId || selectedCompany?.primaryId),
-  );
+  const recipient = deliveryRecipient(draft, records);
   const creatingTask = isTask && creating.current;
-  const Editor = creatingTask ? Dialog : Sheet;
-  const EditorContent = creatingTask ? DialogContent : SheetContent;
-  const EditorTitle = creatingTask ? DialogTitle : SheetTitle;
-  const EditorDescription = creatingTask ? DialogDescription : SheetDescription;
+  const modal = creatingTask || isReference;
+  const Editor = modal ? Dialog : Sheet;
+  const EditorContent = modal ? DialogContent : SheetContent;
+  const EditorTitle = modal ? DialogTitle : SheetTitle;
+  const EditorDescription = modal ? DialogDescription : SheetDescription;
   const titleField = (
     <>
       <label className="field">
@@ -615,9 +622,18 @@ export function TaskEditor({
     </>
   );
   return (
-    <Editor open={open} onOpenChange={(v) => !v && onClose()}>
+    <Editor
+      open={open}
+      onOpenChange={(v) => !v && !saving && !uploadsBusy && onClose()}
+    >
       <EditorContent
-        className={creatingTask ? 'task-create-modal' : 'editor-sheet'}
+        className={
+          isReference
+            ? 'task-create-modal reference-editor-modal'
+            : creatingTask
+              ? 'task-create-modal'
+              : 'editor-sheet'
+        }
         initialFocus={creatingTask ? taskNameRef : undefined}
       >
         <SheetHeader>
@@ -633,9 +649,11 @@ export function TaskEditor({
                   : isContact
                     ? 'Contact'
                     : draft.kind === 'agenda'
-                      ? 'Discussion item'
+                      ? 'Agenda item'
                       : draft.kind === 'reference'
-                        ? 'Reference'
+                        ? creating.current
+                          ? 'Add reference'
+                          : 'Reference details'
                         : 'Quick note'}
           </EditorTitle>
           <EditorDescription className={creatingTask ? 'sr-only' : undefined}>
@@ -700,6 +718,32 @@ export function TaskEditor({
                 </div>
               </div>
             </>
+          ) : isReference ? (
+            <div className="reference-editor-columns">
+              <div className="reference-editor-main">
+                {titleField}
+                {workspaceFields}
+                {notesField}
+                <label className="field">
+                  Year
+                  <input
+                    value={draft.year || ''}
+                    placeholder="Optional"
+                    onChange={(e) => change({ year: e.target.value })}
+                  />
+                </label>
+                {attachmentFields}
+              </div>
+              <ReferenceThumbnailEditor
+                key={draft.id}
+                entity={draft}
+                files={files}
+                store={store}
+                onChange={change}
+                disabled={saving}
+                onBusyChange={setThumbnailBusy}
+              />
+            </div>
           ) : (
             <>
               {titleField}
@@ -814,73 +858,64 @@ export function TaskEditor({
                 </label>
               )}
               {deliveryFields}
-              {draft.kind === 'reference' && (
-                <label className="field">
-                  Year
-                  <input
-                    value={draft.year || ''}
-                    placeholder="2027"
-                    onChange={(e) => change({ year: e.target.value })}
-                  />
-                </label>
-              )}
               {attachmentFields}
-              {!creatingTask && (
-                <div className="editor-secondary">
-                  <button
-                    className="text-button"
-                    onClick={async () => {
-                      await store.add(
-                        createEntity(draft.kind, draft.scope, {
-                          ...draft,
-                          id: uid(),
-                          title: draft.title + ' (copy)',
-                          report:
-                            draft.scope === 'business' &&
-                            (!draft.routine || draft.report),
-                          reportDefaultsVersion: 1,
-                          reportSchedule: [],
-                          status: 'active',
-                          completedAt: '',
-                          reminderAt: '',
-                          reminderZone: '',
-                          reminderAcknowledgedAt: '',
-                          draftDone: false,
-                          finalDone: false,
-                          seriesId: '',
-                          occurrence: '',
-                          repeat: 'none',
-                        }),
-                      );
-                      notify('Copy added.');
-                    }}
-                  >
-                    <Copy />
-                    Duplicate
-                  </button>
-                  {records.some((e) => e.id === draft.id) && (
-                    <button
-                      className="text-button danger"
-                      disabled={saving || filesBusy}
-                      onClick={() => void save({ deletedAt: now() })}
-                    >
-                      <Trash2 />
-                      Move to Trash
-                    </button>
-                  )}
-                </div>
-              )}
             </>
+          )}
+          {!creatingTask && (
+            <div className="editor-secondary">
+              <button
+                className="text-button"
+                disabled={saving || uploadsBusy}
+                onClick={async () => {
+                  await store.add(
+                    createEntity(draft.kind, draft.scope, {
+                      ...draft,
+                      id: uid(),
+                      title: draft.title + ' (copy)',
+                      report:
+                        draft.scope === 'business' &&
+                        (!draft.routine || draft.report),
+                      reportDefaultsVersion: 1,
+                      reportSchedule: [],
+                      status: 'active',
+                      completedAt: '',
+                      reminderAt: '',
+                      reminderZone: '',
+                      reminderAcknowledgedAt: '',
+                      draftDone: false,
+                      finalDone: false,
+                      seriesId: '',
+                      occurrence: '',
+                      repeat: 'none',
+                    }),
+                  );
+                  notify('Copy added.');
+                }}
+              >
+                <Copy />
+                Duplicate
+              </button>
+              {records.some((e) => e.id === draft.id) && (
+                <button
+                  className="text-button danger"
+                  disabled={saving || uploadsBusy}
+                  onClick={() => void save({ deletedAt: now() })}
+                >
+                  <Trash2 />
+                  Move to Trash
+                </button>
+              )}
+            </div>
           )}
         </div>
         <div className="editor-actions">
           {creatingTask && (
             <p className="task-create-note">Only a task name is required.</p>
           )}
-          {creatingTask && (
+          {modal && (
             <button
               className="button"
-              disabled={saving || filesBusy}
+              disabled={saving || uploadsBusy}
               onClick={onClose}
             >
               Cancel
@@ -900,7 +935,7 @@ export function TaskEditor({
           )}
           <button
             className="button primary"
-            disabled={saving || filesBusy || !draft.title.trim()}
+            disabled={saving || uploadsBusy || !draft.title.trim()}
             onClick={() => void save()}
           >
             {creatingTask

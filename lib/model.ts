@@ -1,4 +1,19 @@
+import { validateCapture, type CaptureState } from './capture-intent';
 export type Scope = 'business' | 'personal';
+export const referenceIcons = [
+  'file',
+  'bookmark',
+  'star',
+  'idea',
+  'image',
+  'link',
+  'folder',
+  'tag',
+] as const;
+export type ReferenceIcon = (typeof referenceIcons)[number];
+type ReferenceThumbnail =
+  | { type: 'image'; fileId: string }
+  | { type: 'icon'; icon: ReferenceIcon };
 export type Kind =
   | 'task'
   | 'note'
@@ -19,6 +34,7 @@ export type Entity = {
   reportPreferenceSet?: boolean;
   reportDefaultsVersion?: number;
   files: string[];
+  thumbnail?: ReferenceThumbnail | null;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
@@ -53,6 +69,14 @@ export type Entity = {
   email?: string;
   phone?: string;
   primaryId?: string;
+  firstName?: string;
+  lastName?: string;
+  jobTitle?: string;
+  companyName?: string;
+  website?: string;
+  address?: string;
+  portraitId?: string;
+  fileLabels?: Record<string, string>;
   date?: string;
   endDate?: string;
   time?: string;
@@ -61,6 +85,7 @@ export type Entity = {
   year?: string;
   order?: number;
   sourceId?: string;
+  capture?: CaptureState;
   important?: boolean;
   pinned?: boolean;
   businessName?: string;
@@ -123,6 +148,12 @@ export type ReportSnapshot = {
 };
 export const now = () => new Date().toISOString();
 export const uid = () => crypto.randomUUID();
+export function agendaNoteLines(notes: string) {
+  return notes
+    .split(/\r\n|[\n\r\u2028\u2029]/)
+    .map((line) => line.trim().replace(/^[-*•]\s+/, ''))
+    .filter(Boolean);
+}
 export function day(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
@@ -859,6 +890,10 @@ export const kinds: Kind[] = [
   'meeting',
 ];
 export function validateEntity(e: Entity) {
+  if (e?.capture !== undefined) {
+    validateCapture(e.capture);
+    if (e.kind !== 'note') throw new Error('Original captures must be notes.');
+  }
   if (
     !e ||
     !kinds.includes(e.kind) ||
@@ -878,6 +913,48 @@ export function validateEntity(e: Entity) {
     e.files.some((f) => typeof f !== 'string')
   )
     throw new Error('Invalid attachments');
+  if (
+    e.thumbnail != null &&
+    (typeof e.thumbnail !== 'object' ||
+      !(
+        (e.thumbnail.type === 'image' &&
+          typeof e.thumbnail.fileId === 'string' &&
+          /^[\w-]{1,100}$/.test(e.thumbnail.fileId)) ||
+        (e.thumbnail.type === 'icon' &&
+          referenceIcons.includes(e.thumbnail.icon))
+      ))
+  )
+    throw new Error('Invalid reference thumbnail');
+  for (const field of [
+    'firstName',
+    'lastName',
+    'jobTitle',
+    'companyName',
+    'website',
+    'address',
+    'portraitId',
+  ] as const)
+    if (
+      e[field] !== undefined &&
+      (typeof e[field] !== 'string' || e[field]!.length > 2000)
+    )
+      throw new Error('Invalid contact details');
+  if (e.portraitId && !e.files.includes(e.portraitId))
+    throw new Error('Profile image must be attached to this record');
+  if (
+    e.fileLabels !== undefined &&
+    (!e.fileLabels ||
+      typeof e.fileLabels !== 'object' ||
+      Array.isArray(e.fileLabels) ||
+      Object.keys(e.fileLabels).length > 100 ||
+      Object.entries(e.fileLabels).some(
+        ([id, label]) =>
+          !e.files.includes(id) ||
+          typeof label !== 'string' ||
+          label.length > 500,
+      ))
+  )
+    throw new Error('Invalid attachment names');
   if (e.kind !== 'settings' && !e.title.trim())
     throw new Error('Add a title or a note first');
   for (const k of [

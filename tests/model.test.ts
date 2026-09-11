@@ -1,7 +1,100 @@
+import {
+  addressDetails,
+  addressSearch,
+  contactCompany,
+  sortedContacts,
+  websiteUrl,
+  addressBookCsv,
+  deliveryRecipient,
+} from '../lib/address-book';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { agendaItems, agendaOrderChanges } from '../lib/agenda';
+import { referenceImage, referenceOriginal } from '../lib/reference';
+import type { FileMeta } from '../lib/model';
+
+void test('reference artwork overrides the board thumbnail while preserving the original and default fallback', () => {
+  const files: FileMeta[] = [
+    {
+      id: 'custom',
+      name: 'Cover.png',
+      type: 'image/png',
+      size: 10,
+      createdAt: '',
+    },
+    {
+      id: 'photo',
+      name: 'Screenshot.jpg',
+      type: 'image/jpeg',
+      size: 20,
+      createdAt: '',
+    },
+    {
+      id: 'document',
+      name: 'Brief.pdf',
+      type: 'application/pdf',
+      size: 30,
+      createdAt: '',
+    },
+  ];
+  const reference = createEntity('reference', 'business', {
+    title: 'Brief',
+    files: ['document', 'photo'],
+  });
+  assert.equal(referenceOriginal(reference, files)?.id, 'document');
+  assert.equal(referenceImage(reference, files), undefined);
+  const custom = {
+    ...reference,
+    thumbnail: { type: 'image' as const, fileId: 'custom' },
+  };
+  assert.equal(referenceImage(custom, files)?.id, 'custom');
+  assert.equal(referenceOriginal(custom, files)?.id, 'document');
+  assert.deepEqual(custom.files, ['document', 'photo']);
+  const photo = { ...custom, files: ['photo'] };
+  assert.equal(
+    referenceImage({ ...photo, thumbnail: null }, files)?.id,
+    'photo',
+  );
+  assert.equal(
+    referenceImage(
+      { ...photo, thumbnail: { type: 'icon', icon: 'star' } },
+      files,
+    ),
+    undefined,
+  );
+  assert.equal(
+    referenceImage(
+      photo,
+      files.filter((file) => file.id !== 'custom'),
+    )?.id,
+    'photo',
+  );
+  assert.equal(referenceImage({ ...reference, files: [] }, files), undefined);
+  assert.equal(referenceImage({ ...custom, files: [] }, files)?.id, 'custom');
+  assert.equal(validateEntity(custom).thumbnail?.type, 'image');
+  assert.equal(
+    validateEntity({ ...reference, thumbnail: null }).thumbnail,
+    null,
+  );
+  assert.throws(
+    () =>
+      validateEntity({
+        ...reference,
+        thumbnail: { type: 'image', fileId: 'https://example.com/image' },
+      }),
+    /thumbnail/,
+  );
+  assert.throws(
+    () =>
+      validateEntity({
+        ...reference,
+        thumbnail: { type: 'icon', icon: 'invalid' },
+      } as unknown as Entity),
+    /thumbnail/,
+  );
+});
 import {
-  normalizeTaskDeadlines,
+  agendaNoteLines,
   createEntity,
   completedDateRange,
   recurrenceDates,
@@ -21,6 +114,7 @@ import {
   visibleMonthlyTasks,
   migrateLegacyRoutine,
   migrateReportDefaults,
+  normalizeTaskDeadlines,
   reportMonths,
   reportDateStatus,
   compareTasks,
@@ -30,6 +124,54 @@ import {
   type Operation,
   type Entity,
 } from '../lib/model';
+void test('agenda lists separate discussed items and preserve flagged priority during reordering', () => {
+  const a = createEntity('agenda', 'business', { title: 'A', order: 10 });
+  const b = createEntity('agenda', 'business', { title: 'B', order: 20 });
+  const flagged = createEntity('agenda', 'business', {
+    title: 'Important',
+    order: 30,
+    important: true,
+  });
+  const discussed = createEntity('agenda', 'business', {
+    title: 'Discussed',
+    status: 'completed',
+    completedAt: '2026-09-09T12:00:00.000Z',
+  });
+  const imported = createEntity('agenda', 'business', {
+    title: 'Imported discussed',
+    archived: true,
+    date: '2026-09-08',
+  });
+  const hidden = createEntity('agenda', 'business', {
+    title: 'Deleted',
+    deletedAt: '2026-09-09T12:00:00.000Z',
+  });
+  const personal = createEntity('agenda', 'personal', { title: 'Private' });
+  const records = [b, discussed, a, flagged, imported, hidden, personal];
+  const active = agendaItems(records, 'business');
+  assert.deepEqual(
+    active.map((item) => item.title),
+    ['Important', 'A', 'B'],
+  );
+  assert.deepEqual(
+    agendaItems(records, 'business', true).map((item) => item.title),
+    ['Discussed', 'Imported discussed'],
+  );
+  const changes = agendaOrderChanges(active, b.id, a.id);
+  const reordered = active.map((item) => ({
+    ...item,
+    order:
+      changes.find((change) => change.item.id === item.id)?.order ?? item.order,
+  }));
+  assert.deepEqual(
+    agendaItems(reordered, 'business').map((item) => item.title),
+    ['Important', 'B', 'A'],
+  );
+  assert.deepEqual(agendaOrderChanges(active, b.id, flagged.id), []);
+  assert.deepEqual(agendaOrderChanges(active, 'missing', a.id), []);
+  assert.deepEqual(agendaOrderChanges(active, a.id, a.id), []);
+  assert.equal(a.order, 10);
+});
 void test('single-date work uses Final and one-step completion without changing report choices', () => {
   for (const [title, date, report] of [
     ['Q2 Marketing Overview', '2026-09-09', true],
@@ -100,6 +242,25 @@ void test('single-date normalization preserves two-step workflows, review dates,
     draft: '2026-09-09',
   });
   assert.equal(normalizeTaskDeadlines(note), note);
+});
+void test('agenda notes keep each nonempty line as a separate bullet', () => {
+  assert.deepEqual(
+    agendaNoteLines(
+      '  First point\r\nSecond point\n\n Third point \rFourth\u2028Fifth\u2029Sixth ',
+    ),
+    ['First point', 'Second point', 'Third point', 'Fourth', 'Fifth', 'Sixth'],
+  );
+  assert.deepEqual(agendaNoteLines(' \n\r\n\t'), []);
+  assert.deepEqual(agendaNoteLines('- First\n• Second\n* Third\n-5 degrees'), [
+    'First',
+    'Second',
+    'Third',
+    '-5 degrees',
+  ]);
+  assert.deepEqual(agendaNoteLines('Repeated\nRepeated'), [
+    'Repeated',
+    'Repeated',
+  ]);
 });
 void test('monthly dashboard and report share month grouping and retain months with notes only', () => {
   const t = createEntity('task', 'business', {
@@ -1053,5 +1214,161 @@ void test('new or rescheduled tasks restore date order, while manual moves and c
   assert.equal(
     hasNewScheduledWork([], [{ ...added, deletedAt: '2026-09-09T10:00:00Z' }]),
     false,
+  );
+});
+
+void test('address book recovers imported fields and portraits without undoing deliberate edits', () => {
+  const company = createEntity('company', 'business', {
+    title: 'Acme',
+    notes: 'Original\nWebsite: acme.test\nAddress: 1 Main',
+    files: ['logo', 'spec'],
+    legacy: {
+      record: {
+        notes: 'Original',
+        website: 'acme.test',
+        address: '1 Main',
+        logo_path: 'folder/logo.png',
+      },
+    },
+  });
+  const files: FileMeta[] = [
+    { id: 'logo', name: 'logo.png', type: 'image/png', size: 1, createdAt: '' },
+  ];
+  const details = addressDetails(company, files);
+  assert.equal(details.portraitId, 'logo');
+  assert.equal(details.website, 'acme.test');
+  assert.equal(details.notes, 'Original');
+  const edited = addressDetails(
+    {
+      ...details,
+      website: '',
+      address: '',
+      portraitId: '',
+      notes: 'New notes',
+    },
+    files,
+  );
+  assert.equal(edited.website, '');
+  assert.equal(edited.portraitId, '');
+  assert.equal(edited.notes, 'New notes');
+  assert.equal(addressDetails(company).portraitId, '');
+  assert.equal(company.notes, 'Original\nWebsite: acme.test\nAddress: 1 Main');
+  const contact = addressDetails(
+    createEntity('contact', 'business', {
+      title: 'Pat Lee',
+      notes: 'Editor\nCall Tuesday',
+      legacy: {
+        record: {
+          first_name: 'Pat',
+          last_name: 'Lee',
+          title: 'Editor',
+          notes: 'Call Tuesday',
+        },
+      },
+    }),
+  );
+  assert.equal(contact.firstName, 'Pat');
+  assert.equal(contact.lastName, 'Lee');
+  assert.equal(contact.jobTitle, 'Editor');
+  assert.equal(contact.notes, 'Call Tuesday');
+  assert.equal(
+    addressDetails({ ...contact, firstName: '', jobTitle: '' }).firstName,
+    '',
+  );
+});
+void test('address book sorts empty fields last, searches details, and safely exports unassigned contacts', () => {
+  const company = createEntity('company', 'business', {
+    title: 'Acme, Inc.',
+    website: 'acme.test',
+  });
+  const a = createEntity('contact', 'business', {
+    title: 'Zoe Alpha',
+    firstName: 'Zoe',
+    lastName: 'Alpha',
+    email: 'z@example.test',
+    companyId: company.id,
+    jobTitle: 'Publisher',
+  });
+  const b = createEntity('contact', 'business', {
+    title: 'Ana Beta',
+    firstName: 'Ana',
+    lastName: 'Beta',
+    email: '',
+    companyName: 'Unlisted',
+    notes: '=SUM(1,2)',
+  });
+  company.primaryId = a.id;
+  assert.equal(addressSearch(a, 'publisher'), true);
+  assert.equal(contactCompany(a, [company]), company.title);
+  assert.deepEqual(
+    sortedContacts([b, a], [company], { field: null, direction: 1 }).map(
+      (e) => e.id,
+    ),
+    [a.id, b.id],
+  );
+  assert.deepEqual(
+    sortedContacts([b, a], [company], { field: 'email', direction: -1 }).map(
+      (e) => e.id,
+    ),
+    [a.id, b.id],
+  );
+  const csv = addressBookCsv([company], [a, b]);
+  assert.ok(csv.includes('"Acme, Inc."'));
+  assert.ok(csv.includes('"Unlisted"'));
+  assert.ok(csv.includes('"Yes"'));
+  assert.ok(csv.includes('"\'=SUM(1,2)"'));
+  assert.equal(websiteUrl('example.com'), 'https://example.com/');
+  assert.equal(websiteUrl('javascript:alert(1)'), '');
+  assert.equal(websiteUrl('data:text/html,hello'), '');
+});
+void test('delivery primary contacts cannot resolve to deleted, moved, or other-workspace contacts', () => {
+  const company = createEntity('company', 'business', { title: 'Acme' });
+  const person = createEntity('contact', 'business', {
+    title: 'Pat',
+    companyId: company.id,
+    email: 'pat@example.test',
+  });
+  company.primaryId = person.id;
+  const task = createEntity('task', 'business', {
+    title: 'Send',
+    companyId: company.id,
+  });
+  assert.equal(deliveryRecipient(task, [company, person])?.id, person.id);
+  assert.equal(
+    deliveryRecipient(task, [company, { ...person, deletedAt: 'now' }]),
+    undefined,
+  );
+  assert.equal(
+    deliveryRecipient(task, [company, { ...person, companyId: 'elsewhere' }]),
+    undefined,
+  );
+  assert.equal(
+    deliveryRecipient(task, [company, { ...person, scope: 'personal' }]),
+    undefined,
+  );
+  assert.equal(
+    deliveryRecipient(task, [{ ...company, deletedAt: 'now' }, person]),
+    undefined,
+  );
+});
+void test('contact metadata validation rejects broken portrait and label references', () => {
+  const contact = createEntity('contact', 'business', {
+    title: 'Pat',
+    files: ['photo'],
+    portraitId: 'photo',
+    fileLabels: { photo: 'Profile' },
+  });
+  assert.equal(validateEntity(contact).portraitId, 'photo');
+  assert.throws(
+    () => validateEntity({ ...contact, portraitId: 'missing' }),
+    /Profile image/,
+  );
+  assert.throws(
+    () => validateEntity({ ...contact, fileLabels: { missing: 'Missing' } }),
+    /attachment names/,
+  );
+  assert.throws(
+    () => validateEntity({ ...contact, firstName: 3 } as unknown as Entity),
+    /contact details/,
   );
 });

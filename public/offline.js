@@ -3,6 +3,12 @@ const note = document.querySelector('#note');
 const photo = document.querySelector('#photo');
 const captureStatus = document.querySelector('#status');
 const save = document.querySelector('#save');
+const mic = document.querySelector('#mic');
+const micLabel = document.querySelector('#mic-label');
+let recorder;
+let pendingRecording;
+let recordingAt;
+let requesting = false;
 let account;
 let db;
 let saving = false;
@@ -78,6 +84,7 @@ if (!account) {
   req.onsuccess = () => {
     db = req.result;
     save.disabled = false;
+    mic.disabled = false;
     restore();
   };
   req.onerror = () => {
@@ -104,15 +111,22 @@ window.addEventListener('online', () => {
   captureStatus.textContent =
     'Connection restored. Tap Reconnect to sync your notes.';
 });
-save.onclick = async () => {
+save.onclick = () => void saveCapture(pendingRecording);
+async function saveCapture(recorded) {
   if (!db || saving) return;
   const text = note.value.trim(),
     previous = draft();
-  if (!text && !photo.files.length && !previous.ids?.length) return;
+  if (!text && !recorded && !photo.files.length && !previous.ids?.length)
+    return;
   saving = true;
-  save.disabled = note.disabled = photo.disabled = scope.disabled = true;
+  save.disabled =
+    note.disabled =
+    photo.disabled =
+    scope.disabled =
+    mic.disabled =
+      true;
   try {
-    const selected = Array.from(photo.files);
+    const selected = recorded ? [recorded] : Array.from(photo.files);
     for (const f of selected)
       if (f.size > 20 * 1024 * 1024)
         throw new Error(f.name + ' is over 20 MB.');
@@ -132,15 +146,29 @@ save.onclick = async () => {
     const entity = {
       id,
       kind: 'note',
-      title: text.split('\n')[0].slice(0, 120) || 'Photo note',
+      title: recorded
+        ? 'Voice recording'
+        : text.split('\n')[0].slice(0, 120) || 'Photo note',
       notes: text,
       scope: scope.value,
       report: false,
-      files: [...(previous.ids || []), ...uploads.map((u) => u.meta.id)],
+      files: [...uploads.map((u) => u.meta.id), ...(previous.ids || [])],
       createdAt: stamp,
       updatedAt: stamp,
       status: 'active',
       order: Date.now(),
+      ...(recorded ||
+      (selected.length === 1 && selected[0].type.startsWith('image/'))
+        ? {
+            capture: {
+              type: recorded ? 'voice' : 'photo',
+              state: 'pending',
+              capturedAt: recorded ? recordingAt : stamp,
+              timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              instruction: text,
+            },
+          }
+        : {}),
     };
     // Read and append under the same write lock, preserving another tab's saves.
     await new Promise((resolve, reject) => {
@@ -167,6 +195,7 @@ save.onclick = async () => {
       tx.onerror = () => reject(tx.error);
     });
     note.value = '';
+    pendingRecording = null;
     photo.value = '';
     try {
       localStorage.removeItem(draftKey());
@@ -174,12 +203,91 @@ save.onclick = async () => {
       /* The note is already durable in IndexedDB. */
     }
     captureStatus.textContent =
-      'Saved on this device. Reconnect to sync with your desktop.';
+      'Saved on this device. Reconnect and tap Process in Capture to transcribe audio or photos.';
   } catch (e) {
     captureStatus.textContent =
       e.message || 'Could not save. Keep this page open.';
   } finally {
     saving = false;
     save.disabled = note.disabled = photo.disabled = scope.disabled = false;
+    mic.disabled = !!pendingRecording;
+  }
+}
+mic.onclick = async () => {
+  if (recorder?.state === 'recording') {
+    recorder.stop();
+    return;
+  }
+  if (!db || saving || requesting || pendingRecording) return;
+  requesting = true;
+  let stream;
+  try {
+    if (
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof MediaRecorder === 'undefined'
+    )
+      throw new Error(
+        'Recording is unavailable. Use keyboard dictation below.',
+      );
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mime = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm'].find(
+      (type) => MediaRecorder.isTypeSupported(type),
+    );
+    recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+    recordingAt = new Date().toISOString();
+    const chunks = [];
+    let size = 0;
+    const current = recorder;
+    const timer = setTimeout(() => {
+      if (current.state === 'recording') current.stop();
+    }, 180000);
+    current.ondataavailable = (event) => {
+      if (event.data.size) {
+        chunks.push(event.data);
+        size += event.data.size;
+      }
+      if (size > 10 * 1024 * 1024 && current.state === 'recording')
+        current.stop();
+    };
+    current.onstop = () => {
+      clearTimeout(timer);
+      stream.getTracks().forEach((track) => track.stop());
+      mic.setAttribute('aria-pressed', 'false');
+      mic.setAttribute('aria-label', 'Record a voice note');
+      micLabel.textContent = 'Tap to speak · up to 3 minutes';
+      save.disabled = note.disabled = photo.disabled = scope.disabled = false;
+      if (!chunks.length) {
+        captureStatus.textContent = 'No audio was recorded. Try again.';
+        return;
+      }
+      const type = (current.mimeType || chunks[0].type || 'audio/webm').split(
+        ';',
+      )[0];
+      pendingRecording = new File(
+        chunks,
+        'Offline voice note.' + (type.includes('mp4') ? 'm4a' : 'webm'),
+        { type },
+      );
+      void saveCapture(pendingRecording);
+    };
+    current.onerror = () => {
+      if (current.state !== 'inactive') current.stop();
+    };
+    current.start(1000);
+    mic.setAttribute('aria-pressed', 'true');
+    mic.setAttribute('aria-label', 'Stop recording and save');
+    micLabel.textContent = 'Recording · tap to stop. Keep Launch open.';
+    save.disabled = note.disabled = photo.disabled = scope.disabled = true;
+  } catch (error) {
+    stream?.getTracks().forEach((track) => track.stop());
+    captureStatus.textContent =
+      error.name === 'NotAllowedError'
+        ? 'Allow microphone access, or use keyboard dictation below.'
+        : error.message;
+  } finally {
+    requesting = false;
   }
 };
+window.addEventListener('pagehide', () => {
+  if (recorder?.state === 'recording') recorder.stop();
+});

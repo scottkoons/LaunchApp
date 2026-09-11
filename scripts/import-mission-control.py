@@ -68,6 +68,10 @@ def convert(source, output):
         file_paths[id] = path
         if id not in e['files']:
             e['files'].append(id)
+        if field in ('logo_path', 'avatar_path'):
+            e['portraitId'] = id
+        if r.get('display_name'):
+            e.setdefault('fileLabels', {})[id] = r['display_name']
 
     task_rows = data['tasks']
     roots = {r['id']: r for r in task_rows if r['repeat'] != 'none'}
@@ -101,14 +105,12 @@ def convert(source, output):
     for r in data.get('companies', []):
         e = add('company', 'companies', r, r['name'])
         e.update(email=r['email'] or '', phone=r['phone'] or '', primaryId=eid('contacts', r['primary_contact_id']) if r['primary_contact_id'] else '')
-        extra = [f"Website: {r['website']}" if r['website'] else '', f"Address: {r['address']}" if r['address'] else '']
-        e['notes'] = '\n'.join(x for x in [e['notes'], *extra] if x)
+        e.update(website=r.get('website') or '', address=r.get('address') or '')
         attach(e, r, 'logo_path')
     for r in data.get('contacts', []):
         e = add('contact', 'contacts', r, ' '.join(x for x in [r['first_name'], r['last_name']] if x) or r['email'])
         e.update(email=r['email'] or '', phone=r['phone'] or '', companyId=eid('companies', r['company_id']) if r['company_id'] else '')
-        if r.get('title'):
-            e['notes'] = '\n'.join(x for x in [r['title'], e['notes']] if x)
+        e.update(firstName=r.get('first_name') or '', lastName=r.get('last_name') or '', jobTitle=r.get('title') or '', companyName=r.get('company') or '')
         attach(e, r, 'avatar_path')
     for r in data.get('calendar_events', []):
         e = add('event', 'calendar_events', r, r['name'])

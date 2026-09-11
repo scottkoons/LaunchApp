@@ -1,4 +1,4 @@
-const CACHE = 'launch-shell-v13';
+const CACHE = 'launch-shell-v14';
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
@@ -6,7 +6,7 @@ self.addEventListener('install', (event) => {
       .then((c) =>
         c.addAll([
           '/offline.html',
-          '/offline.js',
+          '/offline.js?v=capture-1',
           '/icons/orbit-96.png?v=launch-orbit-1',
           '/icons/favicon-32.png?v=launch-orbit-1',
           '/icons/icon-192.png',
