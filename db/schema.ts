@@ -42,6 +42,16 @@ export const files = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.owner, t.id] })],
 );
+// Content-free markers prevent old devices from recreating permanently deleted data.
+export const permanentDeletions = sqliteTable(
+  'permanent_deletions',
+  {
+    owner: text('owner').notNull(),
+    id: text('id').notNull(),
+    resource: text('resource', { enum: ['record', 'file'] }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.owner, t.id, t.resource] })],
+);
 export const agentConnections = sqliteTable(
   'agent_connections',
   {
@@ -66,3 +76,32 @@ export const agentRequests = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.connectionId, t.requestId] })],
 );
+export const pushSubscriptions = sqliteTable(
+  'push_subscriptions',
+  {
+    id: text('id').primaryKey(),
+    owner: text('owner').notNull(),
+    subscription: text('subscription').notNull(),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (t) => [index('idx_push_subscriptions_owner').on(t.owner)],
+);
+export const pushDeliveries = sqliteTable(
+  'push_deliveries',
+  {
+    id: text('id').primaryKey(),
+    owner: text('owner').notNull(),
+    subscriptionId: text('subscription_id').notNull(),
+    recordId: text('record_id'),
+    reminderAt: text('reminder_at').notNull(),
+    sentAt: text('sent_at'),
+    leaseUntil: text('lease_until'),
+    attempts: integer('attempts').notNull().default(0),
+  },
+  (t) => [index('idx_push_deliveries_due').on(t.sentAt, t.reminderAt)],
+);
+export const pushService = sqliteTable('push_service', {
+  id: text('id').primaryKey(),
+  lastRunAt: text('last_run_at').notNull(),
+});

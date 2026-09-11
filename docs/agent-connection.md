@@ -18,8 +18,11 @@ list, edit, or delete other records. Launch syncs from the same account database
 on focus and every 15 seconds while open.
 
 Reminders are saved with an absolute instant and IANA time zone. They appear
-inside Launch while it is open. This connector does not add background push,
-email, or SMS delivery. Clock-change ambiguities and nonexistent times are
+inside Launch while it is open. Background phone notifications also require
+the phone-alert service to be configured and the user to enable Phone alerts in
+Launch Settings on that device. A saved receipt does not confirm delivery or
+device permissions. The connector does not add email or SMS delivery.
+Clock-change ambiguities and nonexistent times are
 rejected instead of silently moving an alarm.
 
 ## Authentication and revocation

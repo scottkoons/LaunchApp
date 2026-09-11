@@ -126,8 +126,7 @@ export function ReminderPicker({
       )}
       {(expanded || task.reminderAt) && (
         <p className="hint reminder-availability">
-          Reminders appear inside Launch. Phone notifications while the app is
-          closed aren’t connected yet.
+          For an alert when Launch is closed, enable Phone alerts in Settings.
         </p>
       )}
       {task.reminderAt && task.repeat && task.repeat !== 'none' && (

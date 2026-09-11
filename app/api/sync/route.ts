@@ -5,20 +5,29 @@ import {
   failure,
   originGuard,
   allRecords,
+  bucket,
 } from '@/lib/server';
+import { permanentDeletions, cleanupPurgedFiles } from '@/lib/trash-server';
 import { mergePatch, validateEntity, now, kinds } from '@/lib/model';
 import type { Entity, Operation } from '@/lib/model';
 export async function GET() {
   try {
     const user = await owner();
+    // Retry interrupted attachment cleanup without blocking normal sync.
+    await cleanupPurgedFiles(database(), bucket(), user).catch(() => {});
     const records = await allRecords(user);
     const f = await database()
       .prepare(
-        'SELECT id,name,type,size,created_at AS createdAt FROM files WHERE owner=?',
+        "SELECT id,name,type,size,created_at AS createdAt FROM files WHERE owner=? AND id NOT IN (SELECT id FROM permanent_deletions WHERE owner=? AND resource='file')",
       )
-      .bind(user)
+      .bind(user, user)
       .all();
-    return json({ records, files: f.results, serverTime: now() });
+    return json({
+      records,
+      files: f.results,
+      removed: await permanentDeletions(database(), user),
+      serverTime: now(),
+    });
   } catch (e) {
     return failure(e);
   }
@@ -55,6 +64,18 @@ export async function POST(request: Request) {
         400,
       );
     const db = database();
+    const wasPurged = () =>
+      db
+        .prepare(
+          "SELECT id FROM permanent_deletions WHERE owner=? AND id=? AND resource='record'",
+        )
+        .bind(user, op.entityId)
+        .first();
+    if (await wasPurged())
+      return json(
+        { error: 'This item was permanently deleted.', removedId: op.entityId },
+        410,
+      );
     const saved = await db
       .prepare('SELECT result FROM operations WHERE owner=? AND id=?')
       .bind(user, op.id)
@@ -97,6 +118,11 @@ export async function POST(request: Request) {
           )
           .bind(user, op.entityId, op.kind, serialized, version, now())
           .run();
+    if (!result.meta.changes && (await wasPurged()))
+      return json(
+        { error: 'This item was permanently deleted.', removedId: op.entityId },
+        410,
+      );
     if (!result.meta.changes)
       return json({ error: 'Another change arrived. Retry sync.' }, 409);
     await db
@@ -107,6 +133,18 @@ export async function POST(request: Request) {
       .run();
     return json({ entity });
   } catch (e) {
+    if (
+      e instanceof Error &&
+      e.message.includes('An attachment was permanently deleted')
+    )
+      return json(
+        {
+          error:
+            'An attachment was permanently deleted. Remove it before saving.',
+          conflicts: ['files'],
+        },
+        409,
+      );
     return failure(e);
   }
 }

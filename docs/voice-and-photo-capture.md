@@ -36,8 +36,9 @@ Processing is limited to 60 requests per account per hour and 12 MB per input.
   task deadline remains in Final even if its reminder is earlier. The saved
   capture shows the reminder's local date/time and zone and offers Edit and Undo.
   Missing times and unsupported location/event/repeating triggers ask for
-  clarification. Alerts currently appear inside Launch; background phone push
-  delivery is not connected.
+  clarification. Alerts appear inside Launch. Background phone alerts require
+  a connected reminder service and Phone alerts enabled in Settings on the
+  receiving device. See [phone alerts](phone-alerts.md) for service setup.
 - Unclear instructions wait for correction. Photo text is source material;
   without separate instructions it becomes a literal note. New records only are
   supported; the interpreter cannot send messages or modify existing records.
@@ -62,4 +63,4 @@ Personal To-Dos combines existing tasks and notes without migrating or deleting 
 
 The phone navigation has three destinations: Capture in the current workspace, Today in Business, and To-Dos in Personal.
 
-Timed actions store `dueAt` and `dueZone` separately from `reminderAt` and `reminderZone`. Capture plans can include `dueLocal` as well as a date. Explicit reminder times are retained even when later than the due time. Relative advance warnings use the due time; conflicting instructions should request clarification. The visible reminder shows remaining or elapsed minutes. Alarms remain in-app alerts; background/closed-app push is not implemented.
+Timed actions store `dueAt` and `dueZone` separately from `reminderAt` and `reminderZone`. Capture plans can include `dueLocal` as well as a date. Explicit reminder times are retained even when later than the due time. Relative advance warnings use the due time; conflicting instructions should request clarification. The visible reminder shows remaining or elapsed minutes. Background phone alerts use the same saved reminder time after the service and receiving device are connected.

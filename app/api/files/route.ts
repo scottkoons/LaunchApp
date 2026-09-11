@@ -25,6 +25,17 @@ export async function POST(request: Request) {
       return json({ error: 'Invalid file' }, 400);
     if (file.size > 20 * 1024 * 1024)
       return json({ error: 'Files must be 20 MB or smaller.' }, 413);
+    const removed = await database()
+      .prepare(
+        "SELECT id FROM permanent_deletions WHERE owner=? AND id=? AND resource='file'",
+      )
+      .bind(user, id)
+      .first();
+    if (removed)
+      return json(
+        { error: 'This attachment was permanently deleted.', removedId: id },
+        410,
+      );
     const prior = await database()
       .prepare(
         'SELECT id,name,type,size,created_at AS createdAt FROM files WHERE owner=? AND id=?',

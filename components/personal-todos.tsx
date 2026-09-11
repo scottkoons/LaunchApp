@@ -11,15 +11,26 @@ import {
 } from '@/lib/personal-todos';
 import { reminderLabel } from '@/lib/reminders';
 import type { LaunchStore } from '@/lib/client-store';
+import { TrashPanel } from './trash-panel';
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from './ui/dialog';
 
 export function PersonalTodos({
   records,
+  completing,
+  onComplete,
   store,
   onOpen,
   notify,
   completedOnly = false,
 }: {
   records: Entity[];
+  completing: Record<string, Entity>;
+  onComplete: (item: Entity) => Promise<void>;
   store: LaunchStore;
   onOpen: (item: Entity) => void;
   notify: (text: string, undo?: () => void) => void;
@@ -29,8 +40,12 @@ export function PersonalTodos({
   const [query, setQuery] = useState('');
   const [showDone, setShowDone] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [trashOpen, setTrashOpen] = useState(false);
   const all = personalTodos(records);
   const items = all
+    // Hold the original row and sort position while its completion plays.
+    // The saved records and the remaining count already reflect completion.
+    .map((item) => (!completedOnly && completing[item.id]) || item)
     .filter(
       (item) =>
         (completedOnly ? todoDone(item) : showDone || !todoDone(item)) &&
@@ -106,6 +121,9 @@ export function PersonalTodos({
         </form>
       )}
       <div className="todo-filters">
+        <button className="text-button" onClick={() => setTrashOpen(true)}>
+          <Trash2 /> Trash
+        </button>
         <input
           aria-label="Search to-dos"
           placeholder="Find a to-do…"
@@ -131,64 +149,87 @@ export function PersonalTodos({
         notify={notify}
       >
         <ul className="todo-list">
-          {items.map((item) => (
-            <li key={item.id} className={todoDone(item) ? 'is-done' : ''}>
-              <SelectionCheckbox item={item} />
-              <input
-                type="checkbox"
-                aria-label={`Complete ${item.title}`}
-                checked={todoDone(item)}
-                disabled={busy}
-                onChange={(e) =>
-                  void run(
-                    () =>
-                      store.change(
-                        item,
-                        todoCompletion(item, e.target.checked),
-                      ),
-                    e.target.checked ? 'To-do completed.' : 'To-do reopened.',
-                  )
-                }
-              />
-              <button className="todo-copy" onClick={() => onOpen(item)}>
-                <strong>{item.title}</strong>
-                {item.notes && item.notes !== item.title && (
-                  <span>{item.notes}</span>
-                )}
-                <small>
-                  {todoDueLabel(item) && <span>Due {todoDueLabel(item)}</span>}
-                  {item.reminderAt && (
-                    <span>
-                      <Bell />
-                      {reminderLabel(item)}
-                    </span>
-                  )}
-                  {item.files.length > 0 && (
-                    <span>
-                      {item.files.length} attachment
-                      {item.files.length === 1 ? '' : 's'}
-                    </span>
-                  )}
-                </small>
-              </button>
-              <button
-                className="icon-button"
-                aria-label={`Delete to-do: ${item.title}`}
-                disabled={busy}
-                onClick={() =>
-                  void run(
-                    () =>
-                      store.change(item, {
-                        deletedAt: new Date().toISOString(),
-                      }),
-                    'Moved to Trash.',
-                  )
+          {items.map((item) => {
+            const finishing = !completedOnly && !!completing[item.id];
+            return (
+              <li
+                key={item.id}
+                className={
+                  finishing
+                    ? `is-completing${showDone ? ' keep-completed' : ''}`
+                    : todoDone(item)
+                      ? 'is-done'
+                      : ''
                 }
               >
-                <Trash2 />
-              </button>
-            </li>
-          ))}
+                <SelectionCheckbox item={item} />
+                <input
+                  type="checkbox"
+                  aria-label={`${todoDone(item) || finishing ? 'Reopen' : 'Complete'} ${item.title}`}
+                  checked={todoDone(item) || finishing}
+                  disabled={busy || finishing}
+                  onChange={(e) => {
+                    if (e.target.checked) void onComplete(item);
+                    else
+                      void run(
+                        () => store.change(item, todoCompletion(item, false)),
+                        'To-do reopened.',
+                      );
+                  }}
+                />
+                <button
+                  className="todo-copy"
+                  disabled={finishing}
+                  onClick={() => onOpen(item)}
+                >
+                  <strong className="todo-title">
+                    {item.title}
+                    {finishing && (
+                      <span className="todo-completion-line" aria-hidden="true">
+                        {item.title}
+                      </span>
+                    )}
+                  </strong>
+                  {item.notes && item.notes !== item.title && (
+                    <span>{item.notes}</span>
+                  )}
+                  <small>
+                    {todoDueLabel(item) && (
+                      <span>Due {todoDueLabel(item)}</span>
+                    )}
+                    {item.reminderAt && (
+                      <span>
+                        <Bell />
+                        {reminderLabel(item)}
+                      </span>
+                    )}
+                    {item.files.length > 0 && (
+                      <span>
+                        {item.files.length} attachment
+                        {item.files.length === 1 ? '' : 's'}
+                      </span>
+                    )}
+                  </small>
+                </button>
+                <button
+                  className="icon-button"
+                  aria-label={`Delete to-do: ${item.title}`}
+                  disabled={busy || finishing}
+                  onClick={() =>
+                    void run(
+                      () =>
+                        store.change(item, {
+                          deletedAt: new Date().toISOString(),
+                        }),
+                      'Moved to Trash.',
+                    )
+                  }
+                >
+                  <Trash2 />
+                </button>
+              </li>
+            );
+          })}
         </ul>
       </BulkSelection>
       {!items.length && (
@@ -200,6 +241,20 @@ export function PersonalTodos({
               : 'Your list is clear. Add a to-do above or use Capture.'}
         </p>
       )}
+      <Dialog open={trashOpen} onOpenChange={setTrashOpen}>
+        <DialogContent className="trash-dialog">
+          <DialogTitle>Personal Trash</DialogTitle>
+          <DialogDescription className="sr-only">
+            Restore deleted items or clear them permanently.
+          </DialogDescription>
+          <TrashPanel
+            records={records}
+            store={store}
+            notify={notify}
+            scope="personal"
+          />
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

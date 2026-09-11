@@ -35,6 +35,8 @@ next-env.d.ts
 /dist/
 /.wrangler/
 /outputs/
+/notifications/outputs/
+/notifications/.wrangler/
 /work/
 
 *.tsbuildinfo

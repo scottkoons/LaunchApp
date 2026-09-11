@@ -2847,6 +2847,89 @@ details[open] > summary {
   color: var(--muted-foreground);
   font-size: 12px;
 }
+.trash-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  margin: 20px 0 8px;
+}
+.trash-toolbar > .button-row {
+  margin-left: auto;
+}
+.trash-select-all,
+.trash-item-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+  cursor: pointer;
+}
+.trash-item-label {
+  min-width: 0;
+  flex: 1;
+}
+.trash-item-label > span {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.trash-panel input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  accent-color: var(--primary);
+}
+.trash-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.trash-list > .trash-row {
+  gap: 16px;
+}
+.trash-row > .text-button {
+  flex-shrink: 0;
+}
+.trash-dialog {
+  width: min(760px, calc(100vw - 32px));
+  max-width: 760px;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}
+.trash-confirm-dialog {
+  width: min(480px, calc(100vw - 32px));
+  max-width: 480px;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}
+.trash-confirm-dialog [data-slot='dialog-title'] {
+  padding-right: 28px;
+}
+.trash-confirm-items {
+  margin: 0;
+  padding-left: 20px;
+  max-height: 160px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  color: var(--muted-foreground);
+}
+.phone-alert-settings h2,
+.phone-alert-enabled {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.phone-alert-settings h2 svg {
+  width: 20px;
+  height: 20px;
+}
+.phone-alert-enabled {
+  color: var(--green);
+}
+.phone-alert-enabled svg {
+  width: 18px;
+  height: 18px;
+}
 @media (min-width: 1600px) {
   .page {
     padding: 50px 64px 80px;
@@ -6192,6 +6275,60 @@ h3,
 }
 .todo-copy strong {
   overflow-wrap: anywhere;
+}
+.todo-title {
+  position: relative;
+  align-self: flex-start;
+  max-width: 100%;
+}
+.todo-list > .is-completing {
+  animation: todo-completion-exit 1500ms cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+.todo-list > .is-completing.keep-completed {
+  animation: none;
+}
+.todo-list .is-completing .todo-copy:disabled,
+.todo-list .is-completing > input:disabled {
+  opacity: 1;
+}
+.todo-list .is-completing > input {
+  accent-color: var(--green);
+}
+.todo-completion-line {
+  position: absolute;
+  inset: 0;
+  color: transparent;
+  text-decoration: line-through;
+  text-decoration-color: var(--green);
+  text-decoration-thickness: 2px;
+  transform-origin: left;
+  animation: todo-completion-strike 380ms cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+@keyframes todo-completion-strike {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes todo-completion-exit {
+  0%,
+  45% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .todo-list > .is-completing,
+  .todo-completion-line {
+    animation: none;
+    transform: none;
+  }
 }
 .todo-copy small {
   display: flex;

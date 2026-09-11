@@ -362,8 +362,8 @@ export function SmartCapture({
           })}
           {result.items.some((item) => item.reminderAt) && (
             <small className="hint">
-              This reminder appears inside Launch. Phone alerts while Launch is
-              closed aren’t connected yet.
+              For an alert when Launch is closed, enable Phone alerts in
+              Settings.
             </small>
           )}
           <button

@@ -1,4 +1,4 @@
-const CACHE = 'launch-shell-v14';
+const CACHE = 'launch-shell-v15';
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
@@ -18,6 +18,63 @@ self.addEventListener('install', (event) => {
       ),
   );
   self.skipWaiting();
+});
+function notificationUrl(value) {
+  try {
+    const url = new URL(
+      typeof value === 'string' ? value : '/',
+      self.location.origin,
+    );
+    if (url.origin === self.location.origin) return url.href;
+  } catch {
+    /* Fall back to Launch if a notification contains an invalid URL. */
+  }
+  return self.location.origin + '/';
+}
+self.addEventListener('push', (event) => {
+  let message = {};
+  try {
+    message = event.data?.json() || {};
+  } catch {
+    /* Still show a visible reminder. */
+  }
+  const url = new URL(notificationUrl(message.url));
+  event.waitUntil(
+    self.registration.showNotification(
+      typeof message.title === 'string' ? message.title : 'Launch reminder',
+      {
+        body:
+          typeof message.body === 'string'
+            ? message.body
+            : 'Open Launch to view your reminder.',
+        icon: '/icons/icon-192.png',
+        tag: typeof message.tag === 'string' ? message.tag : 'launch-reminder',
+        silent: false,
+        vibrate: [200, 100, 200],
+        data: {
+          url: url.pathname + url.search,
+        },
+      },
+    ),
+  );
+});
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const safeUrl = notificationUrl(event.notification.data?.url);
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: 'window', includeUncontrolled: true })
+      .then(async (windows) => {
+        const client = windows.find(
+          (window) => new URL(window.url).origin === self.location.origin,
+        );
+        if (client) {
+          await client.navigate(safeUrl);
+          return client.focus();
+        }
+        return self.clients.openWindow(safeUrl);
+      }),
+  );
 });
 self.addEventListener('activate', (event) =>
   event.waitUntil(

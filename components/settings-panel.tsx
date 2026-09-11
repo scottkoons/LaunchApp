@@ -3,7 +3,6 @@ import { useRef, useState } from 'react';
 import {
   Download,
   Upload,
-  Undo2,
   Cloud,
   FileText,
   Sun,
@@ -16,6 +15,8 @@ import { createEntity, now, type Entity, type FileMeta } from '@/lib/model';
 import { downloadBlob } from './calendar';
 import type { LaunchStore } from '@/lib/client-store';
 import { AgentConnections } from './agent-connections';
+import { TrashPanel } from './trash-panel';
+import { PhoneAlerts } from './phone-alerts';
 export function SettingsPanel({
   store,
   records,
@@ -234,6 +235,7 @@ export function SettingsPanel({
           </span>
         </div>
       </section>
+      <PhoneAlerts />
       <section className="settings-section">
         <h2>Phone & connections</h2>
         <div className="setting-row">
@@ -252,9 +254,10 @@ export function SettingsPanel({
             <small>
               Tap the microphone in Capture to speak a note, task, agenda item,
               or reminder: “Remind me tomorrow at 9 AM” or “in 30 minutes.” The
-              saved result shows the reminder time. Reminders currently appear
-              inside Launch. Scan a photo to extract its text. Originals stay
-              attached; reconnect and tap Process for offline captures.
+              saved result shows the reminder time. Enable Phone alerts above to
+              receive reminders when Launch is closed. Scan a photo to extract
+              its text. Originals stay attached; reconnect and tap Process for
+              offline captures.
             </small>
           </span>
           <Check />
@@ -295,8 +298,8 @@ export function SettingsPanel({
       <section className="settings-section">
         <h2>Your data stays yours.</h2>
         <p className="hint">
-          Completed work is kept indefinitely. Backups include task history,
-          notes, contacts, reports, and original attachments.
+          Completed work is kept until you delete it. Backups include task
+          history, notes, contacts, reports, and original attachments.
         </p>
         <div className="button-row">
           <button
@@ -338,33 +341,7 @@ export function SettingsPanel({
       </section>
       <section className="settings-section">
         <h2>Trash</h2>
-        <p className="hint">
-          Deleted items are kept here until you restore them. No automatic
-          deletion.
-        </p>
-        {records.filter((e) => e.deletedAt).length ? (
-          records
-            .filter((e) => e.deletedAt)
-            .map((e) => (
-              <div className="trash-row" key={e.id}>
-                <span>
-                  {e.title}
-                  <small>
-                    {e.kind} · {e.scope}
-                  </small>
-                </span>
-                <button
-                  className="text-button"
-                  onClick={() => void store.change(e, { deletedAt: null })}
-                >
-                  <Undo2 />
-                  Restore
-                </button>
-              </div>
-            ))
-        ) : (
-          <p className="empty-inline">Nothing in Trash.</p>
-        )}
+        <TrashPanel records={records} store={store} notify={notify} />
       </section>
     </div>
   );

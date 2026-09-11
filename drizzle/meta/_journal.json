@@ -15,6 +15,20 @@
       "when": 1789159698387,
       "tag": "0001_long_leo",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789159920404,
+      "tag": "0002_permanent_trash",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1789160916327,
+      "tag": "0003_phone_alerts",
+      "breakpoints": true
     }
   ]
 }

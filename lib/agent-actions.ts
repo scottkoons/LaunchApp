@@ -15,7 +15,7 @@ const common = {
   notes: z.string().max(20000).default(''),
   workspace: z.enum(['business', 'personal']).default('business'),
 };
-export const taskInput = z
+const taskInput = z
   .object({
     ...common,
     due_date: date
@@ -47,8 +47,8 @@ export const taskInput = z
       ),
   })
   .strict();
-export const noteInput = z.object(common).strict();
-export const agendaInput = z
+const noteInput = z.object(common).strict();
+const agendaInput = z
   .object({
     ...common,
     meeting_date: date.optional(),

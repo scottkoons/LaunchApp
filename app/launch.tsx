@@ -194,7 +194,10 @@ export default function Launch({
     setCompleting((items) => ({ ...items, [task.id]: task }));
     completionTimers.current.set(
       task.id,
-      setTimeout(() => stopCompletion(task.id), 1200),
+      setTimeout(
+        () => stopCompletion(task.id),
+        task.scope === 'personal' ? 1500 : 1200,
+      ),
     );
   }
   async function undoLast() {
@@ -259,6 +262,7 @@ export default function Launch({
       matchMedia('(max-width:767px)').matches
     )
       setView('capture');
+    if (params.get('view') === 'phone-alerts') setView('settings');
     if ('serviceWorker' in navigator)
       void navigator.serviceWorker.register('/sw.js').catch(() => {});
   }, []);
@@ -426,6 +430,22 @@ export default function Launch({
     setEditor(e);
     setEditorOpen(true);
   }
+  useEffect(() => {
+    if (!ready) return;
+    const url = new URL(location.href),
+      id = url.searchParams.get('reminder');
+    if (!id) return;
+    const item = records.find(
+      (record) => record.id === id && !record.deletedAt,
+    );
+    if (!item) return;
+    setScope(item.scope);
+    setView('tasks');
+    setEditor(item);
+    setEditorOpen(true);
+    url.searchParams.delete('reminder');
+    history.replaceState(null, '', url.pathname + url.search + url.hash);
+  }, [ready, records]);
   function add(kind: Entity['kind'], extra: Partial<Entity> = {}) {
     if (scope === 'personal' && kind === 'task') kind = 'note';
     open(
@@ -440,20 +460,23 @@ export default function Launch({
     );
   }
   async function complete(t: Entity) {
-    if (t.scope === 'personal') {
-      await store.change(t, todoCompletion(t, true));
-      notify('To-do completed.', () => void undoLast());
-      return;
-    }
     if (completionTimers.current.has(t.id)) return;
     animateCompletion(t);
     try {
-      await store.change(t, {
-        status: 'completed',
-        completedAt: now(),
-        ...(t.routine ? { finalDone: true } : {}),
-      });
-      notify('Task completed.', () => void undoLast());
+      await store.change(
+        t,
+        t.scope === 'personal'
+          ? todoCompletion(t, true)
+          : {
+              status: 'completed',
+              completedAt: now(),
+              ...(t.routine ? { finalDone: true } : {}),
+            },
+      );
+      notify(
+        t.scope === 'personal' ? 'To-do completed.' : 'Task completed.',
+        () => void undoLast(),
+      );
     } catch (error) {
       stopCompletion(t.id);
       notify((error as Error).message);
@@ -975,6 +998,8 @@ export default function Launch({
               <PersonalTodos
                 key={view}
                 records={records}
+                completing={completing}
+                onComplete={complete}
                 store={store}
                 onOpen={open}
                 notify={notify}

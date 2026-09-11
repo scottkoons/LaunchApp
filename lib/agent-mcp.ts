@@ -40,7 +40,7 @@ export async function agentMcp(request: Request, db: D1Database) {
     { name: 'Launch', version: '1.0.0' },
     {
       instructions:
-        'Save tasks, quick notes, and meeting agenda items in the connected Launch account. Default to the business workspace and America/Denver time zone. Only save items the user requests. Use one stable request_id per item and reuse it on retries. A single task date is its Final deadline. Call get_launch_context when resolving relative dates; today and tomorrow are also accepted directly. Ask for a reminder time if missing. Reminders appear inside Launch while it is open, not as background push alarms. Confirm success only after saved:true. Tools cannot list, edit, or delete existing records.',
+        'Save tasks, quick notes, and meeting agenda items in the connected Launch account. Default to the business workspace and America/Denver time zone. Only save items the user requests. Use one stable request_id per item and reuse it on retries. A single task date is its Final deadline. Call get_launch_context when resolving relative dates; today and tomorrow are also accepted directly. Ask for a reminder time if missing. Reminders appear inside Launch. Background phone alerts require the user to enable Phone alerts in Launch Settings on that device and a connected reminder service. A saved reminder does not confirm that phone alerts are enabled or delivered. Confirm success only after saved:true. Tools cannot list, edit, or delete existing records.',
     },
   );
   server.registerTool(
@@ -63,7 +63,8 @@ export async function agentMcp(request: Request, db: D1Database) {
             local_time: localTime(new Date().toISOString(), 'America/Denver'),
             time_zone: 'America/Denver',
             default_workspace: 'business',
-            reminder_delivery: 'Inside Launch while open',
+            reminder_delivery:
+              'Inside Launch; background delivery requires Phone alerts enabled on the device and a connected reminder service. Device status is not checked by this tool.',
           }),
         },
       ],

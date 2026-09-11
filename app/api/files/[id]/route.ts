@@ -7,8 +7,10 @@ export async function GET(
     const user = await owner();
     const { id } = await params;
     const meta = await database()
-      .prepare('SELECT name,type FROM files WHERE owner=? AND id=?')
-      .bind(user, id)
+      .prepare(
+        "SELECT name,type FROM files WHERE owner=? AND id=? AND id NOT IN (SELECT id FROM permanent_deletions WHERE owner=? AND resource='file')",
+      )
+      .bind(user, id, user)
       .first<{ name: string; type: string }>();
     if (!meta) return json({ error: 'File not found' }, 404);
     const obj = await bucket().get(`${user}/${id}`);

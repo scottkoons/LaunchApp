@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "316ce8a0-f1dc-4b10-9080-eab3c16f236b",
-  "prevId": "ec7a7ee2-494b-4eef-b889-061a2decff3c",
+  "id": "9ba51703-d994-4f32-a4db-ff96ef4e6226",
+  "prevId": "316ce8a0-f1dc-4b10-9080-eab3c16f236b",
   "tables": {
     "agent_connections": {
       "name": "agent_connections",
@@ -219,6 +219,42 @@
         "operations_owner_id_pk": {
           "columns": ["owner", "id"],
           "name": "operations_owner_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "permanent_deletions": {
+      "name": "permanent_deletions",
+      "columns": {
+        "owner": {
+          "name": "owner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "resource": {
+          "name": "resource",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "permanent_deletions_owner_id_resource_pk": {
+          "columns": ["owner", "id", "resource"],
+          "name": "permanent_deletions_owner_id_resource_pk"
         }
       },
       "uniqueConstraints": {},

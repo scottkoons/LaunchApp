@@ -85,8 +85,8 @@ export function AgentConnections({
       <h2>Agent connections</h2>
       <p className="hint">
         Let Grok Bot add tasks, quick notes, and meeting agenda items to your
-        account. It can set reminders, which appear inside Launch while it is
-        open.
+        account. It can set reminders. Enable Phone alerts in Settings to
+        receive them when Launch is closed.
       </p>
       <p className="hint">
         Connections can create items and check their own save receipts. They

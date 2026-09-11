@@ -24,6 +24,7 @@ type Cache = {
   files: FileMeta[];
   queue: Operation[];
   uploads: { meta: FileMeta; blob: Blob }[];
+  removed?: { records: string[]; files: string[] };
 };
 const empty = (): Cache => ({ records: [], files: [], queue: [], uploads: [] });
 async function openCache(account: string) {
@@ -49,6 +50,22 @@ async function readCache(account: string) {
 // Apply only this writer's changes inside one IndexedDB transaction. Another
 // tab's queued work must survive a save made from an older in-memory snapshot.
 function mergeCache(current: Cache, base: Cache, next: Cache): Cache {
+  const removed = {
+    records: [
+      ...new Set([
+        ...(current.removed?.records || []),
+        ...(next.removed?.records || []),
+      ]),
+    ],
+    files: [
+      ...new Set([
+        ...(current.removed?.files || []),
+        ...(next.removed?.files || []),
+      ]),
+    ],
+  };
+  const goneRecords = new Set(removed.records),
+    goneFiles = new Set(removed.files);
   function merge<T extends object>(
     old: T[],
     before: T[],
@@ -89,15 +106,18 @@ function mergeCache(current: Cache, base: Cache, next: Cache): Cache {
     if (index >= 0) records[index] = { ...records[index], ...op.patch };
   }
   return {
-    records,
-    queue,
-    files: merge(current.files, base.files, next.files, (v) => v.id),
+    removed,
+    records: records.filter((e) => !goneRecords.has(e.id)),
+    queue: queue.filter((q) => !goneRecords.has(q.entityId)),
+    files: merge(current.files, base.files, next.files, (v) => v.id).filter(
+      (f) => !goneFiles.has(f.id),
+    ),
     uploads: merge(
       current.uploads,
       base.uploads,
       next.uploads,
       (v) => v.meta.id,
-    ),
+    ).filter((u) => !goneFiles.has(u.meta.id)),
   };
 }
 async function writeCache(account: string, base: Cache, data: Cache) {
@@ -143,6 +163,7 @@ export class LaunchStore {
   saveChain = Promise.resolve();
   private submitted: Cache = empty();
   private syncPromise: Promise<void> | null = null;
+  private purging = false;
   // Session history is independent of notification lifetime. Store only the
   // lifecycle and moved-deadline fields so undo preserves later notes and attachments.
   undoHistory: {
@@ -198,6 +219,7 @@ export class LaunchStore {
           this.submitted = structuredClone(this.data);
       });
     await this.saveChain;
+    this.forgetRemovedHistory();
     this.emit();
   }
   async init() {
@@ -216,6 +238,8 @@ export class LaunchStore {
     }
   }
   async change(entity: Entity, patch: Partial<Entity>, remember = true) {
+    if (this.data.removed?.records.includes(entity.id))
+      throw new Error('This item was permanently deleted.');
     const latest = this.data.records.find((e) => e.id === entity.id) || entity;
     const candidate = { ...latest, ...patch, updatedAt: now() };
     const next = validateEntity({ ...candidate });
@@ -325,6 +349,95 @@ export class LaunchStore {
     await Promise.all(writes);
     return current.length;
   }
+  private forgetRemovedHistory() {
+    const removed = new Set(this.data.removed?.records || []);
+    this.undoHistory = this.undoHistory.flatMap((action) => {
+      const remaining = [action, ...(action.related || [])]
+        .filter((entry) => !removed.has(entry.entityId))
+        .map(({ entityId, before, after }) => ({ entityId, before, after }));
+      return remaining.length
+        ? [{ ...remaining[0], related: remaining.slice(1) }]
+        : [];
+    });
+  }
+  async permanentlyDelete(items: Entity[]) {
+    if (this.purging)
+      throw new Error('Permanent deletion is already in progress.');
+    if (!navigator.onLine)
+      throw new Error('Connect to the internet to permanently delete items.');
+    const ids = new Set(items.map((item) => item.id));
+    if (!ids.size) return { deleted: 0, skipped: 0, cleanupPending: false };
+    this.purging = true;
+    let deleted = 0,
+      skipped = 0,
+      cleanupPending = false;
+    try {
+      await this.sync();
+      if (this.error || this.data.queue.length || this.data.uploads.length)
+        throw new Error(
+          'Finish syncing your changes before permanently deleting items.',
+        );
+      const expected = new Map(items.map((item) => [item.id, item]));
+      const selected = this.data.records.filter((item) => {
+        const confirmed = expected.get(item.id);
+        return (
+          confirmed &&
+          item.deletedAt &&
+          [...new Set([...Object.keys(confirmed), ...Object.keys(item)])]
+            .filter((key) => key !== 'version' && key !== 'updatedAt')
+            .every(
+              (key) =>
+                JSON.stringify(confirmed[key as keyof Entity]) ===
+                JSON.stringify(item[key as keyof Entity]),
+            )
+        );
+      });
+      skipped = ids.size - selected.length;
+      for (let offset = 0; offset < selected.length; offset += 500) {
+        const response = await fetch('/api/trash', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            items: selected
+              .slice(offset, offset + 500)
+              .map((item) => ({ id: item.id, version: item.version })),
+          }),
+          signal: AbortSignal.timeout(60000),
+        });
+        const result = (await response.json()) as {
+          error?: string;
+          deleted: number;
+          skipped: number;
+          removed: NonNullable<Cache['removed']>;
+          cleanupPending: boolean;
+        };
+        if (!response.ok)
+          throw new Error(
+            result.error ||
+              'Could not permanently delete these items. Try again.',
+          );
+        this.data = mergeCache(this.data, this.data, {
+          ...this.data,
+          removed: result.removed,
+        });
+        deleted += result.deleted;
+        skipped += result.skipped;
+        cleanupPending ||= result.cleanupPending;
+        await this.persist();
+      }
+      return { deleted, skipped, cleanupPending };
+    } catch (error) {
+      if (deleted)
+        throw new Error(
+          `${deleted} items permanently deleted. The remaining items were kept. ${(error as Error).message}`,
+        );
+      throw error;
+    } finally {
+      this.purging = false;
+      // Reconcile other devices and uncertain responses before another attempt.
+      await this.sync();
+    }
+  }
   async undoLast() {
     if (this.undoing) return null;
     const action = this.undoHistory.at(-1);
@@ -387,6 +500,8 @@ export class LaunchStore {
     void this.sync();
   }
   private queueAdd(entity: Entity) {
+    if (this.data.removed?.records.includes(entity.id))
+      throw new Error('This item was permanently deleted.');
     validateEntity(entity);
     this.data.records.push(entity);
     this.data.queue.push({
@@ -675,6 +790,14 @@ export class LaunchStore {
           body: form,
           signal: AbortSignal.timeout(60000),
         });
+        if (r.status === 410) {
+          this.data = mergeCache(this.data, this.data, {
+            ...this.data,
+            removed: { records: [], files: [item.meta.id] },
+          });
+          await this.persist();
+          continue;
+        }
         if (!r.ok)
           throw new Error(
             ((await r.json()) as { error: string }).error || 'Upload failed',
@@ -705,6 +828,14 @@ export class LaunchStore {
           error?: string;
           entity: Entity;
         };
+        if (r.status === 410) {
+          this.data = mergeCache(this.data, this.data, {
+            ...this.data,
+            removed: { records: [op.entityId], files: [] },
+          });
+          await this.persist();
+          continue;
+        }
         if (r.status === 409) {
           op.conflict = result.conflicts?.join(', ') || 'Record';
           blocked.add(op.entityId);
@@ -731,7 +862,12 @@ export class LaunchStore {
       const remote = (await r.json()) as {
         records: Entity[];
         files: FileMeta[];
+        removed?: Cache['removed'];
       };
+      this.data = mergeCache(this.data, this.data, {
+        ...this.data,
+        removed: remote.removed,
+      });
       const pending = new Set(this.data.queue.map((q) => q.entityId));
       this.data.records = [
         ...remote.records.filter((e: Entity) => !pending.has(e.id)),

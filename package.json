@@ -12,8 +12,8 @@
     "lint": "oxlint",
     "format": "oxfmt",
     "db:generate": "drizzle-kit generate",
-    "test": "tsx --test tests/model.test.ts tests/store.test.ts tests/note-swipe.test.ts tests/reminders.test.ts tests/image-view.test.ts tests/capture.test.ts tests/agent-mcp.test.ts",
-    "test:api": "tsx --test tests/api.test.ts",
+    "test": "tsx --test tests/model.test.ts tests/store.test.ts tests/note-swipe.test.ts tests/reminders.test.ts tests/image-view.test.ts tests/capture.test.ts tests/agent-mcp.test.ts tests/trash.test.ts tests/phone-alerts.test.ts",
+    "test:api": "tsx --test tests/api.test.ts tests/trash-api.test.ts",
     "typecheck": "tsc --noEmit",
     "format:check": "oxfmt --check",
     "deadcode": "knip",
@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",
+    "@block65/webcrypto-web-push": "^2.0.0",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
