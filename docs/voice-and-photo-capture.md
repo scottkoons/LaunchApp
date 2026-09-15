@@ -50,6 +50,18 @@ Processing is limited to 60 requests per account per hour and 12 MB per input.
 
 ## Verification
 
+Attachment uploads and transcription requests materialize a fresh in-memory
+Blob before building multipart data. This works around
+[WebKit bug 319985](https://bugs.webkit.org/show_bug.cgi?id=319985), where a
+disk-backed File restored from IndexedDB can send a zero-byte request on iOS.
+The September 14 production logs showed repeated zero-length `/api/files`
+requests returning 400, while nearby transcription requests succeeded.
+Uploads retain their original IDs and queued data until acknowledged, so
+pending recordings retry after the update without creating duplicates.
+Byte-length checks stop incomplete reads before sending; tests cover binary
+multipart contents, filenames, MIME types, and uploading after an offline
+restart. A physical iPhone retry is still needed to confirm recovery there.
+
 `npm run check` covers validation, dates/DST, untrusted photo instructions,
 provider failures, offline storage, operation replay, idempotency, and Undo.
 Live synthetic voice and image requests and the browser capture flow were

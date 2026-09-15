@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { agendaItems, agendaOrderChanges } from './agenda';
+import { uploadBlob } from './upload-blob';
 import {
   captureFingerprint,
   captureReminderAt,
@@ -784,7 +785,11 @@ export class LaunchStore {
       for (const item of this.data.uploads.slice()) {
         const form = new FormData();
         form.set('id', item.meta.id);
-        form.set('file', item.blob, item.meta.name);
+        form.set(
+          'file',
+          await uploadBlob(item.blob, item.meta.size, item.meta.type),
+          item.meta.name,
+        );
         const r = await fetch('/api/files', {
           method: 'POST',
           body: form,

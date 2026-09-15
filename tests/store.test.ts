@@ -468,6 +468,12 @@ void test('offline note and photo survive restart, sync once, and retain conflic
       const form = init.body as FormData;
       const id = form.get('id') as string;
       const file = form.get('file') as File;
+      // Exercise the actual multipart bytes after the original crossed IndexedDB.
+      const sent = await new Response(form).formData();
+      const sentFile = sent.get('file') as File;
+      assert.equal(await sentFile.text(), 'image bytes');
+      assert.equal(sentFile.name, 'menu.jpg');
+      assert.equal(sentFile.type, 'image/jpeg');
       const f = {
         id,
         name: file.name,

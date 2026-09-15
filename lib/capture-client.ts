@@ -2,6 +2,7 @@
 import { createEntity, type Entity, type Scope } from './model';
 import type { LaunchStore } from './client-store';
 import { validatePlan, type CapturePlan } from './capture-intent';
+import { uploadBlob } from './upload-blob';
 
 const running = new Set<string>();
 async function request(body: BodyInit) {
@@ -96,7 +97,10 @@ export async function processCapture(
         form.set('type', source.capture!.type);
         form.set(
           'file',
-          blob,
+          await uploadBlob(
+            blob,
+            source.capture!.type === 'voice' ? file.size : blob.size,
+          ),
           source.capture!.type === 'photo' ? 'capture.jpg' : file.name,
         );
         const { transcript } = await request(form);

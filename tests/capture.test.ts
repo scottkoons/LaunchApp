@@ -9,6 +9,44 @@ import {
   type CaptureState,
 } from '../lib/capture-intent';
 import { interpretCapture, transcribeMedia } from '../lib/capture-ai';
+import { uploadBlob } from '../lib/upload-blob';
+
+void test('uploads materialize saved file bytes before multipart serialization', async () => {
+  const bytes = new Uint8Array([0, 255, 1, 0, 128, 45]);
+  const original = new File([bytes], 'Voice note.m4a', { type: 'audio/mp4' });
+  let reads = 0;
+  const read = original.arrayBuffer.bind(original);
+  original.arrayBuffer = async () => {
+    reads++;
+    return read();
+  };
+  const blob = await uploadBlob(original, bytes.length, 'audio/mp4');
+  assert.equal(reads, 1);
+  assert.notEqual(blob, original);
+  assert.equal(blob instanceof File, false);
+  const form = new FormData();
+  form.set('id', 'saved-voice');
+  form.set('file', blob, original.name);
+  const sent = await new Response(form).formData();
+  const file = sent.get('file') as File;
+  assert.equal(sent.get('id'), 'saved-voice');
+  assert.equal(file.name, original.name);
+  assert.equal(file.type, original.type);
+  assert.deepEqual(new Uint8Array(await file.arrayBuffer()), bytes);
+  assert.deepEqual(new Uint8Array(await original.arrayBuffer()), bytes);
+});
+void test('unreadable or partial saved attachments fail before sending empty data', async () => {
+  const original = new Blob(['keep the original'], { type: 'audio/mp4' });
+  await assert.rejects(uploadBlob(original, original.size + 1), /completely/);
+  original.arrayBuffer = async () => {
+    throw new Error('private browser details');
+  };
+  await assert.rejects(uploadBlob(original), (error: Error) => {
+    assert.match(error.message, /attachment could not be read/);
+    assert.doesNotMatch(error.message, /private browser details/);
+    return true;
+  });
+});
 
 const source: CaptureState = {
   type: 'voice',
