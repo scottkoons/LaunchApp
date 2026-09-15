@@ -432,14 +432,16 @@ function CaptureReview({
   const [error, setError] = useState('');
   const transcript = source.capture?.transcript || '';
   const fileId = source.files[0];
+  const isVoice = source.capture?.type === 'voice';
+  const pending = store.data.files.find((file) => file.id === fileId)?.pending;
   useEffect(() => setText(transcript), [transcript]);
   useEffect(() => {
-    const next = fileId ? store.fileUrl(fileId) : '';
+    const next = fileId && !isVoice ? store.fileUrl(fileId) : '';
     setUrl(next);
     return () => {
       if (next.startsWith('blob:')) URL.revokeObjectURL(next);
     };
-  }, [fileId, store]);
+  }, [fileId, isVoice, pending, store]);
   async function act(keep = false) {
     setSaving(true);
     setError('');
@@ -472,7 +474,11 @@ function CaptureReview({
               : 'Original saved · ready to transcribe')}
       </strong>
       {source.capture?.type === 'voice' ? (
-        <OriginalAudio src={url} aria-label="Original voice recording" />
+        <OriginalAudio
+          fileId={fileId}
+          store={store}
+          aria-label="Original voice recording"
+        />
       ) : (
         <img
           className="capture-source-photo"

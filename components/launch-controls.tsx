@@ -263,7 +263,11 @@ export function Attachments({
               active={!!preview}
             />
           ) : preview?.type.startsWith('audio/') ? (
-            <OriginalAudio src={urls[preview.id]} aria-label={preview.name} />
+            <OriginalAudio
+              fileId={preview.id}
+              store={store}
+              aria-label={preview.name}
+            />
           ) : preview?.type === 'application/pdf' ? (
             <iframe src={urls[preview.id]} title={preview.name} />
           ) : (

@@ -14,6 +14,7 @@
     "db:generate": "drizzle-kit generate",
     "test": "tsx --test tests/model.test.ts tests/store.test.ts tests/note-swipe.test.ts tests/reminders.test.ts tests/image-view.test.ts tests/capture.test.ts tests/agent-mcp.test.ts tests/trash.test.ts tests/phone-alerts.test.ts tests/notification-clock.test.ts",
     "test:api": "tsx --test tests/api.test.ts tests/trash-api.test.ts",
+    "test:playback": "tsx --test tests/file-playback-api.test.ts",
     "typecheck": "tsc --noEmit",
     "format:check": "oxfmt --check",
     "deadcode": "knip",

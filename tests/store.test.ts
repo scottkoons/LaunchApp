@@ -137,6 +137,28 @@ void test('voice capture originals survive offline restart; tasks use Final; app
     true,
   );
   assert.equal(restarted.data.uploads[0].blob.size, 14);
+  const createURL = URL.createObjectURL.bind(URL);
+  let playbackBlob: Blob | undefined;
+  URL.createObjectURL = (blob: Blob) => {
+    playbackBlob = blob;
+    return createURL(blob);
+  };
+  try {
+    const url = await restarted.audioUrl(files[0]);
+    try {
+      assert.notEqual(playbackBlob, restarted.data.uploads[0].blob);
+      assert.equal(playbackBlob?.type, 'audio/webm');
+      assert.equal(await (await fetch(url)).text(), 'original audio');
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+    assert.equal(
+      await restarted.audioUrl('uploaded-recording'),
+      '/api/files/uploaded-recording',
+    );
+  } finally {
+    URL.createObjectURL = createURL;
+  }
   // Server sync changes metadata timestamps without changing the saved content.
   restarted.data.records = restarted.data.records.map((e) =>
     e.sourceId === source.id

@@ -62,6 +62,22 @@ Byte-length checks stop incomplete reads before sending; tests cover binary
 multipart contents, filenames, MIME types, and uploading after an offline
 restart. A physical iPhone retry is still needed to confirm recovery there.
 
+Audio playback separately requires [HTTP byte-range support on iPhone](https://developer.apple.com/library/archive/documentation/AppleApplications/Reference/SafariWebContent/CreatingVideoforSafarioniPhone/CreatingVideoforSafarioniPhone.html).
+Private file responses now serve bounded, open-ended, and suffix ranges with
+206, Content-Range and the exact Content-Length; HEAD omits the body and invalid
+offsets return 416. Authentication and permanent-deletion checks apply first.
+Pending recordings play from a fresh memory-backed Blob, then switch to the
+uploaded file when sync finishes. Playback failures offer Reload recording;
+they do not discard the transcript or prevent reminder clarification. The
+file playback API test verifies actual response bytes and authentication,
+and the offline-restart test verifies the separate playback Blob.
+`worker.ts` preserves the length at the final response boundary using
+Cloudflare's FixedLengthStream; framework wrappers can otherwise turn the
+recording into a chunked transfer even when the route specifies its length.
+After building, run `npx wrangler dev --config dist/server/wrangler.json --port 8787 --persist-to .wrangler/state`,
+then `npm run test:playback`. This test uses only local fixtures and refuses
+non-local URLs. Physical iPhone playback still needs a device check.
+
 `npm run check` covers validation, dates/DST, untrusted photo instructions,
 provider failures, offline storage, operation replay, idempotency, and Undo.
 Live synthetic voice and image requests and the browser capture flow were

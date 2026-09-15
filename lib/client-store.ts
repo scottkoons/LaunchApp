@@ -745,6 +745,15 @@ export class LaunchStore {
       ? URL.createObjectURL(upload.blob)
       : `/api/files/${encodeURIComponent(id)}`;
   }
+  async audioUrl(id: string) {
+    const upload = this.data.uploads.find((u) => u.meta.id === id);
+    // Give Safari's media process in-memory bytes rather than an IndexedDB File.
+    return upload
+      ? URL.createObjectURL(
+          await uploadBlob(upload.blob, upload.meta.size, upload.meta.type),
+        )
+      : `/api/files/${encodeURIComponent(id)}`;
+  }
   async resolve(id: string, keepLocal: boolean) {
     const op = this.data.queue.find((q) => q.id === id);
     if (!op) return;
