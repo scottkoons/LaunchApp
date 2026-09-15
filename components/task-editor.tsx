@@ -177,7 +177,7 @@ export function TaskEditor({
   const selectedCompany = companies.find((c) => c.id === draft.companyId);
   const recipient = deliveryRecipient(draft, records);
   const creatingTask = isTask && creating.current;
-  const modal = creatingTask || isReference;
+  const modal = isTask || isReference;
   const Editor = modal ? Dialog : Sheet;
   const EditorContent = modal ? DialogContent : SheetContent;
   const EditorTitle = modal ? DialogTitle : SheetTitle;
@@ -187,7 +187,7 @@ export function TaskEditor({
       <label className="field">
         {isTask ? 'Task name' : 'Title'}
         <input
-          ref={creatingTask ? taskNameRef : undefined}
+          ref={isTask ? taskNameRef : undefined}
           value={draft.title}
           placeholder={isTask ? 'What needs to happen?' : 'Give this a name'}
           onChange={(e) => change({ title: e.target.value })}
@@ -259,7 +259,7 @@ export function TaskEditor({
     </>
   );
   const notesField = (
-    <>
+    <div className={isTask ? 'task-notes' : undefined}>
       <label className="field">
         Notes
         <textarea
@@ -268,7 +268,24 @@ export function TaskEditor({
           onChange={(e) => change({ notes: e.target.value })}
         />
       </label>
-    </>
+      {isTask && (
+        <>
+          <Toggle
+            checked={draft.includeNotesInReport !== false}
+            onChange={(includeNotesInReport) =>
+              change({ includeNotesInReport })
+            }
+          >
+            Include notes in report
+          </Toggle>
+          {draft.includeNotesInReport === false && (
+            <p className="hint">
+              Notes stay with this task and are left out of reports.
+            </p>
+          )}
+        </>
+      )}
+    </div>
   );
   const taskFlags = (
     <>
@@ -632,6 +649,11 @@ export function TaskEditor({
               onChange={(e) => change({ reportNote: e.target.value })}
               placeholder="A shorter version for the meeting. Leave blank to use notes."
             />
+            {draft.includeNotesInReport === false && (
+              <span className="hint">
+                Select “Include notes in report” to include this summary.
+              </span>
+            )}
           </label>
         </details>
       )}
@@ -660,11 +682,11 @@ export function TaskEditor({
         className={
           isReference
             ? 'task-create-modal reference-editor-modal'
-            : creatingTask
-              ? 'task-create-modal'
+            : isTask
+              ? `task-create-modal${creatingTask ? '' : ' task-details-modal'}`
               : 'editor-sheet'
         }
-        initialFocus={creatingTask ? taskNameRef : undefined}
+        initialFocus={isTask ? taskNameRef : undefined}
       >
         <SheetHeader>
           <EditorTitle>
@@ -693,9 +715,9 @@ export function TaskEditor({
           </EditorDescription>
         </SheetHeader>
         <div className="editor-body">
-          {creatingTask ? (
+          {isTask ? (
             <>
-              {draft.scope === 'business' && (
+              {creatingTask && draft.scope === 'business' && (
                 <div className="task-create-preset">
                   <span>
                     <Bookmark />
@@ -737,7 +759,9 @@ export function TaskEditor({
               <div className="task-create-columns">
                 <div className="task-create-main">
                   {titleField}
-                  <div className="task-create-flags">{taskFlags}</div>
+                  {creatingTask && (
+                    <div className="task-create-flags">{taskFlags}</div>
+                  )}
                   {workspaceFields}
                   {notesField}
                   {attachmentFields}

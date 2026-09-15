@@ -1225,6 +1225,20 @@ kbd {
   margin-bottom: 12px;
   font-size: 13px;
 }
+.task-create-modal .task-notes {
+  margin-bottom: 22px;
+}
+.task-create-modal .task-notes .field {
+  margin-bottom: 8px;
+}
+.task-create-modal .task-notes .toggle {
+  font-size: 14px;
+  margin-bottom: 0;
+}
+.task-details-modal .task-notes textarea {
+  min-height: 160px;
+  height: 200px;
+}
 .task-create-flags {
   display: flex;
   flex-wrap: wrap;

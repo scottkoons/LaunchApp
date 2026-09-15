@@ -51,7 +51,7 @@ export function createPdf(s: ReportSnapshot) {
     doc.line(16, y + 2, width() - 16, y + 2);
     y += 6;
   };
-  const table = (heading: string, rows: Entity[]) => {
+  const table = (heading: string, rows: Entity[], completed = false) => {
     if (!rows.length) return;
     title(heading);
     autoTable(doc, {
@@ -59,7 +59,12 @@ export function createPdf(s: ReportSnapshot) {
       head: [['TASK NAME', 'NOTES', 'DRAFT', 'FINAL']],
       body: rows.map((t) => [
         t.title + (t.scope === 'personal' ? ' (Personal)' : ''),
-        t.reportNote || t.notes,
+        [
+          t.includeNotesInReport === false ? '' : t.reportNote || t.notes,
+          completed ? `Completed ${t.completedAt?.slice(0, 10) || ''}` : '',
+        ]
+          .filter(Boolean)
+          .join('\n'),
         t.draft ? pretty(t.draft) : '-',
         t.final ? pretty(t.final) : '-',
       ]),
@@ -187,12 +192,8 @@ export function createPdf(s: ReportSnapshot) {
   }
   table(
     `Completed · ${pretty(s.options.completedFrom)} – ${pretty(s.options.completedTo)}`,
-    s.completed.map((t) => ({
-      ...t,
-      reportNote:
-        (t.reportNote || t.notes) +
-        `\nCompleted ${t.completedAt?.slice(0, 10) || ''}`,
-    })),
+    s.completed,
+    true,
   );
   table('Back burner', s.backburner);
   table('Postponed', s.postponed);

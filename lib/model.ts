@@ -56,6 +56,7 @@ export type Entity = {
   reminderAcknowledgedAt?: string;
   revisit?: string;
   reportNote?: string;
+  includeNotesInReport?: boolean;
   repeat?: 'none' | 'weekly' | 'monthly' | 'quarterly';
   repeatDays?: number[];
   repeatAnchor?: string;
@@ -224,6 +225,7 @@ export function createEntity(
     notes: '',
     scope,
     report: kind === 'task' && scope === 'business',
+    ...(kind === 'task' ? { includeNotesInReport: true } : {}),
     files: [],
     createdAt: now(),
     updatedAt: now(),
@@ -682,7 +684,12 @@ export function makeReport(
             !e.deletedAt)) &&
         !options.excluded.includes(e.id),
     )
-    .sort((a, b) => (a.order || 0) - (b.order || 0));
+    .sort((a, b) => (a.order || 0) - (b.order || 0))
+    .map((e) =>
+      e.kind === 'task' && e.includeNotesInReport === false
+        ? { ...e, notes: '', reportNote: '' }
+        : e,
+    );
   const tasks = items.filter((e) => e.kind === 'task');
   const settings = records.find((e) => e.kind === 'settings');
   return {
@@ -915,6 +922,11 @@ export function validateEntity(e: Entity) {
     e.notes.length > 100000
   )
     throw new Error('Title or notes are too long');
+  if (
+    e.includeNotesInReport !== undefined &&
+    typeof e.includeNotesInReport !== 'boolean'
+  )
+    throw new Error('Invalid report notes preference');
   if (
     !Array.isArray(e.files) ||
     e.files.length > 100 ||
