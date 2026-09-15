@@ -4104,6 +4104,12 @@ h3,
   width: 13px;
   height: 13px;
 }
+.classic-action-heading {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 34px;
+}
 .classic-table-heading > button:hover {
   color: var(--foreground);
 }
@@ -4112,6 +4118,21 @@ h3,
   border-bottom: 1px solid var(--border);
   background: var(--card);
   position: relative;
+}
+.classic-row-open {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+.classic-task-row > :not(.classic-row-open) {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+.classic-task-row:not(.is-completing) button {
+  pointer-events: auto;
 }
 .classic-task-row:hover {
   background: color-mix(in srgb, var(--card) 87%, var(--muted));
@@ -4253,6 +4274,9 @@ h3,
 .classic-action:hover {
   color: var(--primary);
   background: var(--accent);
+}
+.classic-delete:hover {
+  color: var(--destructive);
 }
 .task-column-divider {
   width: 6px;
@@ -4704,7 +4728,7 @@ h3,
     display: none;
   }
   .classic-task-grid {
-    grid-template-columns: 24px minmax(0, 1fr) 38px 30px;
+    grid-template-columns: 24px minmax(0, 1fr) repeat(3, 30px);
     padding: 8px 8px 8px 2px;
     gap: 4px;
   }
@@ -6372,4 +6396,83 @@ h3,
 
 .todo-editor-modal {
   max-height: calc(100dvh - 32px);
+}
+
+.reference-assistant {
+  display: grid;
+  gap: 16px;
+  margin: 20px 0 28px;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--card);
+}
+.reference-assistant-heading,
+.reference-assistant-actions,
+.reference-page-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.reference-assistant-heading > svg {
+  color: var(--primary);
+  width: 22px;
+}
+.reference-assistant-heading h2 {
+  margin: 0;
+  font-size: 1.125rem;
+}
+.reference-assistant-heading > span {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+.reference-site,
+.reference-command {
+  display: grid;
+  gap: 8px;
+  font-size: 0.875rem;
+}
+.reference-site input,
+.reference-command textarea {
+  width: 100%;
+  font-size: 1rem;
+}
+.reference-command textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+.reference-assistant-actions {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.reference-assistant p {
+  margin: 0;
+}
+.reference-assistant .report-error {
+  white-space: pre-line;
+}
+.reference-page-controls {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+.reference-page-controls span {
+  font-size: 0.875rem;
+}
+@media (max-width: 600px) {
+  .reference-assistant {
+    padding: 16px;
+  }
+  .reference-assistant-actions .primary {
+    width: 100%;
+    white-space: normal;
+  }
+  .reference-page-controls {
+    gap: 8px;
+  }
+  .reference-page-controls .button {
+    padding: 9px;
+    font-size: 0.875rem;
+  }
 }

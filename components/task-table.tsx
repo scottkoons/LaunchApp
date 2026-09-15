@@ -24,7 +24,14 @@ import {
   FileX,
   Repeat2,
   Paperclip,
+  Trash2,
 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { reminderLabel, reminderPending } from '@/lib/reminders';
 import { day, dateStatus, pretty, type Entity } from '@/lib/model';
 
@@ -40,13 +47,19 @@ type Props = {
   onSort: (key: string) => void;
   onOpen: (task: Entity) => void;
   onComplete: (task: Entity) => void;
+  onDelete: (task: Entity) => Promise<void>;
   onMilestone: (task: Entity, key: 'draft' | 'final') => void;
   onPatch: (task: Entity, patch: Partial<Entity>) => void;
 };
 
 export function TaskTable(props: Props) {
-  const { tasks, ratio, setRatio, onSort, sort, direction } = props;
+  const { tasks, ratio, setRatio, onSort, sort, direction, onDelete } = props;
   const container = useRef<HTMLDivElement>(null);
+  const deleteTrigger = useRef<HTMLButtonElement>(null);
+  const cancelDelete = useRef<HTMLButtonElement>(null);
+  const [deleteTask, setDeleteTask] = useState<Entity | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
   const [width, setWidth] = useState(1000);
   useEffect(() => {
     const element = container.current;
@@ -59,10 +72,10 @@ export function TaskTable(props: Props) {
   }, []);
   // Match the original proportions, reserving space for the overall completion
   // control that Launch keeps separate from the two milestone buttons.
-  const available = Math.max(250, width - 340);
+  const available = Math.max(250, width - 378);
   const nameWidth = Math.max(150, Math.min(available - 100, available * ratio));
   const style = {
-    '--task-columns': `26px ${nameWidth}px 6px minmax(100px, 1fr) 82px 82px 30px 30px`,
+    '--task-columns': `26px ${nameWidth}px 6px minmax(100px, 1fr) 82px 82px 30px 30px 30px`,
   } as CSSProperties;
   const heading = (key: string, label: string) => (
     <button
@@ -121,17 +134,97 @@ export function TaskTable(props: Props) {
         {heading('notes', 'Notes')}
         {heading('draft', 'Draft')}
         {heading('final', 'Final')}
-        <CircleCheck aria-label="Complete task" />
-        <Pin aria-label="Pin task" />
+        <span className="classic-action-heading">
+          <CircleCheck aria-label="Complete task" />
+        </span>
+        <span className="classic-action-heading">
+          <Pin aria-label="Pin task" />
+        </span>
+        <span className="classic-action-heading">
+          <Trash2 aria-label="Delete task" />
+        </span>
       </div>
       <SortableContext
         items={tasks.map((task) => task.id)}
         strategy={verticalListSortingStrategy}
       >
         {tasks.map((task) => (
-          <TaskRow key={task.id} task={task} {...props} />
+          <TaskRow
+            key={task.id}
+            task={task}
+            {...props}
+            onRequestDelete={(item, trigger) => {
+              deleteTrigger.current = trigger;
+              setDeleteError('');
+              setDeleteTask(item);
+            }}
+          />
         ))}
       </SortableContext>
+      <Dialog
+        open={!!deleteTask}
+        onOpenChange={(open) => {
+          if (!open && !deleting) setDeleteTask(null);
+        }}
+      >
+        <DialogContent
+          className="trash-confirm-dialog"
+          showCloseButton={!deleting}
+          initialFocus={cancelDelete}
+          finalFocus={() =>
+            deleteTrigger.current?.isConnected
+              ? deleteTrigger.current
+              : container.current?.querySelector<HTMLButtonElement>(
+                  '.classic-row-open',
+                )
+          }
+        >
+          <DialogTitle>Delete this task?</DialogTitle>
+          <DialogDescription>
+            {deleteTask?.status !== 'completed'
+              ? 'This task is not complete. '
+              : ''}
+            Deleting it will move the entire task and its notes to Trash. You
+            can restore it from Trash.
+          </DialogDescription>
+          <ul className="trash-confirm-items">
+            <li>{deleteTask?.title}</li>
+          </ul>
+          {deleteError && <p role="alert">{deleteError}</p>}
+          <div className="button-row">
+            <button
+              ref={cancelDelete}
+              className="button"
+              disabled={deleting}
+              onClick={() => setDeleteTask(null)}
+            >
+              Cancel
+            </button>
+            <button
+              className="button danger"
+              disabled={deleting}
+              onClick={async () => {
+                if (!deleteTask || deleting) return;
+                setDeleting(true);
+                setDeleteError('');
+                try {
+                  await onDelete(deleteTask);
+                  setDeleteTask(null);
+                } catch (error) {
+                  setDeleteError(
+                    (error as Error).message || 'Could not delete this task.',
+                  );
+                } finally {
+                  setDeleting(false);
+                }
+              }}
+            >
+              <Trash2 />
+              {deleting ? 'Deleting…' : 'Delete task'}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -145,7 +238,11 @@ function TaskRow({
   onComplete,
   onMilestone,
   onPatch,
-}: Props & { task: Entity }) {
+  onRequestDelete,
+}: Props & {
+  task: Entity;
+  onRequestDelete: (task: Entity, trigger: HTMLButtonElement) => void;
+}) {
   const finishing = !!completing[task.id] && !completed;
   const {
     setNodeRef,
@@ -244,6 +341,12 @@ function TaskRow({
         zIndex: isDragging ? 5 : undefined,
       }}
     >
+      <button
+        className="classic-row-open"
+        aria-label={`Open details for ${task.title}`}
+        disabled={finishing || isDragging}
+        onClick={() => onOpen(task)}
+      />
       <div className="classic-handle-cell">
         {!completed && (
           <button
@@ -361,6 +464,15 @@ function TaskRow({
         onClick={() => onPatch(task, { pinned: !task.pinned })}
       >
         <Pin />
+      </button>
+      <button
+        className="classic-action classic-delete"
+        disabled={finishing}
+        aria-label={`Delete ${task.title}`}
+        title="Delete task"
+        onClick={(event) => onRequestDelete(task, event.currentTarget)}
+      >
+        <Trash2 />
       </button>
     </div>
   );

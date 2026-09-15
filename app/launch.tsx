@@ -48,6 +48,7 @@ import { AddressEditor } from '@/components/address-editor';
 import { NoteEditor } from '@/components/note-editor';
 import { quickNotes } from '@/lib/notes';
 import { NotesDrawer } from '@/components/notes-drawer';
+import { ReferenceAssistant } from '@/components/reference-assistant';
 import {
   PanelLeftClose,
   PanelLeftOpen,
@@ -645,6 +646,7 @@ export default function Launch({
       onSort={sortBy}
       onOpen={open}
       onComplete={(task) => void complete(task)}
+      onDelete={trash}
       onMilestone={(task, key) => void milestone(task, key)}
       onPatch={(task, patch) => void store.change(task, patch)}
     />
@@ -1571,6 +1573,16 @@ export default function Launch({
                       />
                     </div>
                   </div>
+                  <ReferenceAssistant
+                    key={scope}
+                    store={store}
+                    scope={scope}
+                    notify={notify}
+                    onAdded={() => {
+                      setRefYear('all');
+                      setQuery('');
+                    }}
+                  />
                   <div className="reference-upload">
                     <Attachments
                       ids={[]}
@@ -2142,15 +2154,36 @@ function ReferenceCard({
   open: (e: Entity) => void;
   trash: (e: Entity) => void;
 }) {
-  const first = referenceOriginal(entity, files);
+  const original = referenceOriginal(entity, files);
+  const pages = entity.files
+    .map((id) => files.find((file) => file.id === id))
+    .filter(
+      (file) =>
+        file &&
+        file.type.startsWith('image/') &&
+        /^Page \d+$/.test(entity.fileLabels?.[file.id] || ''),
+    );
+  const [page, setPage] = useState(0);
+  const first = pages[page] || original;
+  const download =
+    files.find(
+      (file) =>
+        entity.files.includes(file.id) &&
+        entity.fileLabels?.[file.id] === 'Original PDF',
+    ) || original;
   const [preview, setPreview] = useState(false);
   const url = useStoredFileUrl(store, first);
+  const downloadUrl = useStoredFileUrl(store, download);
   return (
     <article className="reference-card">
       <button
         className="reference-thumb"
         aria-label={first ? `Preview ${entity.title}` : `Edit ${entity.title}`}
-        onClick={() => (first ? setPreview(true) : open(entity))}
+        onClick={() => {
+          setPage(0);
+          if (first) setPreview(true);
+          else open(entity);
+        }}
       >
         <ReferenceThumbnail entity={entity} files={files} store={store} />
       </button>
@@ -2181,6 +2214,27 @@ function ReferenceCard({
           <DialogDescription>
             {entity.notes || first?.name || 'Reference'}
           </DialogDescription>
+          {pages.length > 1 && (
+            <div className="reference-page-controls" aria-label="Menu pages">
+              <button
+                className="button"
+                disabled={page === 0}
+                onClick={() => setPage((current) => current - 1)}
+              >
+                Previous page
+              </button>
+              <span aria-live="polite">
+                Page {page + 1} of {pages.length}
+              </span>
+              <button
+                className="button"
+                disabled={page >= pages.length - 1}
+                onClick={() => setPage((current) => current + 1)}
+              >
+                Next page
+              </button>
+            </div>
+          )}
           {first?.type.startsWith('image/') ? (
             <ImageViewer
               key={first.id}
@@ -2193,13 +2247,28 @@ function ReferenceCard({
           ) : (
             <p>Download this document to open it in its usual app.</p>
           )}
-          {first && (
+          {download && (
             <a
               className="button"
-              href={url + (url.startsWith('blob:') ? '' : '?download=1')}
-              download={first.name}
+              href={
+                downloadUrl +
+                (downloadUrl.startsWith('blob:') ? '' : '?download=1')
+              }
+              download={download.name}
             >
-              Download original
+              {download.type === 'application/pdf'
+                ? 'Download original PDF'
+                : 'Download original'}
+            </a>
+          )}
+          {entity.website?.startsWith('https://') && (
+            <a
+              className="text-button"
+              href={entity.website}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open source website
             </a>
           )}
           <button

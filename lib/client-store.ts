@@ -744,6 +744,56 @@ export class LaunchStore {
     void this.sync();
     return ids;
   }
+  async addReferenceFiles(entity: Entity, files: File[], pageCount: number) {
+    const existing =
+      entity.website &&
+      this.data.records.find(
+        (item) =>
+          item.kind === 'reference' &&
+          item.scope === entity.scope &&
+          !item.deletedAt &&
+          item.website === entity.website,
+      );
+    if (existing) return existing;
+    if (
+      entity.kind !== 'reference' ||
+      !files.length ||
+      files.length > 13 ||
+      pageCount < 1 ||
+      !Number.isInteger(pageCount) ||
+      pageCount > files.length ||
+      files.some((file) => !file.size || file.size > 20 * 1024 * 1024)
+    )
+      throw new Error('Use reference files of 20 MB or less.');
+    const metas = files.map((file) => ({
+      id: uid(),
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      createdAt: now(),
+      pending: true,
+    }));
+    const reference = validateEntity({
+      ...entity,
+      files: metas.map((file) => file.id),
+      thumbnail: { type: 'image', fileId: metas[0].id },
+      fileLabels: Object.fromEntries(
+        metas.map((file, index) => [
+          file.id,
+          index < pageCount ? `Page ${index + 1}` : 'Original PDF',
+        ]),
+      ),
+    });
+    this.data.files.push(...metas);
+    this.data.uploads.push(
+      ...metas.map((meta, index) => ({ meta, blob: files[index] })),
+    );
+    this.queueAdd(reference);
+    // Original, page images, and card share one durable local transaction.
+    await this.persist();
+    void this.sync();
+    return reference;
+  }
   fileUrl(id: string) {
     const upload = this.data.uploads.find((u) => u.meta.id === id);
     return upload
