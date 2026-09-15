@@ -85,7 +85,7 @@ import {
   day,
   pretty,
   workDate,
-  nextDate,
+  dashboardDate,
   hasNewScheduledWork,
   monthLabel,
   urgency,
@@ -401,7 +401,7 @@ export default function Launch({
   const upcoming = active.filter(
     (t) => urgency(t, day(), soon) === 'soon',
   ).length;
-  const todayCount = active.filter((t) => nextDate(t) === day()).length;
+  const todayCount = active.filter((t) => dashboardDate(t) === day()).length;
   const isDashboard = view === 'dashboard' || view === 'today';
   const isMonthly =
     (view === 'dashboard' && dashboardMode === 'grouped') ||
@@ -511,8 +511,8 @@ export default function Launch({
             ? t.status === 'active' && !workDate(t)
             : view === 'today'
               ? t.status === 'active' &&
-                (nextDate(t) || t.plannedDate) &&
-                (nextDate(t) || t.plannedDate!) <= day()
+                (dashboardDate(t) || t.plannedDate) &&
+                (dashboardDate(t) || t.plannedDate!) <= day()
               : t.status === 'active' && !!workDate(t),
     )
     .filter(

@@ -172,6 +172,7 @@ function TaskRow({
       task[key === 'draft' ? 'draftDone' : 'finalDone'];
     return task[key] ? (
       <button
+        disabled={finishing}
         className={
           'date-badge ' +
           (task.status === 'postponed' && !done
@@ -269,7 +270,14 @@ function TaskRow({
             <Flag />
           </button>
           <button className="classic-title" onClick={() => onOpen(task)}>
-            <span className="task-title-text">{task.title}</span>
+            <span className="task-title-text">
+              <span>{task.title}</span>
+              {finishing && (
+                <span className="task-completion-line" aria-hidden="true">
+                  {task.title}
+                </span>
+              )}
+            </span>
           </button>
           {!task.report && task.scope === 'business' && (
             <span

@@ -265,7 +265,7 @@ export function compareTasks(
   if (sort === 'manual') return (a.order || 0) - (b.order || 0);
   const value = (t: Entity) =>
     sort === 'next'
-      ? nextDate(t) || t.plannedDate || '9999'
+      ? dashboardDate(t) || t.plannedDate || '9999'
       : sort === 'draft' || sort === 'final'
         ? t[sort] ||
           t[sort === 'draft' ? 'final' : 'draft'] ||
@@ -521,6 +521,10 @@ export function nextDate(t: Entity) {
       .sort()[0] || ''
   );
 }
+// Finished milestones remain on the dashboard until the whole task is checked off.
+export function dashboardDate(t: Entity) {
+  return nextDate(t) || t.final || t.draft || t.review || '';
+}
 export function urgency(t: Entity, today = day(), soon = 2) {
   if (t.status === 'completed') return 'done';
   if (t.status === 'postponed') return 'paused';
@@ -536,25 +540,25 @@ export function dashboardGroups(tasks: Entity[], today = day()) {
     {
       key: 'overdue',
       label: 'Overdue',
-      items: active.filter((t) => nextDate(t) && nextDate(t) < today),
+      items: active.filter((t) => dashboardDate(t) && dashboardDate(t) < today),
     },
     {
       key: 'today',
       label: 'Due today',
-      items: active.filter((t) => nextDate(t) === today),
+      items: active.filter((t) => dashboardDate(t) === today),
     },
     {
       key: 'planned',
       label: 'Planned for today',
       items: active.filter(
-        (t) => !nextDate(t) && t.plannedDate && t.plannedDate <= today,
+        (t) => !dashboardDate(t) && t.plannedDate && t.plannedDate <= today,
       ),
     },
     {
       key: 'next',
       label: 'Next 7 days',
       items: active.filter((t) => {
-        const date = nextDate(t) || t.plannedDate || '';
+        const date = dashboardDate(t) || t.plannedDate || '';
         return date > today && date <= addDays(today, 7);
       }),
     },

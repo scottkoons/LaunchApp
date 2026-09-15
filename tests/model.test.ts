@@ -108,6 +108,7 @@ import {
   calendarIcs,
   validateEntity,
   dashboardGroups,
+  dashboardDate,
   monthlyTaskGroups,
   planningMonths,
   dashboardMonths,
@@ -319,6 +320,52 @@ void test('dashboard groups use the next unfinished date and count a task only o
     groups.map((g) => g.items.map((t) => t.id)),
     [['late-draft'], ['today'], [], ['next']],
   );
+});
+void test('green draft and final stay on dashboards until the whole task is completed', () => {
+  for (const [date, section] of [
+    ['2026-09-07', 'overdue'],
+    ['2026-09-08', 'today'],
+    ['2026-09-09', 'next'],
+  ]) {
+    const task = validateEntity(
+      createEntity('task', 'business', {
+        title: 'Ready for final check-off',
+        draft: '2026-09-01',
+        final: date,
+        draftDone: true,
+        finalDone: true,
+        plannedDate: '2026-09-01',
+      }),
+    );
+    assert.equal(task.status, 'active');
+    assert.equal(dashboardDate(task), date);
+    assert.equal(urgency(task, '2026-09-08'), 'none');
+    const groups = dashboardGroups([task], '2026-09-08');
+    assert.deepEqual(groups.find((g) => g.key === section)?.items, [task]);
+    assert.equal(groups.flatMap((g) => g.items).length, 1);
+    const months = dashboardMonths([task], '2026-09-08');
+    assert.deepEqual(
+      monthlyTaskGroups(
+        visibleMonthlyTasks([task], months, '2026-09-08'),
+      ).flatMap((g) => g.items),
+      [task],
+    );
+    const completed = { ...task, status: 'completed' as const };
+    assert.deepEqual(
+      dashboardGroups([completed], '2026-09-08').flatMap((g) => g.items),
+      [],
+    );
+    // Reopening either milestone restores its unfinished deadline.
+    assert.equal(dashboardDate({ ...task, draftDone: false }), task.draft);
+    assert.equal(dashboardDate({ ...task, finalDone: false }), task.final);
+  }
+  const planned = createEntity('task', 'business', {
+    title: 'Planned without deadlines',
+    plannedDate: '2026-09-08',
+  });
+  const groups = dashboardGroups([planned], '2026-09-08');
+  assert.deepEqual(groups.find((g) => g.key === 'planned')?.items, [planned]);
+  assert.equal(groups.flatMap((g) => g.items).length, 1);
 });
 void test('imported repeat schedules respect historical cutoff, skipped dates, and end date', () => {
   const root = createEntity('task', 'business', {
@@ -1164,6 +1211,32 @@ void test('single-date tasks sort alongside drafts and finals instead of at the 
     assert.deepEqual(
       [...tasks].sort((a, b) => compareTasks(a, b, sort)).map((t) => t.title),
       ['Pinned later task', 'Store hours', 'Planned reminder', 'Later draft'],
+    );
+  }
+});
+void test('finishing the final milestone keeps a monthly task in date order until check-off', () => {
+  const task = createEntity('task', 'business', {
+    title: 'Q2 Financials',
+    draft: '2026-09-07',
+    draftDone: true,
+    final: '2026-09-09',
+  });
+  const later = createEntity('task', 'business', {
+    title: 'Later September task',
+    final: '2026-09-15',
+  });
+  for (const finalDone of [false, true]) {
+    const current = { ...task, finalDone };
+    const groups = monthlyTaskGroups(
+      [later, current].sort((a, b) => compareTasks(a, b, 'next')),
+    );
+    assert.deepEqual(
+      groups.map((g) => g.key),
+      ['2026-09'],
+    );
+    assert.deepEqual(
+      groups[0].items.map((t) => t.id),
+      [task.id, later.id],
     );
   }
 });

@@ -4,6 +4,7 @@
     "app/layout.tsx",
     "app/api/**/route.ts",
     "next.config.ts",
+    "worker.ts",
     "notifications/scheduler.ts",
     "tests/**/*.ts",
     "scripts/verify-import.ts",
