@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { agendaItems, agendaOrderChanges } from './agenda';
 import { uploadBlob } from './upload-blob';
+import { pendingFileIds, pendingRecord, syncRecords } from './sync-records';
 import {
   captureFingerprint,
   captureReminderAt,
@@ -104,7 +105,7 @@ function mergeCache(current: Cache, base: Cache, next: Cache): Cache {
   // Pending edits take precedence over a remote snapshot fetched by another tab.
   for (const op of queue) {
     const index = records.findIndex((e) => e.id === op.entityId);
-    if (index >= 0) records[index] = { ...records[index], ...op.patch };
+    if (index >= 0) records[index] = pendingRecord(records[index], op);
   }
   return {
     removed,
@@ -164,6 +165,8 @@ export class LaunchStore {
   saveChain = Promise.resolve();
   private submitted: Cache = empty();
   private syncPromise: Promise<void> | null = null;
+  private uploadController: AbortController | null = null;
+  private uploadPhaseOperations = new Set<string>();
   private purging = false;
   // Session history is independent of notification lifetime. Store only the
   // lifecycle and moved-deadline fields so undo preserves later notes and attachments.
@@ -193,13 +196,15 @@ export class LaunchStore {
         this.error ||
         (!navigator.onLine
           ? 'Offline · saved on this device'
-          : this.data.queue.some((q) => q.conflict)
-            ? 'A change needs your review'
-            : this.data.queue.length || this.data.uploads.length
-              ? `${this.data.queue.length + this.data.uploads.length} waiting to sync`
-              : this.lastSync
-                ? 'All changes synced'
-                : 'Connecting…'),
+          : this.syncing
+            ? 'Syncing changes…'
+            : this.data.queue.some((q) => q.conflict)
+              ? 'A change needs your review'
+              : this.data.queue.length || this.data.uploads.length
+                ? `${this.data.queue.length + this.data.uploads.length} waiting to sync`
+                : this.lastSync
+                  ? 'All changes synced'
+                  : 'Connecting…'),
       error: this.error,
       lastSync: this.lastSync,
     };
@@ -778,135 +783,231 @@ export class LaunchStore {
     await this.sync();
   }
   sync(): Promise<void> {
-    if (this.syncPromise) return this.syncPromise;
+    if (this.syncPromise) {
+      if (
+        this.uploadController &&
+        this.data.queue.some((op) => !this.uploadPhaseOperations.has(op.id))
+      )
+        this.uploadController.abort();
+      return this.syncPromise;
+    }
     if (!this.ready || !navigator.onLine) return Promise.resolve();
-    this.syncPromise = this.performSync().finally(() => {
+    this.syncPromise = (async () => {
+      // Drain edits made while a fetch was in flight without waiting for the
+      // next timer. Bound passes so an actively edited page can yield normally.
+      for (let pass = 0; pass < 3; pass++) {
+        const seen = new Set([
+          ...this.data.queue.map((op) => op.id),
+          ...this.data.uploads.map((upload) => upload.meta.id),
+        ]);
+        await this.performSync();
+        if (
+          !this.data.queue.some((op) => !seen.has(op.id)) &&
+          !this.data.uploads.some((upload) => !seen.has(upload.meta.id))
+        )
+          break;
+      }
+    })().finally(() => {
       this.syncPromise = null;
     });
     return this.syncPromise;
   }
-  private async performSync() {
-    this.syncing = true;
-    this.error = '';
-    this.emit();
-    try {
-      await this.persist();
-      for (const item of this.data.uploads.slice()) {
-        const form = new FormData();
-        form.set('id', item.meta.id);
-        form.set(
-          'file',
-          await uploadBlob(item.blob, item.meta.size, item.meta.type),
-          item.meta.name,
-        );
-        const r = await fetch('/api/files', {
-          method: 'POST',
-          body: form,
-          signal: AbortSignal.timeout(60000),
-        });
-        if (r.status === 410) {
-          this.data = mergeCache(this.data, this.data, {
-            ...this.data,
-            removed: { records: [], files: [item.meta.id] },
-          });
-          await this.persist();
-          continue;
-        }
-        if (!r.ok)
-          throw new Error(
-            ((await r.json()) as { error: string }).error || 'Upload failed',
-          );
-        const meta = (await r.json()) as FileMeta;
-        this.data.uploads = this.data.uploads.filter(
-          (u) => u.meta.id !== meta.id,
-        );
-        this.data.files = this.data.files.map((f) =>
-          f.id === meta.id ? meta : f,
-        );
-        await this.persist();
+  private async pushChanges(issues: Set<string>) {
+    // Older clients labelled a retryable version race as a generic conflict.
+    // Retry that saved operation; actual field conflicts retain their names.
+    this.data.queue = this.data.queue.map((op) =>
+      op.conflict === 'Record' ? { ...op, conflict: undefined } : op,
+    );
+    const blocked = new Set<string>();
+    const waitingFiles = new Set(
+      this.data.uploads.map((upload) => upload.meta.id),
+    );
+    for (const queued of this.data.queue.slice()) {
+      // persist() merges and clones the shared cache after every request.
+      // Work with the current operation, not a detached snapshot from the loop.
+      const op = this.data.queue.find((item) => item.id === queued.id);
+      if (!op) continue;
+      if (
+        op.conflict ||
+        blocked.has(op.entityId) ||
+        pendingFileIds(op).some((id) => waitingFiles.has(id))
+      ) {
+        blocked.add(op.entityId);
+        continue;
       }
-      const blocked = new Set<string>();
-      for (const op of this.data.queue.slice()) {
-        if (op.conflict || blocked.has(op.entityId)) {
-          blocked.add(op.entityId);
-          continue;
+      try {
+        let r!: Response;
+        let result!: { conflicts?: string[]; error?: string; entity: Entity };
+        for (let attempt = 0; attempt < 3; attempt++) {
+          r = await fetch('/api/sync', {
+            signal: AbortSignal.timeout(20000),
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(op),
+          });
+          result = (await r.json()) as typeof result;
+          // A simultaneous write can lose the version race without a field
+          // conflict. Repeating the same idempotent operation safely re-merges it.
+          if (r.status !== 409 || result.conflicts?.length) break;
         }
-        const r = await fetch('/api/sync', {
-          signal: AbortSignal.timeout(20000),
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(op),
-        });
-        const result = (await r.json()) as {
-          conflicts?: string[];
-          error?: string;
-          entity: Entity;
-        };
         if (r.status === 410) {
           this.data = mergeCache(this.data, this.data, {
             ...this.data,
             removed: { records: [op.entityId], files: [] },
           });
-          await this.persist();
-          continue;
-        }
-        if (r.status === 409) {
-          op.conflict = result.conflicts?.join(', ') || 'Record';
+        } else if (r.status === 409 && result.conflicts?.length) {
+          this.data.queue = this.data.queue.map((item) =>
+            item.id === op.id
+              ? { ...item, conflict: result.conflicts!.join(', ') }
+              : item,
+          );
           blocked.add(op.entityId);
-          await this.persist();
-          continue;
+        } else {
+          if (!r.ok) throw new Error(result.error || 'Sync failed');
+          this.data.queue = this.data.queue.filter((item) => item.id !== op.id);
+          const local = this.data.records.find(
+            (item) => item.id === op.entityId,
+          );
+          if (
+            !this.data.queue.some((item) => item.entityId === op.entityId) &&
+            (local?.version || 0) <= (result.entity.version || 0)
+          )
+            this.data.records = this.data.records
+              .filter((item) => item.id !== op.entityId)
+              .concat(result.entity);
         }
-        if (!r.ok) throw new Error(result.error || 'Sync failed');
-        this.data.queue = this.data.queue.filter((q) => q.id !== op.id);
-        if (!this.data.queue.some((q) => q.entityId === op.entityId))
-          this.data.records = this.data.records
-            .filter((e) => e.id !== op.entityId)
-            .concat(result.entity);
         await this.persist();
+      } catch (e) {
+        blocked.add(op.entityId);
+        issues.add(syncError(e));
+        // Failed validation belongs to this item. Network/auth failures will
+        // also be reported by the pull without sending every queued request.
+        if (
+          e instanceof TypeError ||
+          (e instanceof Error && e.name === 'TimeoutError')
+        )
+          break;
       }
-      const r = await fetch('/api/sync', {
-        signal: AbortSignal.timeout(20000),
-      });
-      if (!r.ok)
-        throw new Error(
-          r.status === 401
-            ? 'Please sign in again to sync.'
-            : 'Could not reach Launch. Your changes are saved on this device.',
-        );
-      const remote = (await r.json()) as {
-        records: Entity[];
-        files: FileMeta[];
-        removed?: Cache['removed'];
-      };
-      this.data = mergeCache(this.data, this.data, {
-        ...this.data,
-        removed: remote.removed,
-      });
-      const pending = new Set(this.data.queue.map((q) => q.entityId));
-      this.data.records = [
-        ...remote.records.filter((e: Entity) => !pending.has(e.id)),
-        ...this.data.records.filter((e) => pending.has(e.id)),
-      ];
-      this.data.files = [
-        ...remote.files,
-        ...this.data.files.filter((f) =>
-          this.data.uploads.some((u) => u.meta.id === f.id),
-        ),
-      ];
-      this.lastSync = now();
+    }
+  }
+  private async pullChanges() {
+    const r = await fetch('/api/sync', { signal: AbortSignal.timeout(20000) });
+    if (!r.ok)
+      throw new Error(
+        r.status === 401
+          ? 'Please sign in again to sync.'
+          : 'Could not reach Launch. Your changes are saved on this device.',
+      );
+    const remote = (await r.json()) as {
+      records: Entity[];
+      files: FileMeta[];
+      removed?: Cache['removed'];
+    };
+    this.data = mergeCache(this.data, this.data, {
+      ...this.data,
+      removed: remote.removed,
+    });
+    // Keep only pending fields over the latest server record, so a local title
+    // conflict cannot hide a completion or deletion received from another device.
+    this.data.records = syncRecords(
+      remote.records,
+      this.data.records,
+      this.data.queue,
+    );
+    this.data.files = [
+      ...remote.files,
+      ...this.data.files.filter((file) =>
+        this.data.uploads.some((upload) => upload.meta.id === file.id),
+      ),
+    ];
+    this.lastSync = now();
+    await this.persist();
+  }
+  private async performSync() {
+    this.syncing = true;
+    this.error = '';
+    this.emit();
+    const issues = new Set<string>();
+    try {
       await this.persist();
+      const recordIds = new Set(this.data.queue.map((op) => op.id));
+      // Small record changes and incoming updates go first. A slow or broken
+      // attachment must never stop unrelated check-offs and deletions syncing.
+      await this.pushChanges(issues);
+      await this.pullChanges();
+      if (this.data.queue.some((op) => !recordIds.has(op.id))) {
+        this.error = [...issues].join(' ');
+        return; // The next immediate pass sends edits made during the refresh.
+      }
+      this.uploadPhaseOperations = recordIds;
+      const uploads = this.data.uploads.slice();
+      for (const item of uploads) {
+        const controller = new AbortController();
+        this.uploadController = controller;
+        try {
+          const form = new FormData();
+          form.set('id', item.meta.id);
+          form.set(
+            'file',
+            await uploadBlob(item.blob, item.meta.size, item.meta.type),
+            item.meta.name,
+          );
+          const r = await fetch('/api/files', {
+            method: 'POST',
+            body: form,
+            signal: AbortSignal.any([
+              controller.signal,
+              AbortSignal.timeout(60000),
+            ]),
+          });
+          if (r.status === 410) {
+            this.data = mergeCache(this.data, this.data, {
+              ...this.data,
+              removed: { records: [], files: [item.meta.id] },
+            });
+          } else {
+            if (!r.ok)
+              throw new Error(
+                ((await r.json()) as { error: string }).error ||
+                  'Upload failed',
+              );
+            const meta = (await r.json()) as FileMeta;
+            this.data.uploads = this.data.uploads.filter(
+              (upload) => upload.meta.id !== meta.id,
+            );
+            this.data.files = this.data.files.map((file) =>
+              file.id === meta.id ? meta : file,
+            );
+          }
+          await this.persist();
+        } catch (e) {
+          // New task changes take priority. Retain the original and ID so even
+          // an upload whose response was interrupted can retry idempotently.
+          if (controller.signal.aborted) break;
+          issues.add('An attachment is waiting to upload. ' + syncError(e));
+        } finally {
+          this.uploadController = null;
+        }
+      }
+      if (uploads.length) {
+        await this.pushChanges(issues);
+        await this.pullChanges();
+      }
+      this.error = [...issues].join(' ');
     } catch (e) {
-      this.error =
-        e instanceof Error && e.name === 'TimeoutError'
-          ? 'Connection timed out. Your changes are saved on this device; retry sync.'
-          : e instanceof Error
-            ? e.message
-            : 'Waiting to sync. Your changes are saved on this device.';
+      this.error = syncError(e);
     } finally {
       this.syncing = false;
       this.emit();
     }
   }
+}
+function syncError(e: unknown) {
+  return e instanceof Error && e.name === 'TimeoutError'
+    ? 'Connection timed out. Your changes are saved on this device; retry sync.'
+    : e instanceof Error
+      ? e.message
+      : 'Waiting to sync. Your changes are saved on this device.';
 }
 export function useLaunchStore(account: string) {
   const [store] = useState(() => new LaunchStore(account));
@@ -926,12 +1027,19 @@ export function useLaunchStore(account: string) {
     const focus = () => void store.sync();
     window.addEventListener('online', focus);
     window.addEventListener('focus', focus);
+    window.addEventListener('pageshow', focus);
+    const visible = () => {
+      if (document.visibilityState === 'visible') focus();
+    };
+    document.addEventListener('visibilitychange', visible);
     window.addEventListener('offline', update);
     return () => {
       clearInterval(timer);
       store.listeners.delete(update);
       window.removeEventListener('online', focus);
       window.removeEventListener('focus', focus);
+      window.removeEventListener('pageshow', focus);
+      document.removeEventListener('visibilitychange', visible);
       window.removeEventListener('offline', update);
     };
   }, [store]);
