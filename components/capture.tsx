@@ -6,7 +6,7 @@ import { SmartCapture } from './smart-capture';
 import { ReminderPicker } from './reminder-picker';
 import { reminderDay } from '@/lib/reminders';
 import { QuickNoteRow } from './quick-note-row';
-import { quickNotes } from '@/lib/notes';
+import { captureLists } from '@/lib/capture-lists';
 import { SwipeNote } from './swipe-note';
 import { Attachments } from './launch-controls';
 import {
@@ -135,14 +135,7 @@ export function Capture({
       setBusy(false);
     }
   }
-  const completed = quickNotes(records, scope).filter((note) => note.archived);
-  const recent = records
-    .filter(
-      (e) =>
-        e.kind === 'note' && e.scope === scope && !e.deletedAt && !e.archived,
-    )
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, 4);
+  const { recent, completed } = captureLists(records, scope);
   return (
     <div className="capture-page">
       <div className="capture-intro">

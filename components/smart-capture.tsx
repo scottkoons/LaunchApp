@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { OriginalAudio } from './original-audio';
 import { Camera, Check, ImagePlus, Mic, Square, Undo2 } from 'lucide-react';
 import { notePlan, processCapture, saveMedia } from '@/lib/capture-client';
+import { captureLists } from '@/lib/capture-lists';
 import { todoDueLabel } from '@/lib/personal-todos';
 import { reminderLabel } from '@/lib/reminders';
 import type { LaunchStore } from '@/lib/client-store';
@@ -230,14 +231,7 @@ export function SmartCapture({
       setStarting(false);
     }
   }
-  const pending = records.filter(
-    (e) =>
-      e.scope === scope &&
-      e.capture &&
-      e.capture.state !== 'done' &&
-      !e.deletedAt &&
-      !e.archived,
-  );
+  const { pending } = captureLists(records, scope);
   return (
     <section className="smart-capture" aria-label="Voice and photo capture">
       <div className="voice-capture-controls">

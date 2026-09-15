@@ -10,6 +10,91 @@ import {
 } from '../lib/capture-intent';
 import { interpretCapture, transcribeMedia } from '../lib/capture-ai';
 import { uploadBlob } from '../lib/upload-blob';
+import { captureLists } from '../lib/capture-lists';
+import { createEntity } from '../lib/model';
+import { quickNotes } from '../lib/notes';
+
+void test('saved destinations clear capture reviews even before the original syncs', () => {
+  for (const kind of ['task', 'note', 'agenda'] as const) {
+    const source = createEntity('note', 'business', {
+      title: 'Voice recording',
+      notes: 'Call Sonos tomorrow.',
+      capture: {
+        type: 'voice',
+        state: 'review',
+        transcript: 'Call Sonos tomorrow.',
+        instruction: '',
+        capturedAt: '2026-09-14T15:00:00Z',
+        timeZone: 'America/Denver',
+      },
+    });
+    const saved = createEntity(kind, 'business', { sourceId: source.id });
+    const lists = captureLists([source, saved], 'business');
+    assert.equal(lists.pending.length, 0);
+    assert.ok(!lists.recent.some((note) => note.id === source.id));
+    assert.equal(lists.completed.length, 0);
+    // Removing the destination must not discard an unfinished original.
+    assert.deepEqual(
+      captureLists(
+        [source, { ...saved, deletedAt: '2026-09-14T16:00:00Z' }],
+        'business',
+      ).pending,
+      [source],
+    );
+    const processed = {
+      ...source,
+      archived: true,
+      capture: { ...source.capture!, state: 'done' as const },
+    };
+    assert.equal(
+      captureLists([processed, saved], 'business').completed.length,
+      0,
+    );
+    assert.ok(
+      quickNotes([processed, saved], 'business').some(
+        (note) => note.id === source.id,
+      ),
+    );
+  }
+});
+
+void test('Capture keeps unresolved originals once, while retaining ordinary note history', () => {
+  const pending = ['pending', 'review', 'error'].map((state) =>
+    createEntity('note', 'personal', {
+      capture: {
+        type: 'voice',
+        state: state as CaptureState['state'],
+        transcript: state === 'review' ? 'Remind me tomorrow.' : undefined,
+        instruction: '',
+        capturedAt: '2026-09-14T15:00:00Z',
+        timeZone: 'America/Denver',
+        ...(state === 'review'
+          ? { plan: { question: 'What time tomorrow?', items: [] } }
+          : {}),
+      },
+    }),
+  );
+  const note = createEntity('note', 'personal', { title: 'Typed note' });
+  const completed = createEntity('note', 'personal', {
+    title: 'Completed note',
+    archived: true,
+  });
+  const keptOriginal = createEntity('note', 'personal', {
+    capture: { ...pending[0].capture!, state: 'done', resultIds: [] },
+  });
+  const records = [...pending, note, completed, keptOriginal];
+  const lists = captureLists(records, 'personal');
+  assert.deepEqual(
+    new Set(lists.pending.map((item) => item.id)),
+    new Set(pending.map((item) => item.id)),
+  );
+  assert.deepEqual(
+    new Set(lists.recent.map((item) => item.id)),
+    new Set([note.id, keptOriginal.id]),
+  );
+  assert.deepEqual(lists.completed, [completed]);
+  assert.equal(captureLists(records, 'business').pending.length, 0);
+});
 
 void test('uploads materialize saved file bytes before multipart serialization', async () => {
   const bytes = new Uint8Array([0, 255, 1, 0, 128, 45]);

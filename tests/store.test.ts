@@ -1,4 +1,5 @@
 import { quickNotes } from '../lib/notes';
+import { captureLists } from '../lib/capture-lists';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import 'fake-indexeddb/auto';
@@ -121,6 +122,11 @@ void test('voice capture originals survive offline restart; tasks use Final; app
     ],
   };
   const items = await store.applyCapture(source.id, plan);
+  assert.equal(captureLists(store.data.records, 'personal').pending.length, 0);
+  assert.equal(
+    captureLists(store.data.records, 'personal').completed.length,
+    0,
+  );
   assert.equal(items[0].final, '2026-09-11');
   assert.equal(items[0].draft, '');
   assert.equal(items[0].reminderAt, '');
@@ -137,6 +143,10 @@ void test('voice capture originals survive offline restart; tasks use Final; app
     true,
   );
   assert.equal(restarted.data.uploads[0].blob.size, 14);
+  assert.equal(
+    captureLists(restarted.data.records, 'personal').pending.length,
+    0,
+  );
   const createURL = URL.createObjectURL.bind(URL);
   let playbackBlob: Blob | undefined;
   URL.createObjectURL = (blob: Blob) => {
@@ -176,6 +186,12 @@ void test('voice capture originals survive offline restart; tasks use Final; app
     false,
   );
   assert.equal(restarted.data.records.filter((e) => !e.deletedAt).length, 1);
+  assert.deepEqual(
+    captureLists(restarted.data.records, 'personal').pending.map(
+      (note) => note.id,
+    ),
+    [source.id],
+  );
   assert.equal(
     restarted.data.records.find((e) => e.id === source.id)?.capture?.transcript,
     source.notes,
