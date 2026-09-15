@@ -5,6 +5,7 @@ import {
   Plus,
   Download,
   Printer,
+  Eye,
   ExternalLink,
   Settings2,
 } from 'lucide-react';
@@ -577,8 +578,8 @@ export function Reports({
               disabled={busy}
               onClick={() => void generate()}
             >
-              {busy ? 'Preparing preview…' : 'Generate PDF'}
-              <FileDown />
+              <Eye />
+              {busy ? 'Preparing preview…' : 'Preview PDF'}
             </button>
           </div>
         </DialogContent>
