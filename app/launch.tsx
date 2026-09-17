@@ -971,7 +971,6 @@ export default function Launch({
               files={files}
               records={records}
               notify={notify}
-              openNote={open}
               deleteNote={trash}
             />
           ) : scope === 'personal' &&
@@ -1825,10 +1824,6 @@ export default function Launch({
             files={files}
             records={records}
             notify={notify}
-            openNote={(e) => {
-              setCaptureOpen(false);
-              open(e);
-            }}
             deleteNote={trash}
           />
         </SheetContent>

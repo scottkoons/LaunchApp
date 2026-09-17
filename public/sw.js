@@ -1,4 +1,4 @@
-const CACHE = 'launch-shell-v22';
+const CACHE = 'launch-shell-v23';
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches

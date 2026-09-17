@@ -1,13 +1,9 @@
 'use client';
-import { BulkSelection, SelectionCheckbox } from '@/components/bulk-selection';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
-import { ArrowUpRight } from 'lucide-react';
+import { CheckCheck, Keyboard, NotebookPen, Trash2 } from 'lucide-react';
 import { SmartCapture } from './smart-capture';
 import { ReminderPicker } from './reminder-picker';
 import { reminderDay } from '@/lib/reminders';
-import { QuickNoteRow } from './quick-note-row';
-import { captureLists } from '@/lib/capture-lists';
-import { SwipeNote } from './swipe-note';
 import { Attachments } from './launch-controls';
 import {
   createEntity,
@@ -22,7 +18,6 @@ export function Capture({
   files,
   records,
   notify,
-  openNote,
   deleteNote,
 }: {
   scope: Scope;
@@ -30,7 +25,6 @@ export function Capture({
   files: FileMeta[];
   records: Entity[];
   notify: (s: string, undo?: () => void) => void;
-  openNote: (e: Entity) => void;
   deleteNote: (e: Entity) => Promise<void>;
 }) {
   const key = `launch-capture-${store.account}-${scope}`;
@@ -40,9 +34,9 @@ export function Capture({
     [ids, setIds] = useState<string[]>([]),
     [busy, setBusy] = useState(false),
     [loaded, setLoaded] = useState(false);
+  const [typing, setTyping] = useState(false);
   const saving = useRef(false);
   const uploading = useRef(false);
-  const [revealedNote, setRevealedNote] = useState<string | null>(null);
   const [filesBusy, setFilesBusy] = useState(false);
   function fileBusy(value: boolean) {
     uploading.current = value;
@@ -86,48 +80,44 @@ export function Capture({
       }
     }
   }, [text, ids, reminderAt, reminderZone, key, loaded]);
-  async function save() {
+  async function save(kind: 'task' | 'note' = 'note') {
     if (saving.current || uploading.current || (!text.trim() && !ids.length))
       return;
     saving.current = true;
     setBusy(true);
     try {
       await store.add(
-        createEntity(
-          scope === 'personal' ? 'note' : reminderAt ? 'task' : 'note',
-          scope,
-          {
-            title: text.trim().split('\n')[0].slice(0, 120) || 'Photo note',
-            notes: text.trim(),
-            files: ids,
-            report: !!reminderAt && scope === 'business',
-            routine: !!reminderAt,
-            reminderAt,
-            reminderZone,
-            ...(reminderAt
-              ? {
-                  plannedDate: reminderDay({
-                    reminderAt,
-                    reminderZone,
-                  } as Entity),
-                }
-              : {}),
-          },
-        ),
+        createEntity(scope === 'personal' ? 'note' : kind, scope, {
+          title: text.trim().split('\n')[0].slice(0, 120) || 'Photo note',
+          notes: text.trim(),
+          files: ids,
+          report: kind === 'task' && scope === 'business',
+          routine: kind === 'task',
+          reminderAt: kind === 'task' ? reminderAt : '',
+          reminderZone: kind === 'task' ? reminderZone : '',
+          ...(kind === 'task' && reminderAt
+            ? {
+                plannedDate: reminderDay({
+                  reminderAt,
+                  reminderZone,
+                } as Entity),
+              }
+            : {}),
+        }),
       );
       setText('');
       setIds([]);
       setReminderAt('');
       setReminderZone('');
       localStorage.removeItem(key);
+      setTyping(false);
       notify(
         scope === 'personal'
           ? 'To-do saved to your personal list.'
-          : reminderAt
-            ? 'Task saved with a reminder inside Launch.'
+          : kind === 'task'
+            ? 'Task saved.'
             : 'Note captured.',
       );
-      input.current?.focus();
     } catch (e) {
       notify((e as Error).message);
     } finally {
@@ -135,16 +125,16 @@ export function Capture({
       setBusy(false);
     }
   }
-  const { recent, completed } = captureLists(records, scope);
+  function clear() {
+    setText('');
+    setIds([]);
+    setReminderAt('');
+    setReminderZone('');
+    localStorage.removeItem(key);
+    setTyping(false);
+  }
   return (
     <div className="capture-page">
-      <div className="capture-intro">
-        <p className="eyebrow">
-          {scope === 'personal' ? 'PERSONAL' : 'BUSINESS'}
-        </p>
-        <h1>Quick capture</h1>
-        <p>Speak a thought, give a direction, or capture text from a photo.</p>
-      </div>
       <div className="capture-composer">
         <SmartCapture
           key={scope}
@@ -156,145 +146,88 @@ export function Capture({
             setText((current) => (current === saved ? '' : current))
           }
           notify={notify}
-          openItem={openNote}
+          onDelete={deleteNote}
         />
-        <p className="capture-help">
-          Or type a note. You can also add directions here before scanning a
-          photo.
-        </p>
-        <textarea
-          ref={input}
-          disabled={busy || filesBusy}
-          aria-label="Quick note"
-          value={text}
-          placeholder="What do you want to remember?"
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') void save();
-          }}
-          onPaste={(e) => {
-            const fs = Array.from(e.clipboardData.files);
-            if (fs.length) {
-              e.preventDefault();
-              void addFiles(fs);
-            }
-          }}
-        />
-        <ReminderPicker
-          task={{ reminderAt, reminderZone }}
-          disabled={busy || filesBusy}
-          onChange={(at, zone) => {
-            setReminderAt(at);
-            setReminderZone(zone);
-          }}
-        />
-        {reminderAt && (
-          <p className="hint">
-            {scope === 'personal'
-              ? 'This to-do will appear on your personal list'
-              : 'This will become one task on your dashboard'}
-            {scope === 'business'
-              ? ' and be included in marketing reports'
-              : ''}
-            .
-          </p>
-        )}
-        <div className="capture-actions">
-          <button
-            className="button primary"
-            disabled={busy || filesBusy || (!text.trim() && !ids.length)}
-            onClick={() => void save()}
-          >
-            {busy
-              ? 'Saving…'
-              : scope === 'personal'
-                ? 'Save to-do'
-                : reminderAt
-                  ? 'Save task'
-                  : 'Save note'}
-            <ArrowUpRight />
-          </button>
-        </div>
-        <details className="capture-files" open={ids.length > 0}>
+        <details
+          className="capture-type"
+          open={typing}
+          onToggle={(e) => setTyping(e.currentTarget.open)}
+        >
           <summary>
-            {ids.length
-              ? `${ids.length} attachment${ids.length > 1 ? 's' : ''}`
-              : 'Add files or a photo from your library'}
+            <Keyboard /> Type instead
           </summary>
-          <Attachments
-            readOnly={busy}
-            onBusyChange={fileBusy}
-            ids={ids}
-            store={store}
-            files={files}
-            onChange={setIds}
-            notify={notify}
+          <textarea
+            ref={input}
+            disabled={busy || filesBusy}
+            aria-label="Quick note"
+            value={text}
+            placeholder="What do you want to remember?"
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                e.preventDefault();
+                void save();
+              }
+            }}
+            onPaste={(e) => {
+              const fs = Array.from(e.clipboardData.files);
+              if (fs.length) {
+                e.preventDefault();
+                void addFiles(fs);
+              }
+            }}
           />
-        </details>
-        <p className="hint">
-          {scope === 'personal'
-            ? 'Everything you capture appears in To-Dos. Add a reminder or check it off whenever you like.'
-            : 'Private notes stay out of reports until you make them a task or add them to the meeting agenda.'}
-        </p>
-      </div>
-      <BulkSelection
-        key={scope}
-        items={[...recent, ...completed]}
-        store={store}
-        notify={notify}
-      >
-        <section className="recent-captures">
-          <div className="section-heading">
-            <h2>Recently captured</h2>
-            <span>{recent.length}</span>
+          <div className="capture-destinations capture-typed-actions">
+            <button
+              className="button primary"
+              disabled={busy || filesBusy || (!text.trim() && !ids.length)}
+              onClick={() => void save('task')}
+            >
+              <CheckCheck /> Task
+            </button>
+            <button
+              className="button"
+              disabled={busy || filesBusy || (!text.trim() && !ids.length)}
+              onClick={() => void save('note')}
+            >
+              <NotebookPen /> Note
+            </button>
+            <button
+              className="icon-button capture-trash"
+              aria-label="Discard typed capture"
+              disabled={busy || filesBusy || (!text && !ids.length)}
+              onClick={clear}
+            >
+              <Trash2 />
+            </button>
           </div>
-          {recent.length ? (
-            recent.map((n) => (
-              <div key={n.id} className="bulk-capture-row">
-                <SelectionCheckbox item={n} />
-                <SwipeNote
-                  note={n}
-                  revealed={revealedNote === n.id}
-                  onReveal={(show) => setRevealedNote(show ? n.id : null)}
-                  onOpen={() => openNote(n)}
-                  onToggle={async () => {
-                    try {
-                      await store.change(n, { archived: !n.archived });
-                    } catch (error) {
-                      notify((error as Error).message);
-                    }
-                  }}
-                  onDelete={async () => {
-                    try {
-                      await deleteNote(n);
-                      setRevealedNote(null);
-                    } catch (error) {
-                      notify((error as Error).message);
-                    }
-                  }}
-                />
-              </div>
-            ))
-          ) : (
-            <p className="empty-inline">Your next thought belongs here.</p>
-          )}
-          {completed.length > 0 && (
-            <div className="completed-captures">
-              <h3>Completed notes</h3>
-              {completed.map((note) => (
-                <QuickNoteRow
-                  key={note.id}
-                  note={note}
-                  store={store}
-                  onOpen={openNote}
-                  onDelete={deleteNote}
-                  notify={notify}
-                />
-              ))}
-            </div>
-          )}
-        </section>
-      </BulkSelection>
+          <ReminderPicker
+            task={{ reminderAt, reminderZone }}
+            disabled={busy || filesBusy}
+            onChange={(at, zone) => {
+              setReminderAt(at);
+              setReminderZone(zone);
+            }}
+          />
+          <details
+            className="capture-files"
+            open={ids.length > 0 ? true : undefined}
+          >
+            <summary>
+              {ids.length ? `${ids.length} attachments` : 'Attach a file'}
+            </summary>
+            <Attachments
+              readOnly={busy}
+              onBusyChange={fileBusy}
+              ids={ids}
+              store={store}
+              files={files}
+              onChange={setIds}
+              notify={notify}
+            />
+          </details>
+        </details>
+      </div>
     </div>
   );
 }

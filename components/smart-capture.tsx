@@ -1,10 +1,24 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { OriginalAudio } from './original-audio';
-import { Camera, Check, ImagePlus, Mic, Square, Undo2 } from 'lucide-react';
-import { notePlan, processCapture, saveMedia } from '@/lib/capture-client';
+import {
+  Camera,
+  CheckCheck,
+  ImagePlus,
+  Mic,
+  Square,
+  Trash2,
+  NotebookPen,
+  CalendarDays,
+} from 'lucide-react';
+import {
+  captureDestination,
+  notePlan,
+  processCapture,
+  saveMedia,
+} from '@/lib/capture-client';
 import { captureLists } from '@/lib/capture-lists';
-import { todoDueLabel } from '@/lib/personal-todos';
+import { MicrophoneSession } from '@/lib/microphone-session';
 import { reminderLabel } from '@/lib/reminders';
 import type { LaunchStore } from '@/lib/client-store';
 import type { Entity, Scope } from '@/lib/model';
@@ -16,7 +30,7 @@ type Props = {
   instruction: string;
   onSaved: (instruction: string) => void;
   notify: (message: string, undo?: () => void) => void;
-  openItem: (item: Entity) => void;
+  onDelete: (item: Entity) => Promise<void>;
 };
 export function SmartCapture({
   store,
@@ -25,17 +39,31 @@ export function SmartCapture({
   instruction,
   onSaved,
   notify,
-  openItem,
+  onDelete,
 }: Props) {
   const [recording, setRecording] = useState(false);
   const [starting, setStarting] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
-  const [result, setResult] = useState<{
-    sourceId: string;
-    items: Entity[];
-  } | null>(null);
+  const currentKey = `launch-current-capture-${store.account}-${scope}`;
+  const [currentId, setCurrentIdState] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(currentKey);
+    } catch {
+      return null;
+    }
+  });
+  function setCurrentId(id: string | null) {
+    try {
+      if (id) localStorage.setItem(currentKey, id);
+      else localStorage.removeItem(currentKey);
+    } catch {
+      /* The original itself is durably saved in Notes. */
+    }
+    if (active.current) setCurrentIdState(id);
+  }
+  const microphone = useRef(new MicrophoneSession());
   const recorder = useRef<MediaRecorder | null>(null);
   const active = useRef(true);
   const photo = useRef<HTMLInputElement>(null),
@@ -47,16 +75,22 @@ export function SmartCapture({
     active.current = true;
     const stop = () => {
       if (recorder.current?.state === 'recording') recorder.current.stop();
+      microphone.current.release();
+    };
+    const hide = () => {
+      if (document.hidden) stop();
     };
     const warn = (event: BeforeUnloadEvent) => {
       if (recorder.current?.state === 'recording') event.preventDefault();
     };
     window.addEventListener('pagehide', stop);
+    document.addEventListener('visibilitychange', hide);
     window.addEventListener('beforeunload', warn);
     return () => {
       active.current = false;
       stop();
       window.removeEventListener('pagehide', stop);
+      document.removeEventListener('visibilitychange', hide);
       window.removeEventListener('beforeunload', warn);
     };
   }, []);
@@ -74,7 +108,7 @@ export function SmartCapture({
   async function undo(sourceId: string) {
     try {
       await store.undoCapture(sourceId);
-      setResult(null);
+      setCurrentId(sourceId);
       notify('Undone. Your original capture is ready to edit.');
     } catch (reason) {
       setError((reason as Error).message);
@@ -82,7 +116,7 @@ export function SmartCapture({
   }
   function completed(sourceId: string, items: Entity[]) {
     if (!items.length) return;
-    setResult({ sourceId, items });
+    setCurrentId(null);
     notify(
       items.length === 1
         ? items[0].reminderAt
@@ -92,13 +126,17 @@ export function SmartCapture({
       () => void undo(sourceId),
     );
   }
-  async function process(id: string, clarification?: string) {
+  async function process(
+    id: string,
+    clarification?: string,
+    mode: 'review' | 'apply' | 'task' | 'agenda' = 'review',
+  ) {
     if (working.current) return;
     working.current = true;
     setBusy(id);
     setError('');
     try {
-      const outcome = await processCapture(store, id, clarification);
+      const outcome = await processCapture(store, id, clarification, mode);
       if (outcome) completed(id, outcome.items);
     } catch (reason) {
       setError((reason as Error).message);
@@ -125,6 +163,7 @@ export function SmartCapture({
         instruction,
         capturedAt,
       );
+      setCurrentId(source.id);
       onSaved(instruction);
       await process(source.id);
     } catch (reason) {
@@ -150,7 +189,7 @@ export function SmartCapture({
     requesting.current = true;
     setStarting(true);
     setError('');
-    setResult(null);
+    setCurrentId(null);
     let stream: MediaStream | undefined;
     try {
       if (
@@ -160,7 +199,7 @@ export function SmartCapture({
         throw new Error(
           'Recording is unavailable in this browser. Use your keyboard microphone to dictate below.',
         );
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await microphone.current.acquire();
       if (!active.current) {
         stream.getTracks().forEach((track) => track.stop());
         return;
@@ -185,7 +224,7 @@ export function SmartCapture({
           current.stop();
       };
       current.onstop = () => {
-        stream!.getTracks().forEach((track) => track.stop());
+        microphone.current.mute();
         recorder.current = null;
         setRecording(false);
         if (!chunks.length) {
@@ -220,7 +259,8 @@ export function SmartCapture({
       setElapsed(0);
       setRecording(true);
     } catch (reason) {
-      stream?.getTracks().forEach((track) => track.stop());
+      microphone.current.release();
+      if ((reason as Error).name === 'AbortError') return;
       setError(
         (reason as Error).name === 'NotAllowedError'
           ? 'Microphone access was denied. Allow it in this app’s browser settings, or use keyboard dictation below.'
@@ -231,176 +271,152 @@ export function SmartCapture({
       setStarting(false);
     }
   }
-  const { pending } = captureLists(records, scope);
+  const source = captureLists(records, scope).pending.find(
+    (item) => item.id === currentId,
+  );
+  async function choose(kind: 'task' | 'note' | 'agenda', clarification = '') {
+    if (!source || working.current || capturing.current) return;
+    const latest = store.data.records.find((item) => item.id === source.id)!;
+    if (
+      kind !== 'note' &&
+      (clarification.trim() ||
+        !latest.capture?.plan ||
+        latest.capture.plan.question)
+    ) {
+      await process(
+        source.id,
+        `Create ${kind === 'agenda' ? 'an agenda item' : 'a task'} from this capture. ${clarification}`,
+        kind,
+      );
+      return;
+    }
+    working.current = true;
+    setBusy(source.id);
+    setError('');
+    try {
+      const transcript = latest.capture?.transcript || latest.notes;
+      if (!transcript.trim() && kind === 'note') {
+        await store.change(latest, {
+          capture: { ...latest.capture!, state: 'done', resultIds: [] },
+        });
+        setCurrentId(null);
+        notify('Original saved in Notes.');
+        return;
+      }
+      const plan =
+        kind === 'note'
+          ? notePlan(transcript)
+          : captureDestination(latest.capture!.plan!, kind);
+      completed(source.id, await store.applyCapture(source.id, plan));
+    } catch (reason) {
+      setError((reason as Error).message);
+    } finally {
+      working.current = false;
+      setBusy(null);
+    }
+  }
+  async function discard() {
+    if (!source || working.current || capturing.current) return;
+    working.current = true;
+    setBusy(source.id);
+    try {
+      await onDelete(source);
+      setError('');
+    } catch (reason) {
+      setError((reason as Error).message);
+    } finally {
+      working.current = false;
+      setBusy(null);
+    }
+  }
   return (
-    <section className="smart-capture" aria-label="Voice and photo capture">
-      <div className="voice-capture-controls">
-        <button
-          className={`microphone ${recording ? 'listening' : ''}`}
-          aria-label={
-            recording ? 'Stop recording and save' : 'Record a voice note'
-          }
-          aria-pressed={recording}
-          disabled={starting || (!!busy && !recording)}
-          onClick={() => (recording ? recorder.current?.stop() : void start())}
-        >
-          {recording ? <Square fill="currentColor" /> : <Mic />}
-        </button>
-        <strong>
-          {recording
-            ? `Recording · ${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}`
-            : starting
-              ? 'Opening microphone…'
-              : busy
-                ? busy === 'saving'
-                  ? 'Saving your original…'
-                  : 'Transcribing and organizing…'
-                : 'Tap to speak'}
-        </strong>
-        <p>
-          {recording
-            ? 'Tap stop when finished. Keep Launch open · up to 3 minutes.'
-            : '“Remind me tomorrow at 9 AM to call Sonos.”'}
-        </p>
-        {!recording && (
-          <p className="voice-reminder-example">
-            Or say “Set an alarm in 30 minutes to check the oven.”
-          </p>
-        )}
-        <div className="smart-photo-actions">
+    <section
+      className={`smart-capture${source ? ' has-review' : ''}`}
+      aria-label="Voice and photo capture"
+    >
+      {!source && (
+        <div className="voice-capture-controls">
           <button
-            className="button"
-            disabled={recording || starting || !!busy}
-            onClick={() => photo.current?.click()}
+            className={`microphone ${recording ? 'listening' : ''}`}
+            aria-label={
+              recording
+                ? 'Stop recording and transcribe'
+                : 'Record a voice note'
+            }
+            aria-pressed={recording}
+            disabled={starting || (!!busy && !recording)}
+            onClick={() =>
+              recording ? recorder.current?.stop() : void start()
+            }
           >
-            <Camera /> Scan a photo
+            {recording ? <Square fill="currentColor" /> : <Mic />}
           </button>
-          <button
-            className="button"
-            disabled={recording || starting || !!busy}
-            onClick={() => library.current?.click()}
-          >
-            <ImagePlus /> Photo library
-          </button>
-        </div>
-        <input
-          ref={photo}
-          hidden
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) void capture(file, 'photo');
-            e.target.value = '';
-          }}
-        />
-        <input
-          ref={library}
-          hidden
-          type="file"
-          accept="image/*"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) void capture(file, 'photo');
-            e.target.value = '';
-          }}
-        />
-        <small>
-          Originals are saved with your notes. Audio and photos are sent to
-          OpenAI for transcription.
-        </small>
-      </div>
-      {error && (
-        <p className="capture-error" role="alert">
-          {error}
-        </p>
-      )}
-      {result && (
-        <output className="capture-result">
-          <strong>
-            <Check /> Saved to Launch
-          </strong>
-          {result.items.map((saved) => {
-            const item =
-              records.find((record) => record.id === saved.id) || saved;
-            return (
-              <button
-                key={item.id}
-                className="capture-result-item"
-                onClick={() =>
-                  openItem(
-                    store.data.records.find((e) => e.id === item.id) || item,
-                  )
-                }
-              >
-                <span>{item.title}</span>
-                <small>
-                  {item.scope === 'personal'
-                    ? 'To-do'
-                    : item.kind === 'task'
-                      ? `Task${item.final ? ' · Final: ' + item.final : ''}`
-                      : item.kind === 'agenda'
-                        ? 'Meeting agenda'
-                        : 'Quick note'}{' '}
-                  · Edit
-                </small>
-                {item.dueAt && <small>Due · {todoDueLabel(item)}</small>}
-                {item.reminderAt && (
-                  <small className="capture-reminder-time">
-                    Reminder · {reminderLabel(item)}
-                  </small>
-                )}
-              </button>
-            );
-          })}
-          {result.items.some((item) => item.reminderAt) && (
-            <small className="hint">
-              For an alert when Launch is closed, enable Phone alerts in
-              Settings.
-            </small>
+          {(recording || starting || busy) && (
+            <output className="capture-status">
+              {recording
+                ? `Recording · ${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}`
+                : starting
+                  ? 'Opening microphone…'
+                  : 'Saving recording…'}
+            </output>
           )}
-          <button
-            className="text-button"
-            onClick={() => void undo(result.sourceId)}
-          >
-            <Undo2 /> Undo
-          </button>
-        </output>
+          <div className="smart-photo-actions">
+            <button
+              className="button"
+              disabled={recording || starting || !!busy}
+              onClick={() => photo.current?.click()}
+            >
+              <Camera /> Camera
+            </button>
+            <button
+              className="button"
+              disabled={recording || starting || !!busy}
+              onClick={() => library.current?.click()}
+            >
+              <ImagePlus /> Photos
+            </button>
+          </div>
+        </div>
       )}
-      {pending.map((source) => (
+      <input
+        ref={photo}
+        hidden
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void capture(file, 'photo');
+          e.target.value = '';
+        }}
+      />
+      <input
+        ref={library}
+        hidden
+        type="file"
+        accept="image/*"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void capture(file, 'photo');
+          e.target.value = '';
+        }}
+      />
+      {source && (
         <CaptureReview
           key={source.id}
           source={source}
           store={store}
           busy={!!busy || recording || starting}
-          processing={busy === source.id}
-          onProcess={(clarification) => void process(source.id, clarification)}
-          onKeep={async () => {
-            try {
-              const latest = store.data.records.find(
-                (e) => e.id === source.id,
-              )!;
-              if (latest.capture?.transcript)
-                completed(
-                  source.id,
-                  await store.applyCapture(
-                    source.id,
-                    notePlan(latest.capture.transcript),
-                  ),
-                );
-              else {
-                await store.change(latest, {
-                  capture: { ...latest.capture!, state: 'done', resultIds: [] },
-                });
-                notify('Original saved as a quick note.');
-              }
-            } catch (reason) {
-              setError((reason as Error).message);
-            }
-          }}
+          onProcess={(clarification) => process(source.id, clarification)}
+          onChoose={choose}
+          onDelete={discard}
         />
-      ))}
+      )}
+      {error && (
+        <p className="capture-error" role="alert">
+          {error}
+        </p>
+      )}
     </section>
   );
 }
@@ -408,117 +424,130 @@ function CaptureReview({
   source,
   store,
   busy,
-  processing,
   onProcess,
-  onKeep,
+  onChoose,
+  onDelete,
 }: {
   source: Entity;
   store: LaunchStore;
   busy: boolean;
-  processing: boolean;
-  onProcess: (clarification: string) => void;
-  onKeep: () => Promise<void>;
+  onProcess: (clarification: string) => Promise<void>;
+  onChoose: (
+    kind: 'task' | 'note' | 'agenda',
+    clarification?: string,
+  ) => Promise<void>;
+  onDelete: () => Promise<void>;
 }) {
   const [clarification, setClarification] = useState('');
-  const [text, setText] = useState(source.capture?.transcript || '');
+  const [originalOpen, setOriginalOpen] = useState(false);
   const [url, setUrl] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
   const transcript = source.capture?.transcript || '';
+  const question = source.capture?.plan?.question;
   const fileId = source.files[0];
   const isVoice = source.capture?.type === 'voice';
   const pending = store.data.files.find((file) => file.id === fileId)?.pending;
-  useEffect(() => setText(transcript), [transcript]);
   useEffect(() => {
-    const next = fileId && !isVoice ? store.fileUrl(fileId) : '';
+    const next =
+      originalOpen && fileId && !isVoice ? store.fileUrl(fileId) : '';
     setUrl(next);
     return () => {
       if (next.startsWith('blob:')) URL.revokeObjectURL(next);
     };
-  }, [fileId, isVoice, pending, store]);
-  async function act(keep = false) {
-    setSaving(true);
-    setError('');
-    try {
-      if (text !== transcript)
-        await store.change(
-          source,
-          {
-            notes: text,
-            capture: { ...source.capture!, transcript: text, state: 'review' },
-          },
-          false,
-        );
-      if (keep) await onKeep();
-      else onProcess(clarification);
-    } catch (reason) {
-      setError((reason as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  }
+  }, [originalOpen, fileId, isVoice, pending, store]);
   return (
     <article className="capture-review">
-      <strong>
-        {processing
-          ? 'Processing…'
-          : source.capture?.plan?.question ||
-            (transcript
-              ? 'Review your capture'
-              : 'Original saved · ready to transcribe')}
-      </strong>
-      {source.capture?.type === 'voice' ? (
-        <OriginalAudio
-          fileId={fileId}
-          store={store}
-          aria-label="Original voice recording"
-        />
-      ) : (
-        <img
-          className="capture-source-photo"
-          src={url}
-          alt="Captured original"
-        />
-      )}
-      {!!transcript && (
-        <label>
-          Transcription
-          <textarea
-            value={text}
-            disabled={busy || saving}
-            onChange={(e) => setText(e.target.value)}
-          />
-        </label>
-      )}
-      <label>
-        {transcript
-          ? 'Your instructions or clarification'
-          : 'Optional directions'}
-        <input
-          value={clarification}
-          disabled={busy || saving}
-          onChange={(e) => setClarification(e.target.value)}
-          placeholder="Remind me tomorrow at 9 AM"
-          maxLength={2000}
-        />
-      </label>
-      {error && <p role="alert">{error}</p>}
-      <div className="capture-review-actions">
+      <div className="capture-review-heading">
+        <h2>
+          {busy ? 'Preparing capture…' : transcript ? 'Create' : 'Your capture'}
+        </h2>
+        <button
+          className="icon-button capture-trash"
+          aria-label="Discard capture"
+          disabled={busy}
+          onClick={() => void onDelete()}
+        >
+          <Trash2 />
+        </button>
+      </div>
+      <div className="capture-destinations">
         <button
           className="button primary"
-          disabled={busy || saving}
-          onClick={() => void act()}
+          disabled={busy || !transcript.trim()}
+          onClick={() => void onChoose('task', clarification)}
         >
-          {transcript ? 'Apply directions' : 'Process'}
+          <CheckCheck /> Task
         </button>
         <button
           className="button"
-          disabled={busy || saving}
-          onClick={() => void act(true)}
+          disabled={busy}
+          onClick={() => void onChoose('note')}
         >
-          Keep as note
+          <NotebookPen /> Note
         </button>
       </div>
+      {source.capture?.plan?.items.some((item) => item.kind === 'agenda') && (
+        <button
+          className="button"
+          disabled={busy}
+          onClick={() => void onChoose('agenda', clarification)}
+        >
+          <CalendarDays /> Agenda item
+        </button>
+      )}
+      {transcript ? (
+        <div
+          className="capture-transcript"
+          aria-label="Transcription"
+          tabIndex={0}
+        >
+          {transcript}
+        </div>
+      ) : (
+        <p className="capture-status">
+          {busy ? 'Transcribing…' : 'Recording saved. Ready to transcribe.'}
+        </p>
+      )}
+      {question && (
+        <label className="capture-question">
+          {question}
+          <input
+            value={clarification}
+            disabled={busy}
+            onChange={(e) => setClarification(e.target.value)}
+            placeholder="Your answer"
+            maxLength={2000}
+          />
+        </label>
+      )}
+      {!transcript && (
+        <button
+          className="button"
+          disabled={busy}
+          onClick={() => void onProcess('')}
+        >
+          Transcribe
+        </button>
+      )}
+      <details
+        className="capture-original"
+        onToggle={(e) => setOriginalOpen(e.currentTarget.open)}
+      >
+        <summary>{isVoice ? 'Original recording' : 'Original photo'}</summary>
+        {originalOpen &&
+          (isVoice ? (
+            <OriginalAudio
+              fileId={fileId}
+              store={store}
+              aria-label="Original voice recording"
+            />
+          ) : (
+            <img
+              className="capture-source-photo"
+              src={url}
+              alt="Captured original"
+            />
+          ))}
+      </details>
     </article>
   );
 }

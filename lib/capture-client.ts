@@ -52,6 +52,7 @@ export async function processCapture(
   store: LaunchStore,
   id: string,
   clarification?: string,
+  mode: 'review' | 'apply' | 'task' | 'agenda' = 'apply',
 ) {
   const key = store.account + ':' + id;
   if (running.has(key)) return null;
@@ -128,7 +129,11 @@ export async function processCapture(
       }
     }
     const { plan: raw } = await request(JSON.stringify(source.capture));
-    const plan = validatePlan(raw);
+    const parsed = validatePlan(raw);
+    const plan =
+      mode === 'task' || mode === 'agenda'
+        ? captureDestination(parsed, mode)
+        : parsed;
     const latest = store.data.records.find((e) => e.id === id);
     if (!latest?.capture || latest.deletedAt || latest.capture.state === 'done')
       return null;
@@ -137,7 +142,8 @@ export async function processCapture(
       { capture: { ...latest.capture, plan, state: 'review' } },
       false,
     );
-    if (plan.question) return { source: updated, plan, items: [] as Entity[] };
+    if (plan.question || mode === 'review')
+      return { source: updated, plan, items: [] as Entity[] };
     return { source: updated, plan, items: await store.applyCapture(id, plan) };
   }
   try {
@@ -207,4 +213,26 @@ export function notePlan(transcript: string): CapturePlan {
       },
     ],
   };
+}
+
+export function captureDestination(
+  plan: CapturePlan,
+  kind: 'task' | 'agenda',
+): CapturePlan {
+  return validatePlan({
+    ...plan,
+    items: plan.items.map((item) => ({
+      ...item,
+      kind,
+      ...(kind === 'task'
+        ? { dueDate: item.dueDate || item.meetingDate, meetingDate: '' }
+        : {
+            meetingDate: item.meetingDate || item.dueDate,
+            dueDate: '',
+            dueLocal: '',
+            reminderLocal: '',
+            reminderOffsetMinutes: undefined,
+          }),
+    })),
+  });
 }
