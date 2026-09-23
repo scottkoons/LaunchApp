@@ -7,6 +7,8 @@ import {
   DialogDescription,
 } from './ui/dialog';
 import { Attachments } from './launch-controls';
+import { NoteVoiceInput } from './note-voice-input';
+import { withVoiceAddition } from '@/lib/note-dictation';
 import { ReminderPicker } from './reminder-picker';
 import { reminderInput, reminderPatch } from '@/lib/reminders';
 import { reminderInstant } from '@/lib/capture-intent';
@@ -37,9 +39,11 @@ export function TodoEditor({
   );
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [dictating, setDictating] = useState(false);
   const working = useRef(false);
   async function save() {
-    if (working.current || uploading || !draft.title.trim()) return;
+    if (working.current || uploading || dictating || !draft.title.trim())
+      return;
     working.current = true;
     setBusy(true);
     try {
@@ -86,12 +90,12 @@ export function TodoEditor({
     <Dialog
       open
       onOpenChange={(open) => {
-        if (!open && !busy && !uploading) onClose();
+        if (!open && !busy && !uploading && !dictating) onClose();
       }}
     >
       <DialogContent
         className="task-create-modal note-editor-modal todo-editor-modal"
-        showCloseButton={!busy && !uploading}
+        showCloseButton={!busy && !uploading && !dictating}
       >
         <header className="note-editor-header">
           <DialogTitle>
@@ -121,6 +125,15 @@ export function TodoEditor({
               onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
             />
           </label>
+          <NoteVoiceInput
+            note={draft}
+            store={store}
+            disabled={busy || uploading}
+            onBusyChange={setDictating}
+            onAdded={(text, ids) =>
+              setDraft((current) => withVoiceAddition(current, text, ids))
+            }
+          />
           <div className="todo-dates">
             <label className="field">
               Due date
@@ -161,14 +174,14 @@ export function TodoEditor({
         <footer className="editor-actions">
           <button
             className="button"
-            disabled={busy || uploading}
+            disabled={busy || uploading || dictating}
             onClick={onClose}
           >
             Cancel
           </button>
           <button
             className="button primary"
-            disabled={busy || uploading || !draft.title.trim()}
+            disabled={busy || uploading || dictating || !draft.title.trim()}
             onClick={() => void save()}
           >
             {busy ? 'Saving…' : 'Save to-do'}

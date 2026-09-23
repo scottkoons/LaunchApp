@@ -1,5 +1,6 @@
 type CaptureItem = {
   kind: 'note' | 'task' | 'agenda';
+  scope?: 'business' | 'personal' | '';
   title: string;
   notes: string;
   dueDate: string;
@@ -118,6 +119,8 @@ export function validatePlan(value: unknown): CapturePlan {
       if (
         !item ||
         !['task', 'note', 'agenda'].includes(item.kind) ||
+        (item.scope !== undefined &&
+          !['', 'business', 'personal'].includes(item.scope)) ||
         typeof item.title !== 'string' ||
         !item.title.trim() ||
         item.title.length > 500 ||
@@ -152,6 +155,7 @@ export function validatePlan(value: unknown): CapturePlan {
         throw new Error('The suggested item needs a clearer title or date.');
       return {
         kind: item.kind,
+        ...(item.scope ? { scope: item.scope } : {}),
         title: item.title.trim(),
         notes: item.notes,
         dueDate: item.dueDate,
@@ -210,6 +214,7 @@ export const captureSchema = {
         additionalProperties: false,
         properties: {
           kind: { type: 'string', enum: ['note', 'task', 'agenda'] },
+          scope: { type: 'string', enum: ['', 'business', 'personal'] },
           title: { type: 'string' },
           notes: { type: 'string' },
           dueDate: { type: 'string' },
@@ -224,6 +229,7 @@ export const captureSchema = {
         },
         required: [
           'kind',
+          'scope',
           'title',
           'notes',
           'dueDate',

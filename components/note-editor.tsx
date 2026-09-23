@@ -8,6 +8,8 @@ import {
   DialogDescription,
 } from './ui/dialog';
 import { Attachments } from './launch-controls';
+import { NoteVoiceInput } from './note-voice-input';
+import { withVoiceAddition } from '@/lib/note-dictation';
 import type { Entity, FileMeta } from '@/lib/model';
 import type { LaunchStore } from '@/lib/client-store';
 
@@ -32,9 +34,10 @@ export function NoteEditor({
   const base = useRef(note);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [dictating, setDictating] = useState(false);
   const saving = useRef(false);
   async function save(promote = false) {
-    if (saving.current || uploading || !draft.title.trim()) return;
+    if (saving.current || uploading || dictating || !draft.title.trim()) return;
     saving.current = true;
     setBusy(true);
     try {
@@ -61,12 +64,12 @@ export function NoteEditor({
     <Dialog
       open={open}
       onOpenChange={(value) => {
-        if (!value && !busy && !uploading) onClose();
+        if (!value && !busy && !uploading && !dictating) onClose();
       }}
     >
       <DialogContent
         className="task-create-modal note-editor-modal"
-        showCloseButton={!busy && !uploading}
+        showCloseButton={!busy && !uploading && !dictating}
       >
         <header className="note-editor-header">
           <DialogTitle>Edit item</DialogTitle>
@@ -95,6 +98,15 @@ export function NoteEditor({
               onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
             />
           </label>
+          <NoteVoiceInput
+            note={draft}
+            store={store}
+            disabled={busy || uploading}
+            onBusyChange={setDictating}
+            onAdded={(text, ids) =>
+              setDraft((current) => withVoiceAddition(current, text, ids))
+            }
+          />
           <div className="section-label">ATTACHMENTS</div>
           <Attachments
             ids={draft.files}
@@ -111,7 +123,7 @@ export function NoteEditor({
         <footer className="editor-actions">
           <button
             className="text-button note-promote"
-            disabled={busy || uploading || !draft.title.trim()}
+            disabled={busy || uploading || dictating || !draft.title.trim()}
             onClick={() => void save(true)}
           >
             <ArrowUpRight />
@@ -119,14 +131,14 @@ export function NoteEditor({
           </button>
           <button
             className="button"
-            disabled={busy || uploading}
+            disabled={busy || uploading || dictating}
             onClick={onClose}
           >
             Cancel
           </button>
           <button
             className="button primary"
-            disabled={busy || uploading || !draft.title.trim()}
+            disabled={busy || uploading || dictating || !draft.title.trim()}
             onClick={() => void save()}
           >
             {busy ? 'Saving…' : 'Save'}

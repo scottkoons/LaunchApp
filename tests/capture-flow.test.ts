@@ -150,3 +150,45 @@ void test('choosing Task for an agenda suggestion moves the date to Final withou
   assert.equal(result.items[0].meetingDate, '');
   assert.equal(original.items[0].kind, 'agenda');
 });
+
+void test('choosing Note preserves spoken details and workspace routing even when task dates were parsed', () => {
+  const transcript =
+    'Add broccoli to my personal grocery list tomorrow at 10 AM';
+  const plan = notePlan(transcript);
+  plan.items[0] = {
+    ...plan.items[0],
+    scope: 'personal',
+    kind: 'task',
+    title: 'Grocery list',
+    notes: 'Broccoli',
+    dueDate: '2030-09-24',
+    dueLocal: '2030-09-24T10:00',
+  };
+  const result = notePlan(transcript, plan);
+  assert.equal(result.items[0].scope, 'personal');
+  assert.equal(result.items[0].notes, transcript);
+  assert.equal(result.items[0].dueDate, '');
+  assert.equal(captureDestination(plan, 'task').items[0].scope, 'personal');
+  plan.items.push({ ...plan.items[0], scope: 'business' });
+  assert.throws(() => notePlan(transcript, plan), /workspace/);
+});
+
+void test('repeated voice additions preserve typed content, title, workspace, and earlier attachments', async () => {
+  const { withVoiceAddition } = await import('../lib/note-dictation');
+  const original = createEntity('note', 'personal', {
+    title: 'Grocery list',
+    notes: 'Eggs\nMilk',
+    files: ['original'],
+  });
+  const first = withVoiceAddition(original, 'Broccoli', ['recording-1']);
+  const second = withVoiceAddition(first, ' Apples\nBread ', [
+    'recording-2',
+    'original',
+  ]);
+  assert.equal(second.notes, 'Eggs\nMilk\nBroccoli\nApples\nBread');
+  assert.deepEqual(second.files, ['original', 'recording-1', 'recording-2']);
+  assert.equal(second.title, original.title);
+  assert.equal(second.scope, 'personal');
+  assert.equal(second.id, original.id);
+  assert.equal(original.notes, 'Eggs\nMilk');
+});

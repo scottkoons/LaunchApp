@@ -1240,3 +1240,62 @@ void test('spoken personal capture saves due time independently, hides duplicate
     [source.id],
   );
 });
+
+void test('spoken workspace overrides selected scope, persists across restart, and supports undo', async () => {
+  const store = new LaunchStore('scope-override-' + crypto.randomUUID());
+  await store.init();
+  for (const selected of ['business', 'personal'] as const) {
+    const destination = selected === 'business' ? 'personal' : 'business';
+    const source = await store.add(
+      createEntity('note', selected, {
+        title: 'Original recording',
+        capture: {
+          type: 'voice',
+          state: 'review',
+          capturedAt: new Date().toISOString(),
+          timeZone: 'America/Denver',
+          instruction: '',
+        },
+      }),
+    );
+    const base = {
+      kind: 'task' as const,
+      title: 'Grocery trip',
+      notes: 'Broccoli',
+      dueDate: '',
+      reminderLocal: '',
+      meetingDate: '',
+    };
+    const results = await store.applyCapture(source.id, {
+      question: '',
+      items: [
+        { ...base, scope: destination },
+        { ...base, title: 'Default workspace' },
+      ],
+    });
+    assert.equal(results[0].scope, destination);
+    assert.equal(results[1].scope, selected);
+    assert.equal(results[0].kind, destination === 'personal' ? 'note' : 'task');
+    assert.equal(results[0].report, destination === 'business');
+    const reopened = new LaunchStore(store.account);
+    await reopened.init();
+    assert.equal(
+      reopened.data.records.find((item) => item.id === results[0].id)?.scope,
+      destination,
+    );
+    assert.equal(
+      captureLists(reopened.data.records, selected).pending.length,
+      0,
+    );
+    await reopened.undoCapture(source.id);
+    assert.ok(
+      reopened.data.records.find((item) => item.id === results[0].id)
+        ?.deletedAt,
+    );
+    assert.equal(
+      reopened.data.records.find((item) => item.id === source.id)?.capture
+        ?.state,
+      'review',
+    );
+  }
+});

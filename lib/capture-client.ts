@@ -199,13 +199,25 @@ async function visionPhoto(blob: Blob) {
     URL.revokeObjectURL(url);
   }
 }
-export function notePlan(transcript: string): CapturePlan {
+export function notePlan(
+  transcript: string,
+  interpreted?: CapturePlan,
+): CapturePlan {
+  const scopes = [
+    ...new Set(interpreted?.items.map((item) => item.scope).filter(Boolean)),
+  ];
+  if (scopes.length > 1)
+    throw new Error('Clarify the workspace before saving this note.');
   return {
     question: '',
     items: [
       {
         kind: 'note',
-        title: transcript.split('\n')[0].slice(0, 120) || 'Captured note',
+        ...(scopes[0] ? { scope: scopes[0] } : {}),
+        title:
+          interpreted?.items.length === 1
+            ? interpreted.items[0].title
+            : transcript.split('\n')[0].slice(0, 120) || 'Captured note',
         notes: transcript,
         dueDate: '',
         reminderLocal: '',

@@ -18,7 +18,7 @@ import {
   saveMedia,
 } from '@/lib/capture-client';
 import { captureLists } from '@/lib/capture-lists';
-import { MicrophoneSession } from '@/lib/microphone-session';
+import { useVoiceRecorder } from '@/lib/use-voice-recorder';
 import { reminderLabel } from '@/lib/reminders';
 import type { LaunchStore } from '@/lib/client-store';
 import type { Entity, Scope } from '@/lib/model';
@@ -41,9 +41,6 @@ export function SmartCapture({
   notify,
   onDelete,
 }: Props) {
-  const [recording, setRecording] = useState(false);
-  const [starting, setStarting] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
   const currentKey = `launch-current-capture-${store.account}-${scope}`;
@@ -63,48 +60,22 @@ export function SmartCapture({
     }
     if (active.current) setCurrentIdState(id);
   }
-  const microphone = useRef(new MicrophoneSession());
-  const recorder = useRef<MediaRecorder | null>(null);
   const active = useRef(true);
   const photo = useRef<HTMLInputElement>(null),
     library = useRef<HTMLInputElement>(null);
   const working = useRef(false);
   const capturing = useRef(false);
-  const requesting = useRef(false);
   useEffect(() => {
     active.current = true;
-    const stop = () => {
-      if (recorder.current?.state === 'recording') recorder.current.stop();
-      microphone.current.release();
-    };
-    const hide = () => {
-      if (document.hidden) stop();
-    };
-    const warn = (event: BeforeUnloadEvent) => {
-      if (recorder.current?.state === 'recording') event.preventDefault();
-    };
-    window.addEventListener('pagehide', stop);
-    document.addEventListener('visibilitychange', hide);
-    window.addEventListener('beforeunload', warn);
     return () => {
       active.current = false;
-      stop();
-      window.removeEventListener('pagehide', stop);
-      document.removeEventListener('visibilitychange', hide);
-      window.removeEventListener('beforeunload', warn);
     };
   }, []);
-  useEffect(() => {
-    if (!recording) return;
-    const started = Date.now();
-    const timer = setInterval(() => {
-      const seconds = Math.floor((Date.now() - started) / 1000);
-      setElapsed(seconds);
-      if (seconds >= 180 && recorder.current?.state === 'recording')
-        recorder.current.stop();
-    }, 500);
-    return () => clearInterval(timer);
-  }, [recording]);
+  const { recording, starting, elapsed, start, stop } = useVoiceRecorder(
+    (file, capturedAt) => capture(file, 'voice', capturedAt),
+    !!busy,
+    setError,
+  );
   async function undo(sourceId: string) {
     try {
       await store.undoCapture(sourceId);
@@ -121,7 +92,7 @@ export function SmartCapture({
       items.length === 1
         ? items[0].reminderAt
           ? `Reminder set for ${reminderLabel(items[0])}.`
-          : `${items[0].scope === 'personal' ? 'To-do' : items[0].kind === 'agenda' ? 'Agenda item' : items[0].kind === 'task' ? 'Task' : 'Note'} saved.`
+          : `${items[0].kind === 'agenda' ? 'Agenda item' : items[0].kind === 'task' ? 'Task' : 'Note'} saved to ${items[0].scope === 'personal' ? 'Personal' : 'Business'}.`
         : `${items.length} items saved.`,
       () => void undo(sourceId),
     );
@@ -182,101 +153,16 @@ export function SmartCapture({
       setBusy(null);
     }
   }
-  async function start() {
-    if (requesting.current || capturing.current) return;
-    if (starting || working.current || recorder.current?.state === 'recording')
-      return;
-    requesting.current = true;
-    setStarting(true);
-    setError('');
-    setCurrentId(null);
-    let stream: MediaStream | undefined;
-    try {
-      if (
-        !navigator.mediaDevices?.getUserMedia ||
-        typeof MediaRecorder === 'undefined'
-      )
-        throw new Error(
-          'Recording is unavailable in this browser. Use your keyboard microphone to dictate below.',
-        );
-      stream = await microphone.current.acquire();
-      if (!active.current) {
-        stream.getTracks().forEach((track) => track.stop());
-        return;
-      }
-      const mime = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm'].find(
-        (type) => MediaRecorder.isTypeSupported(type),
-      );
-      const current = new MediaRecorder(
-        stream,
-        mime ? { mimeType: mime } : undefined,
-      );
-      recorder.current = current;
-      const chunks: Blob[] = [],
-        started = new Date().toISOString();
-      let size = 0;
-      current.ondataavailable = (event) => {
-        if (event.data.size) {
-          chunks.push(event.data);
-          size += event.data.size;
-        }
-        if (size > 10 * 1024 * 1024 && current.state === 'recording')
-          current.stop();
-      };
-      current.onstop = () => {
-        microphone.current.mute();
-        recorder.current = null;
-        setRecording(false);
-        if (!chunks.length) {
-          setError('No audio was recorded. Try again.');
-          return;
-        }
-        const type = (current.mimeType || chunks[0].type || 'audio/webm').split(
-          ';',
-        )[0];
-        const extension = type.includes('mp4')
-          ? 'm4a'
-          : type.includes('ogg')
-            ? 'ogg'
-            : 'webm';
-        void capture(
-          new File(
-            chunks,
-            `Voice note ${started.slice(0, 19).replace(/:/g, '-')}.${extension}`,
-            { type },
-          ),
-          'voice',
-          started,
-        );
-      };
-      current.onerror = () => {
-        setError(
-          'Recording was interrupted. Saving the audio captured so far.',
-        );
-        if (current.state !== 'inactive') current.stop();
-      };
-      current.start(1000);
-      setElapsed(0);
-      setRecording(true);
-    } catch (reason) {
-      microphone.current.release();
-      if ((reason as Error).name === 'AbortError') return;
-      setError(
-        (reason as Error).name === 'NotAllowedError'
-          ? 'Microphone access was denied. Allow it in this app’s browser settings, or use keyboard dictation below.'
-          : (reason as Error).message,
-      );
-    } finally {
-      requesting.current = false;
-      setStarting(false);
-    }
-  }
   const source = captureLists(records, scope).pending.find(
     (item) => item.id === currentId,
   );
   async function choose(kind: 'task' | 'note' | 'agenda', clarification = '') {
     if (!source || working.current || capturing.current) return;
     const latest = store.data.records.find((item) => item.id === source.id)!;
+    if (kind === 'note' && latest.capture?.transcript && !latest.capture.plan) {
+      await process(source.id);
+      return;
+    }
     if (
       kind !== 'note' &&
       (clarification.trim() ||
@@ -305,7 +191,7 @@ export function SmartCapture({
       }
       const plan =
         kind === 'note'
-          ? notePlan(transcript)
+          ? notePlan(transcript, latest.capture?.plan)
           : captureDestination(latest.capture!.plan!, kind);
       completed(source.id, await store.applyCapture(source.id, plan));
     } catch (reason) {
@@ -345,9 +231,7 @@ export function SmartCapture({
             }
             aria-pressed={recording}
             disabled={starting || (!!busy && !recording)}
-            onClick={() =>
-              recording ? recorder.current?.stop() : void start()
-            }
+            onClick={() => (recording ? stop() : void start())}
           >
             {recording ? <Square fill="currentColor" /> : <Mic />}
           </button>
@@ -469,6 +353,22 @@ function CaptureReview({
           <Trash2 />
         </button>
       </div>
+      {transcript && (
+        <p className="capture-workspace" aria-live="polite">
+          Save to{' '}
+          {[
+            ...new Set(
+              source.capture?.plan?.items.length
+                ? source.capture.plan.items.map(
+                    (item) => item.scope || source.scope,
+                  )
+                : [source.scope],
+            ),
+          ]
+            .map((scope) => (scope === 'personal' ? 'Personal' : 'Business'))
+            .join(' and ')}
+        </p>
+      )}
       <div className="capture-destinations">
         <button
           className="button primary"
@@ -498,6 +398,7 @@ function CaptureReview({
         <div
           className="capture-transcript"
           aria-label="Transcription"
+          // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- Scrollable transcript must be reachable by keyboard.
           tabIndex={0}
         >
           {transcript}

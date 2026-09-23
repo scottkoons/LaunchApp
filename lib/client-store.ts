@@ -566,47 +566,41 @@ export class LaunchStore {
     if (plan.question || !plan.items.length)
       throw new Error('Answer the capture question first.');
     const destinations = plan.items.map((item, index) => {
+      const scope = item.scope || source.scope;
       const reminderAt = captureReminderAt(item, source.capture!);
       if (reminderAt && Date.parse(reminderAt) <= Date.now())
         throw new Error(
           'That reminder time has passed. Choose a future time, or save without a reminder.',
         );
       return validateEntity(
-        createEntity(
-          source.scope === 'personal' ? 'note' : item.kind,
-          source.scope,
-          {
-            id: `${source.id}-capture-${index}-${item.kind}`,
-            sourceId: source.id,
-            title: item.title,
-            notes: item.notes,
-            files: [...source.files],
-            final:
-              item.dueDate ||
-              item.dueLocal?.slice(0, 10) ||
-              (source.scope === 'personal' ? item.meetingDate : '') ||
-              '',
-            ...(item.dueLocal
-              ? {
-                  dueAt: reminderInstant(
-                    item.dueLocal,
-                    source.capture!.timeZone,
-                  ),
-                  dueZone: source.capture!.timeZone,
-                }
-              : {}),
-            plannedDate:
-              !item.dueDate && reminderAt
-                ? localTime(reminderAt, source.capture!.timeZone).slice(0, 10)
-                : '',
-            draft: '',
-            routine: item.kind === 'task',
-            date: item.meetingDate,
-            reminderAt,
-            reminderZone: reminderAt ? source.capture!.timeZone : '',
-            deletedAt: null,
-          },
-        ),
+        createEntity(scope === 'personal' ? 'note' : item.kind, scope, {
+          id: `${source.id}-capture-${index}-${item.kind}`,
+          sourceId: source.id,
+          title: item.title,
+          notes: item.notes,
+          files: [...source.files],
+          final:
+            item.dueDate ||
+            item.dueLocal?.slice(0, 10) ||
+            (scope === 'personal' ? item.meetingDate : '') ||
+            '',
+          ...(item.dueLocal
+            ? {
+                dueAt: reminderInstant(item.dueLocal, source.capture!.timeZone),
+                dueZone: source.capture!.timeZone,
+              }
+            : {}),
+          plannedDate:
+            !item.dueDate && reminderAt
+              ? localTime(reminderAt, source.capture!.timeZone).slice(0, 10)
+              : '',
+          draft: '',
+          routine: item.kind === 'task',
+          date: item.meetingDate,
+          reminderAt,
+          reminderZone: reminderAt ? source.capture!.timeZone : '',
+          deletedAt: null,
+        }),
       );
     });
     const resultHashes = await Promise.all(

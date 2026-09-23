@@ -177,7 +177,7 @@ void test('only bounded new note/task/agenda fields are accepted from AI', () =>
   assert.deepEqual(
     validatePlan({
       question: '',
-      items: [{ ...task, deletedAt: 'now', scope: 'personal', id: 'existing' }],
+      items: [{ ...task, deletedAt: 'now', id: 'existing' }],
     }),
     { question: '', items: [task] },
   );
@@ -417,4 +417,24 @@ void test('an alarm request without a saved trigger cannot silently become an or
     mock,
   );
   assert.match(plan.question, /What time/);
+});
+
+void test('workspace routing accepts only explicit allowed scopes and keeps legacy plans valid', () => {
+  assert.equal(
+    validatePlan({ question: '', items: [{ ...task, scope: 'personal' }] })
+      .items[0].scope,
+    'personal',
+  );
+  assert.equal(
+    validatePlan({ question: '', items: [{ ...task, scope: '' }] }).items[0]
+      .scope,
+    undefined,
+  );
+  assert.equal(
+    validatePlan({ question: '', items: [task] }).items[0].scope,
+    undefined,
+  );
+  assert.throws(() =>
+    validatePlan({ question: '', items: [{ ...task, scope: 'shared' }] }),
+  );
 });

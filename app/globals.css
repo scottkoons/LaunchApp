@@ -6654,3 +6654,23 @@ h3,
 .capture-composer:has(.has-review) > .capture-type {
   display: none;
 }
+
+.note-voice-input {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  margin: -4px 0 8px;
+}
+.note-voice-input p,
+.note-voice-input output,
+.capture-workspace {
+  color: var(--muted-foreground);
+  font-size: 13px;
+  margin: 0;
+}
+.note-voice-input .recording {
+  color: var(--danger);
+}
+.capture-workspace {
+  margin-bottom: 12px;
+}
