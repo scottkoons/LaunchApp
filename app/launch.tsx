@@ -1825,7 +1825,7 @@ export default function Launch({
             navigate('today');
           }}
         >
-          <CheckCheck />
+          <CalendarDays />
           Today
         </button>
         <button
