@@ -1,4 +1,5 @@
 'use client';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { PersonalTodos } from '@/components/personal-todos';
 import { TodoEditor } from '@/components/todo-editor';
 import { todoCompletion } from '@/lib/personal-todos';
@@ -78,7 +79,14 @@ import {
   Rocket,
   X,
   FileText,
+  Droplets,
 } from 'lucide-react';
+import {
+  APPEARANCES,
+  appearanceKey,
+  resolveAppearance,
+  type Appearance,
+} from '@/lib/appearance';
 import { useLaunchStore } from '@/lib/client-store';
 import {
   createEntity,
@@ -148,12 +156,14 @@ export default function Launch({
   account: string;
   name: string;
 }) {
+  const isMobile = useIsMobile();
+  const [phoneTools, setPhoneTools] = useState(false);
   const data = useLaunchStore(account),
     { store, records, files, ready } = data;
   const [view, setView] = useState('dashboard'),
     [reportRequest, setReportRequest] = useState(0),
     [scope, setScope] = useState<Scope>('business'),
-    [theme, setTheme] = useState('space'),
+    [theme, setTheme] = useState<Appearance>('space'),
     [isApple, setIsApple] = useState(false),
     [sidebarOpen, setSidebarOpen] = useState(true),
     [mode, setMode] = useState('grouped'),
@@ -250,16 +260,21 @@ export default function Launch({
   }
   useEffect(() => {
     setIsApple(/Mac|iPhone|iPad|iPod/.test(navigator.platform));
-    setSidebarOpen(localStorage.getItem('launch-sidebar-open') !== 'false');
-    const savedRatio = Number(localStorage.getItem('launch-column-ratio'));
-    if (savedRatio >= 0.1 && savedRatio <= 0.9) setColumnRatio(savedRatio);
-    setSort(localStorage.getItem('launch-task-sort-v2') || 'next');
-    const t = localStorage.getItem('launch-theme') || 'space';
+    let savedTheme = null;
+    try {
+      setSidebarOpen(localStorage.getItem('launch-sidebar-open') !== 'false');
+      const savedRatio = Number(localStorage.getItem('launch-column-ratio'));
+      if (savedRatio >= 0.1 && savedRatio <= 0.9) setColumnRatio(savedRatio);
+      setSort(localStorage.getItem('launch-task-sort-v2') || 'next');
+      savedTheme = localStorage.getItem(appearanceKey(navigator.userAgent));
+    } catch {}
+    const t = resolveAppearance(navigator.userAgent, savedTheme);
     setTheme(t);
     document.documentElement.dataset.theme = t;
     const params = new URLSearchParams(location.search);
     if (
       params.get('view') === 'capture' ||
+      /iPhone|iPod/i.test(navigator.userAgent) ||
       matchMedia('(max-width:767px)').matches
     )
       setView('capture');
@@ -268,17 +283,36 @@ export default function Launch({
       void navigator.serviceWorker.register('/sw.js').catch(() => {});
   }, []);
   useEffect(() => {
-    const color =
-      theme === 'light' ? '#f1f5f7' : theme === 'dark' ? '#0d1117' : '#10192b';
-    document
-      .querySelector('meta[name="theme-color"]')
-      ?.setAttribute('content', color);
+    const media = matchMedia('(prefers-color-scheme: dark)');
+    function updateChrome() {
+      const color =
+        theme === 'liquid'
+          ? media.matches
+            ? '#15171d'
+            : '#f2f4f8'
+          : theme === 'light'
+            ? '#f1f5f7'
+            : theme === 'dark'
+              ? '#0d1117'
+              : '#10192b';
+      document
+        .querySelector('meta[name="theme-color"]')
+        ?.setAttribute('content', color);
+    }
+    updateChrome();
+    media.addEventListener('change', updateChrome);
+    return () => media.removeEventListener('change', updateChrome);
   }, [theme]);
-  function changeTheme(t: string) {
+  function changeTheme(t: Appearance) {
     setTheme(t);
     document.documentElement.dataset.theme = t;
-    localStorage.setItem('launch-theme', t);
+    try {
+      localStorage.setItem(appearanceKey(navigator.userAgent), t);
+    } catch {}
   }
+  const appearance = APPEARANCES.find(({ value }) => value === theme)!;
+  const nextAppearance =
+    APPEARANCES[(APPEARANCES.indexOf(appearance) + 1) % APPEARANCES.length];
   function navigate(v: string) {
     window.scrollTo({ top: 0, behavior: 'instant' });
     if (v === 'meetings') setReportRequest((n) => n + 1);
@@ -404,6 +438,13 @@ export default function Launch({
   ).length;
   const todayCount = active.filter((t) => dashboardDate(t) === day()).length;
   const isDashboard = view === 'dashboard' || view === 'today';
+  const phoneOverview = isMobile && isDashboard && scope === 'business';
+  const completedToday = tasks.filter(
+    (task) =>
+      task.status === 'completed' &&
+      task.completedAt &&
+      day(new Date(task.completedAt)) === day(),
+  );
   const isMonthly =
     (view === 'dashboard' && dashboardMode === 'grouped') ||
     (view === 'tasks' && mode === 'grouped');
@@ -864,32 +905,20 @@ export default function Launch({
           <div className="theme-switch">
             <button
               className="theme-cycle"
-              onClick={() =>
-                changeTheme(
-                  theme === 'light'
-                    ? 'dark'
-                    : theme === 'dark'
-                      ? 'space'
-                      : 'light',
-                )
-              }
-              aria-label={`${theme === 'space' ? 'Space mode' : theme === 'dark' ? 'Dark mode' : 'Light mode'}. Switch to ${theme === 'light' ? 'Dark' : theme === 'dark' ? 'Space' : 'Light'}`}
-              title={`Switch to ${theme === 'light' ? 'Dark' : theme === 'dark' ? 'Space' : 'Light'}`}
+              onClick={() => changeTheme(nextAppearance.value)}
+              aria-label={`${appearance.label}. Switch to ${nextAppearance.label}`}
+              title={`Switch to ${nextAppearance.label}`}
             >
-              {theme === 'space' ? (
+              {theme === 'liquid' ? (
+                <Droplets />
+              ) : theme === 'space' ? (
                 <Rocket />
               ) : theme === 'dark' ? (
                 <Moon />
               ) : (
                 <Sun />
               )}
-              <span>
-                {theme === 'space'
-                  ? 'Space mode'
-                  : theme === 'dark'
-                    ? 'Dark mode'
-                    : 'Light mode'}
-              </span>
+              <span>{appearance.label}</span>
             </button>
           </div>
           <SidebarMenu>
@@ -962,17 +991,47 @@ export default function Launch({
             </button>
           </div>
         </header>
-        <main className={'page ' + (view === 'capture' ? 'capture-main' : '')}>
+        {ready && (data.error || data.queue.some((op) => op.conflict)) && (
+          <button className="sync-attention" onClick={() => setSyncOpen(true)}>
+            <CloudOff />
+            <span>
+              Some changes are still on this device.{' '}
+              <strong>Review sync</strong>
+            </span>
+          </button>
+        )}
+        <main
+          className={
+            'page ' +
+            (view === 'capture' ? 'capture-main' : '') +
+            (phoneOverview ? ' phone-overview' : '')
+          }
+        >
           {view === 'capture' ? (
-            <Capture
-              key={`${store.account}:${scope}`}
-              scope={scope}
-              store={store}
-              files={files}
-              records={records}
-              notify={notify}
-              deleteNote={trash}
-            />
+            <>
+              {theme === 'liquid' && (
+                <div className="liquid-capture-heading">
+                  <p>
+                    {new Intl.DateTimeFormat(undefined, {
+                      weekday: 'long',
+                      month: 'long',
+                      day: 'numeric',
+                    }).format(new Date())}
+                  </p>
+                  <h1>Capture</h1>
+                  <span>A thought now. A clear next step.</span>
+                </div>
+              )}
+              <Capture
+                key={`${store.account}:${scope}`}
+                scope={scope}
+                store={store}
+                files={files}
+                records={records}
+                notify={notify}
+                deleteNote={trash}
+              />
+            </>
           ) : scope === 'personal' &&
             [
               'dashboard',
@@ -1038,14 +1097,14 @@ export default function Launch({
                     }[view] || 'Launch'}
                   </h1>
                 </div>
-                {view !== 'settings' && (
+                {view !== 'settings' && !phoneOverview && (
                   <button
                     className="button primary"
                     aria-keyshortcuts={
-                      isTaskView ? 'Meta+t Control+t' : undefined
+                      isTaskView && !isMobile ? 'Meta+t Control+t' : undefined
                     }
                     title={
-                      isTaskView
+                      isTaskView && !isMobile
                         ? `Add task (${isApple ? '⌘T' : 'Ctrl+T'})`
                         : undefined
                     }
@@ -1071,7 +1130,7 @@ export default function Launch({
                           : view === 'meetings'
                             ? 'Agenda item'
                             : 'Add task'}
-                    {isTaskView && (
+                    {isTaskView && !isMobile && (
                       <kbd aria-hidden="true">{isApple ? '⌘T' : 'Ctrl T'}</kbd>
                     )}
                   </button>
@@ -1079,65 +1138,78 @@ export default function Launch({
               </div>
               {isTaskView && (
                 <>
-                  <div className="summary">
-                    <button
-                      className={filter === 'overdue' ? 'selected' : ''}
-                      onClick={() => {
-                        setView('tasks');
-                        setMode('flat');
-                        setFilter(filter === 'overdue' ? 'all' : 'overdue');
-                      }}
-                    >
-                      <span className="status-dot red" />
-                      <strong>{overdue}</strong>Overdue
-                    </button>
-                    <button
-                      className={filter === 'today' ? 'selected' : ''}
-                      onClick={() => {
-                        setView('today');
-                        setFilter('all');
-                      }}
-                    >
-                      <span className="status-dot blue" />
-                      <strong>{todayCount}</strong>Due today
-                    </button>
-                    <button
-                      className={filter === 'soon' ? 'selected' : ''}
-                      onClick={() => {
-                        setView('tasks');
-                        setMode('flat');
-                        setFilter(filter === 'soon' ? 'all' : 'soon');
-                      }}
-                    >
-                      <span className="status-dot yellow" />
-                      <strong>{upcoming}</strong>Due soon
-                    </button>
-                    <button
-                      onClick={() => {
-                        setView('tasks');
-                        setFilter('all');
-                      }}
-                    >
-                      <strong>
-                        {
-                          visibleMonthlyTasks(active, visibleMonths).filter(
-                            (t) => workDate(t),
-                          ).length
-                        }
-                      </strong>
-                      Scheduled
-                    </button>
-                    {notes.length > 0 && (
+                  {!phoneOverview && (
+                    <div className="summary">
                       <button
-                        className="capture-nudge"
-                        onClick={() => navigate('notes')}
+                        className={filter === 'overdue' ? 'selected' : ''}
+                        onClick={() => {
+                          setView('tasks');
+                          setMode('flat');
+                          setFilter(filter === 'overdue' ? 'all' : 'overdue');
+                        }}
                       >
-                        <Inbox />
-                        {notes.length} notes to revisit
-                        <ArrowUpRight />
+                        <span className="status-dot red" />
+                        <strong>{overdue}</strong>Overdue
                       </button>
-                    )}
-                  </div>
+                      <button
+                        className={filter === 'today' ? 'selected' : ''}
+                        onClick={() => {
+                          setView('today');
+                          setFilter('all');
+                        }}
+                      >
+                        <span className="status-dot blue" />
+                        <strong>{todayCount}</strong>Due today
+                      </button>
+                      <button
+                        className={filter === 'soon' ? 'selected' : ''}
+                        onClick={() => {
+                          setView('tasks');
+                          setMode('flat');
+                          setFilter(filter === 'soon' ? 'all' : 'soon');
+                        }}
+                      >
+                        <span className="status-dot yellow" />
+                        <strong>{upcoming}</strong>Due soon
+                      </button>
+                      <button
+                        onClick={() => {
+                          setView('tasks');
+                          setFilter('all');
+                        }}
+                      >
+                        <strong>
+                          {
+                            visibleMonthlyTasks(active, visibleMonths).filter(
+                              (t) => workDate(t),
+                            ).length
+                          }
+                        </strong>
+                        Scheduled
+                      </button>
+                      {notes.length > 0 && (
+                        <button
+                          className="capture-nudge"
+                          onClick={() => navigate('notes')}
+                        >
+                          <Inbox />
+                          {notes.length} notes to revisit
+                          <ArrowUpRight />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {phoneOverview && (
+                    <button
+                      className="text-button phone-view-options"
+                      aria-expanded={phoneTools}
+                      aria-controls="task-view-options"
+                      onClick={() => setPhoneTools(!phoneTools)}
+                    >
+                      <Search />{' '}
+                      {phoneTools ? 'Hide options' : 'Search & view options'}
+                    </button>
+                  )}
                   {isDashboard && (
                     <TodayReminders
                       records={records}
@@ -1165,134 +1237,141 @@ export default function Launch({
                       ))}
                     </section>
                   )}
-                  <div className="toolbar">
-                    {view === 'dashboard' ? (
-                      <Tabs
-                        value={dashboardMode}
-                        onValueChange={setDashboardMode}
-                      >
-                        <TabsList aria-label="Dashboard view">
-                          <TabsTrigger value="grouped">By month</TabsTrigger>
-                          <TabsTrigger value="focus">
-                            Today & upcoming
-                          </TabsTrigger>
-                        </TabsList>
-                      </Tabs>
-                    ) : view === 'tasks' ? (
-                      <Tabs
-                        value={mode}
-                        onValueChange={(v) => setMode(String(v))}
-                      >
-                        <TabsList>
-                          <TabsTrigger value="grouped">By month</TabsTrigger>
-                          <TabsTrigger value="flat">Flat list</TabsTrigger>
-                          <TabsTrigger value="calendar">
-                            <CalendarDays />
-                            Calendar
-                          </TabsTrigger>
-                        </TabsList>
-                      </Tabs>
-                    ) : view === 'completed' ? (
-                      <div className="completed-date-filter">
-                        <Pick
-                          label="Completed date range"
-                          value={completedPeriod}
-                          onChange={(period) =>
-                            period === 'custom'
-                              ? editCompletedRange(
-                                  completedRange.from,
+                  {(!phoneOverview || phoneTools) && (
+                    <div className="toolbar" id="task-view-options">
+                      {view === 'dashboard' ? (
+                        <Tabs
+                          value={dashboardMode}
+                          onValueChange={setDashboardMode}
+                        >
+                          <TabsList aria-label="Dashboard view">
+                            <TabsTrigger value="grouped">By month</TabsTrigger>
+                            <TabsTrigger value="focus">
+                              Today & upcoming
+                            </TabsTrigger>
+                          </TabsList>
+                        </Tabs>
+                      ) : view === 'tasks' ? (
+                        <Tabs
+                          value={mode}
+                          onValueChange={(v) => setMode(String(v))}
+                        >
+                          <TabsList>
+                            <TabsTrigger value="grouped">By month</TabsTrigger>
+                            <TabsTrigger value="flat">Flat list</TabsTrigger>
+                            <TabsTrigger value="calendar">
+                              <CalendarDays />
+                              Calendar
+                            </TabsTrigger>
+                          </TabsList>
+                        </Tabs>
+                      ) : view === 'completed' ? (
+                        <div className="completed-date-filter">
+                          <Pick
+                            label="Completed date range"
+                            value={completedPeriod}
+                            onChange={(period) =>
+                              period === 'custom'
+                                ? editCompletedRange(
+                                    completedRange.from,
+                                    completedRange.to,
+                                  )
+                                : setCompletedPeriod(period as CompletedPeriod)
+                            }
+                            options={[
+                              ['all', 'All time'],
+                              ['this-month', 'This month'],
+                              ['this-week', 'This week'],
+                              ['last-month', 'Last month'],
+                              ['last-week', 'Last week'],
+                              ['last-year', 'Last year'],
+                              ['custom', 'Custom dates'],
+                            ]}
+                          />
+                          <div className="date-filter">
+                            <input
+                              aria-label="Completed from"
+                              type="date"
+                              value={completedRange.from}
+                              max={completedRange.to || undefined}
+                              onChange={(e) =>
+                                editCompletedRange(
+                                  e.target.value,
                                   completedRange.to,
                                 )
-                              : setCompletedPeriod(period as CompletedPeriod)
-                          }
-                          options={[
-                            ['all', 'All time'],
-                            ['this-month', 'This month'],
-                            ['this-week', 'This week'],
-                            ['last-month', 'Last month'],
-                            ['last-week', 'Last week'],
-                            ['last-year', 'Last year'],
-                            ['custom', 'Custom dates'],
-                          ]}
-                        />
-                        <div className="date-filter">
-                          <input
-                            aria-label="Completed from"
-                            type="date"
-                            value={completedRange.from}
-                            max={completedRange.to || undefined}
-                            onChange={(e) =>
-                              editCompletedRange(
-                                e.target.value,
-                                completedRange.to,
-                              )
-                            }
-                          />
-                          <span>to</span>
-                          <input
-                            aria-label="Completed to"
-                            type="date"
-                            value={completedRange.to}
-                            min={completedRange.from || undefined}
-                            onChange={(e) =>
-                              editCompletedRange(
-                                completedRange.from,
-                                e.target.value,
-                              )
-                            }
-                          />
+                              }
+                            />
+                            <span>to</span>
+                            <input
+                              aria-label="Completed to"
+                              type="date"
+                              value={completedRange.to}
+                              min={completedRange.from || undefined}
+                              onChange={(e) =>
+                                editCompletedRange(
+                                  completedRange.from,
+                                  e.target.value,
+                                )
+                              }
+                            />
+                          </div>
+                          <p className="hint completed-range-hint">
+                            Based on completion date. Weeks run Monday–Sunday.
+                          </p>
+                          {completedRange.from &&
+                            completedRange.to &&
+                            completedRange.from > completedRange.to && (
+                              <p className="inline-warning" role="alert">
+                                The end date must be on or after the start date.
+                              </p>
+                            )}
                         </div>
-                        <p className="hint completed-range-hint">
-                          Based on completion date. Weeks run Monday–Sunday.
+                      ) : (
+                        <p className="hint">
+                          {isDashboard
+                            ? view === 'today'
+                              ? 'Today’s planned tasks and unfinished deadlines.'
+                              : 'What needs attention, followed by what’s coming next.'
+                            : view === 'backburner'
+                              ? 'No deadlines needed. Add dates to bring an idea into your task list.'
+                              : view === 'postponed'
+                                ? 'Original deadlines are kept. Review them before resuming.'
+                                : 'Today’s planned tasks and unfinished deadlines.'}
                         </p>
-                        {completedRange.from &&
-                          completedRange.to &&
-                          completedRange.from > completedRange.to && (
-                            <p className="inline-warning" role="alert">
-                              The end date must be on or after the start date.
-                            </p>
-                          )}
-                      </div>
-                    ) : (
-                      <p className="hint">
-                        {isDashboard
-                          ? view === 'today'
-                            ? 'Today’s planned tasks and unfinished deadlines.'
-                            : 'What needs attention, followed by what’s coming next.'
-                          : view === 'backburner'
-                            ? 'No deadlines needed. Add dates to bring an idea into your task list.'
-                            : view === 'postponed'
-                              ? 'Original deadlines are kept. Review them before resuming.'
-                              : 'Today’s planned tasks and unfinished deadlines.'}
-                      </p>
-                    )}
-                    <div className="list-tools">
-                      <label className="search">
-                        <Search />
-                        <input
-                          ref={searchRef}
-                          aria-label="Search tasks"
-                          placeholder="Find a task…"
-                          value={query}
-                          onChange={(e) => setQuery(e.target.value)}
-                        />
-                      </label>
-                      {mode !== 'calendar' && (
-                        <Pick
-                          label="Sort tasks"
-                          value={sort}
-                          onChange={setSort}
-                          options={[
-                            ['manual', 'Manual order'],
-                            ['next', 'Next deadline'],
-                            ['title', 'Task name'],
-                            ['draft', 'Draft date'],
-                            ['final', 'Final date'],
-                          ]}
-                        />
                       )}
+                      {phoneOverview && (
+                        <button className="button" onClick={() => add('task')}>
+                          <Plus /> Add task
+                        </button>
+                      )}
+                      <div className="list-tools">
+                        <label className="search">
+                          <Search />
+                          <input
+                            ref={searchRef}
+                            aria-label="Search tasks"
+                            placeholder="Find a task…"
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                          />
+                        </label>
+                        {mode !== 'calendar' && (
+                          <Pick
+                            label="Sort tasks"
+                            value={sort}
+                            onChange={setSort}
+                            options={[
+                              ['manual', 'Manual order'],
+                              ['next', 'Next deadline'],
+                              ['title', 'Task name'],
+                              ['draft', 'Draft date'],
+                              ['final', 'Final date'],
+                            ]}
+                          />
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                   <TaskDragBoard
                     groups={
                       isDashboard
@@ -1314,6 +1393,23 @@ export default function Launch({
                       <p className="loading">Opening your workspace…</p>
                     ) : (
                       showTasks()
+                    )}
+                    {phoneOverview && ready && completedToday.length > 0 && (
+                      <section
+                        className="phone-completed-today"
+                        aria-label="Completed today"
+                      >
+                        <h2>
+                          Done today <span>{completedToday.length}</span>
+                        </h2>
+                        {completedToday.map((task) => (
+                          <button key={task.id} onClick={() => open(task)}>
+                            <CheckCheck />
+                            <span>{task.title}</span>
+                            <ArrowUpRight />
+                          </button>
+                        ))}
+                      </section>
                     )}
                     {isDashboard && ready && (
                       <>
@@ -1712,6 +1808,7 @@ export default function Launch({
       <nav className="mobile-bottom" aria-label="Phone navigation">
         <button
           className={view === 'capture' ? 'active' : ''}
+          aria-current={view === 'capture' ? 'page' : undefined}
           onClick={() => navigate('capture')}
         >
           <CaptureIcon />
@@ -1719,6 +1816,9 @@ export default function Launch({
         </button>
         <button
           className={scope === 'business' && view === 'today' ? 'active' : ''}
+          aria-current={
+            scope === 'business' && view === 'today' ? 'page' : undefined
+          }
           onClick={() => {
             setScope('business');
             setQuery('');
@@ -1729,7 +1829,18 @@ export default function Launch({
           Today
         </button>
         <button
-          className={scope === 'personal' && view !== 'capture' ? 'active' : ''}
+          className={
+            scope === 'personal' &&
+            ['dashboard', 'tasks', 'today'].includes(view)
+              ? 'active'
+              : ''
+          }
+          aria-current={
+            scope === 'personal' &&
+            ['dashboard', 'tasks', 'today'].includes(view)
+              ? 'page'
+              : undefined
+          }
           onClick={() => {
             setScope('personal');
             setQuery('');
@@ -1739,6 +1850,16 @@ export default function Launch({
           <CheckCheck />
           To-Dos
         </button>
+        {theme === 'liquid' && (
+          <button
+            className={view === 'settings' ? 'active' : ''}
+            aria-current={view === 'settings' ? 'page' : undefined}
+            onClick={() => navigate('settings')}
+          >
+            <SettingsIcon />
+            Settings
+          </button>
+        )}
       </nav>
       {editorOpen &&
         editor?.scope === 'personal' &&
@@ -1895,6 +2016,35 @@ export default function Launch({
                   </div>
                 </section>
               ))}
+            {data.uploads.length > 0 && (
+              <p className="hint">
+                Task text syncs separately from attachments. Recordings waiting
+                to upload remain saved on this device.
+              </p>
+            )}
+            {data.queue.length > 0 && (
+              <section className="pending-sync-items">
+                <h3>Waiting on this device</h3>
+                {[...new Set(data.queue.map((op) => op.entityId))].map((id) => {
+                  const item = records.find((record) => record.id === id);
+                  return item ? (
+                    <button
+                      className="text-button"
+                      key={id}
+                      onClick={() => {
+                        setSyncOpen(false);
+                        open(item);
+                      }}
+                    >
+                      {item.title || 'Untitled item'}{' '}
+                      <span>
+                        {item.scope === 'personal' ? 'Personal' : 'Business'}
+                      </span>
+                    </button>
+                  ) : null;
+                })}
+              </section>
+            )}
             <p className="hint">
               Leave Launch open while attachments upload. Browser background
               uploads are not guaranteed.

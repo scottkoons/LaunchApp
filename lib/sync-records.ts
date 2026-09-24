@@ -1,5 +1,54 @@
 import type { Entity, Operation } from './model';
 
+const attachmentFields = [
+  'files',
+  'portraitId',
+  'thumbnail',
+  'fileLabels',
+] as const;
+
+// Send text with a stable separate request ID, then keep the attachment fields
+// in the original queue position. A lost response can retry the same request.
+export function separatePendingAttachments(
+  op: Operation,
+  waiting: Set<string>,
+  textId: string,
+): Operation[] {
+  if (
+    op.conflict ||
+    textId.length > 160 ||
+    !pendingFileIds(op).some((id) => waiting.has(id))
+  )
+    return [op];
+  const patch = { ...op.patch },
+    base = { ...op.base };
+  const attachmentPatch: Partial<Entity> = {},
+    attachmentBase: Partial<Entity> = {};
+  const creating = !Object.keys(op.base).length;
+  for (const key of attachmentFields) {
+    if (!(key in patch)) continue;
+    Object.assign(attachmentPatch, { [key]: patch[key] });
+    Object.assign(attachmentBase, {
+      [key]: creating && key === 'files' ? [] : base[key],
+    });
+    delete patch[key];
+    delete base[key];
+  }
+  if (
+    !Object.keys(patch).some((key) => !['updatedAt', 'version'].includes(key))
+  )
+    return [op];
+  if (creating) patch.files = [];
+  return [
+    { ...op, id: textId, patch, base },
+    { ...op, patch: attachmentPatch, base: attachmentBase },
+  ];
+}
+
+export function hasAttachmentChanges(op: Operation) {
+  return attachmentFields.some((key) => key in op.patch);
+}
+
 export function pendingRecord(record: Entity, op: Operation): Entity {
   const patch = { ...op.patch };
   // A stale create/edit must not visually restore an item completed or trashed
@@ -26,6 +75,15 @@ export function pendingRecord(record: Entity, op: Operation): Entity {
     op.base.status !== 'completed'
   )
     delete patch.status;
+  // A stale queued creation must not move a task back across workspaces after
+  // another device moved it. A deliberate move based on the current scope wins.
+  if (
+    patch.scope &&
+    record.version &&
+    record.scope !== patch.scope &&
+    record.scope !== op.base.scope
+  )
+    delete patch.scope;
   return { ...record, ...patch, version: record.version };
 }
 

@@ -1,15 +1,6 @@
 'use client';
 import { useRef, useState } from 'react';
-import {
-  Download,
-  Upload,
-  Cloud,
-  FileText,
-  Sun,
-  Moon,
-  Rocket,
-  Check,
-} from 'lucide-react';
+import { Download, Upload, Cloud, FileText, Rocket, Check } from 'lucide-react';
 import { Pick } from './launch-controls';
 import { createEntity, now, type Entity, type FileMeta } from '@/lib/model';
 import { downloadBlob } from './calendar';
@@ -17,6 +8,7 @@ import type { LaunchStore } from '@/lib/client-store';
 import { AgentConnections } from './agent-connections';
 import { TrashPanel } from './trash-panel';
 import { PhoneAlerts } from './phone-alerts';
+import { APPEARANCES, type Appearance } from '@/lib/appearance';
 export function SettingsPanel({
   store,
   records,
@@ -31,8 +23,8 @@ export function SettingsPanel({
   files: FileMeta[];
   settings?: Entity;
   notify: (s: string) => void;
-  theme: string;
-  changeTheme: (s: string) => void;
+  theme: Appearance;
+  changeTheme: (s: Appearance) => void;
 }) {
   const [busy, setBusy] = useState('');
   const upload = useRef<HTMLInputElement>(null);
@@ -149,21 +141,21 @@ export function SettingsPanel({
     <div className="settings-layout">
       <section className="settings-section">
         <h2>Appearance</h2>
-        <p className="hint">Same workspace. A different atmosphere.</p>
+        <p className="hint">
+          Liquid Display is the iPhone default and follows your phone’s light or
+          dark appearance. Your choice is saved on this device.
+        </p>
         <div className="theme-options">
-          {[
-            ['space', 'Space', Rocket],
-            ['dark', 'Dark', Moon],
-            ['light', 'Light', Sun],
-          ].map(([v, label]) => (
+          {APPEARANCES.map(({ value, label }) => (
             <button
-              className={'theme-option ' + (theme === v ? 'selected' : '')}
-              key={v as string}
-              onClick={() => changeTheme(v as string)}
+              className={'theme-option ' + (theme === value ? 'selected' : '')}
+              key={value}
+              aria-pressed={theme === value}
+              onClick={() => changeTheme(value)}
             >
-              <span className={'theme-swatch ' + v} />
-              {label as string}
-              {theme === v && <Check />}
+              <span className={'theme-swatch ' + value} aria-hidden="true" />
+              {label}
+              {theme === value && <Check aria-hidden="true" />}
             </button>
           ))}
         </div>

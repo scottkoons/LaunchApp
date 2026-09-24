@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import './dashboard-theme.css';
+import './liquid-display.css';
+import { appearanceBootstrap } from '@/lib/appearance';
 
 // Configure the framework's viewport instead of adding a second <meta> tag.
 // iOS needs viewport-fit=cover to report the safe-area insets used by our shell.
@@ -47,7 +49,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" data-theme="space">
+    <html lang="en" data-theme="space" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: appearanceBootstrap }} />
+      </head>
       <body>{children}</body>
     </html>
   );

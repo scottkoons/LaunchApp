@@ -1,6 +1,6 @@
 # Launch implementation and operations
 
-Launch is Scott’s private task workspace: the familiar Electron-style monthly dashboard on desktop, with phone capture, personal/business separation, back burner, postponement and printable marketing reports. Space is the default theme; Light and Dark remain available. Main UI typography uses locally served DM Sans and DM Serif Display, with local Barlow/Bitter retained for secondary styles.
+Launch is Scott’s private task workspace: the familiar Electron-style monthly dashboard on desktop, with phone capture, personal/business separation, back burner, postponement and printable marketing reports. Liquid Display is the iPhone default and follows the system light/dark appearance, with native system typography and translucent navigation. The phone choice is stored in `launch-iphone-theme`; other devices retain `launch-theme` and their Space default. Space, Light, Dark, and all task views remain available. Other appearances use locally served DM Sans, with local Barlow/Bitter retained for secondary styles.
 
 ## Architecture
 

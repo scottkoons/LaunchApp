@@ -128,9 +128,10 @@ void test('a broken recording cannot block check-offs, deletions or incoming cha
       [capture.id],
     );
     assert.equal(phone.data.uploads.length, 1);
+    assert.deepEqual(env.remote.get(capture.id)?.files, []);
     assert.ok(
-      !env.remote.has(capture.id),
-      'Do not publish references before their recording is uploaded',
+      env.remote.has(capture.id),
+      'The note text must reach other devices even while its recording waits',
     );
     assert.match(phone.snapshot().status, /attachment.*waiting/i);
     assert.ok(
@@ -423,6 +424,147 @@ void test('checking off a task interrupts an in-flight upload and preserves its 
     assert.equal(phone.data.queue.length, 0);
     assert.equal(phone.data.uploads.length, 1);
     assert.equal(await phone.data.uploads[0].blob.text(), 'original');
+  } finally {
+    env.restore();
+  }
+});
+
+void test('a phone-only task syncs its text and workspace before a failed recording, then attaches once on retry', async () => {
+  const env = setup([]);
+  try {
+    const phone = await env.device();
+    const files = await phone.addFiles([
+      new File(['recording'], 'voice.m4a', { type: 'audio/mp4' }),
+    ]);
+    const task = await phone.add(
+      createEntity('task', 'business', {
+        title: 'School checks',
+        files,
+        final: '2026-09-24',
+        routine: true,
+      }),
+    );
+    await phone.change(task, { scope: 'personal', report: false });
+    env.setOnline(true);
+    await phone.sync();
+    assert.equal(env.remote.get(task.id)?.scope, 'personal');
+    assert.equal(env.remote.get(task.id)?.title, 'School checks');
+    assert.deepEqual(env.remote.get(task.id)?.files, []);
+    assert.deepEqual(
+      phone.data.records.find((item) => item.id === task.id)?.files,
+      files,
+    );
+    const desktop = await env.device();
+    assert.equal(
+      desktop.data.records.find((item) => item.id === task.id)?.scope,
+      'personal',
+    );
+    await phone.change(
+      phone.data.records.find((item) => item.id === task.id)!,
+      {
+        title: 'Write school checks',
+        status: 'completed',
+        completedAt: '2026-09-24T16:00:00.000Z',
+      },
+    );
+    await phone.sync();
+    assert.equal(env.remote.get(task.id)?.status, 'completed');
+    assert.equal(env.remote.get(task.id)?.title, 'Write school checks');
+    const uploaded = phone.data.uploads[0].meta;
+    globalThis.fetch = async (url, options = {}) =>
+      url === '/api/files'
+        ? Response.json(uploaded)
+        : env.respond(url, options);
+    await phone.sync();
+    await phone.sync();
+    assert.deepEqual(env.remote.get(task.id)?.files, files);
+    assert.equal(env.remote.get(task.id)?.scope, 'personal');
+    assert.equal(phone.data.queue.length, 0);
+    assert.equal(phone.data.uploads.length, 0);
+    assert.equal(phone.snapshot().status, 'All changes synced');
+    assert.equal(
+      [...env.remote.values()].filter((item) => item.id === task.id).length,
+      1,
+    );
+  } finally {
+    env.restore();
+  }
+});
+
+void test('stale queued scope cannot hide another device’s move to Personal, but deliberate workspace changes remain visible', () => {
+  const current = createEntity('task', 'personal', {
+    title: 'School checks',
+    version: 3,
+  });
+  const stale: Operation = {
+    id: 'stale-create',
+    entityId: current.id,
+    kind: 'task',
+    createdAt: current.createdAt,
+    base: {},
+    patch: { ...current, scope: 'business' },
+  };
+  assert.equal(pendingRecord(current, stale).scope, 'personal');
+  assert.equal(
+    pendingRecord(current, { ...stale, base: { scope: 'personal' } }).scope,
+    'business',
+  );
+});
+
+void test('a lost text-sync response retries safely after reopening without losing its recording', async () => {
+  const env = setup([]);
+  try {
+    const phone = await env.device();
+    const files = await phone.addFiles([
+      new File(['original recording'], 'voice.m4a', { type: 'audio/mp4' }),
+    ]);
+    const task = await phone.add(
+      createEntity('task', 'personal', { title: 'School checks', files }),
+    );
+    const operationId = phone.data.queue[0].id;
+    const textRequests: string[] = [];
+    let loseResponse = true;
+    globalThis.fetch = async (url, options = {}) => {
+      if (url === '/api/sync' && options.method === 'POST') {
+        const operation = JSON.parse(options.body as string) as Operation;
+        if (operation.id.endsWith('-text')) {
+          textRequests.push(operation.id);
+          const response = await env.respond(url, options);
+          if (loseResponse) throw new TypeError('Connection lost after save');
+          return response;
+        }
+      }
+      return env.respond(url, options);
+    };
+    env.setOnline(true);
+    await phone.sync();
+    assert.equal(env.remote.get(task.id)?.title, 'School checks');
+    assert.deepEqual(env.remote.get(task.id)?.files, []);
+    assert.equal(phone.data.queue[0].id, operationId);
+    assert.deepEqual(phone.data.queue[0].patch.files, files);
+    env.setOnline(false);
+    const reopened = new LaunchStore(phone.account);
+    await reopened.init();
+    assert.equal(
+      await reopened.data.uploads[0].blob.text(),
+      'original recording',
+    );
+    loseResponse = false;
+    env.setOnline(true);
+    await reopened.sync();
+    assert.equal(new Set(textRequests).size, 1);
+    assert.equal(env.remote.get(task.id)?.version, 1);
+    assert.deepEqual(reopened.data.queue[0].patch.files, files);
+    const uploaded = reopened.data.uploads[0].meta;
+    globalThis.fetch = async (url, options = {}) =>
+      url === '/api/files'
+        ? Response.json(uploaded)
+        : env.respond(url, options);
+    await reopened.sync();
+    assert.deepEqual(env.remote.get(task.id)?.files, files);
+    assert.equal(env.remote.get(task.id)?.version, 2);
+    assert.equal(reopened.data.queue.length, 0);
+    assert.equal(reopened.data.uploads.length, 0);
   } finally {
     env.restore();
   }

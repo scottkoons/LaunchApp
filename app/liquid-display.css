@@ -1,0 +1,344 @@
+/* Liquid Display: glass belongs to the navigation layer; content stays solid. */
+:root[data-theme='liquid'] {
+  color-scheme: light;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+  --font-heading: var(--font-sans);
+  --background: #f2f4f8;
+  --foreground: #1c2432;
+  --card: #fcfdff;
+  --sidebar: #f7f9fc;
+  --muted: #e7ebf2;
+  --muted-foreground: #566174;
+  --faint-foreground: #646f81;
+  --primary: #0866d5;
+  --primary-foreground: #fafdff;
+  --border: #dce2eb;
+  --border-strong: #a7b5c8;
+  --accent: #e2edfd;
+  --label-foreground: var(--muted-foreground);
+  --month-header: var(--card);
+  --month-columns: #f3f6fa;
+  --month-shadow: none;
+  --selection: #c6dfff;
+  --selection-foreground: #1c2432;
+  --calendar-outside: #edf1f6;
+  --event-background: #ece9f7;
+  --event-foreground: #5e467d;
+  --destructive: #b92e43;
+  --green: #197650;
+  --yellow: #86600e;
+  --blue: #0866d5;
+  --button-face: var(--primary);
+  --button-ink: var(--primary-foreground);
+  --input-surface: var(--card);
+  --control-radius: 14px;
+  --panel-radius: 22px;
+  --glass-surface: rgb(249 252 255 / 82%);
+  --glass-edge: rgb(255 255 255 / 92%);
+  --glass-shadow:
+    0 8px 28px rgb(37 61 98 / 12%), inset 0 1px 0 var(--glass-edge);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme='liquid'] {
+    color-scheme: dark;
+    --background: #15171d;
+    --foreground: #f1f4fa;
+    --card: #22262f;
+    --sidebar: #1b1f27;
+    --muted: #303642;
+    --muted-foreground: #aeb9cb;
+    --faint-foreground: #a3aec1;
+    --primary: #85baff;
+    --primary-foreground: #12233d;
+    --border: #373f4d;
+    --border-strong: #65728a;
+    --accent: #263b59;
+    --month-columns: #1c2028;
+    --selection: #315881;
+    --selection-foreground: #f1f4fa;
+    --calendar-outside: #1c2028;
+    --event-background: #353048;
+    --event-foreground: #d4c6f4;
+    --destructive: #ff91a0;
+    --green: #7cd5ad;
+    --yellow: #e6c279;
+    --blue: #85baff;
+    --glass-surface: rgb(34 39 49 / 86%);
+    --glass-edge: rgb(220 233 255 / 18%);
+    --glass-shadow:
+      0 8px 28px rgb(3 9 20 / 28%), inset 0 1px 0 var(--glass-edge);
+  }
+}
+
+.theme-options {
+  flex-wrap: wrap;
+}
+html[data-theme] .theme-swatch.liquid {
+  background: linear-gradient(140deg, #fcfdff 15%, #c8dcf5 55%, #e5eaf3);
+  border-color: #9ebadd;
+  box-shadow: inset 0 1px 2px #fff;
+}
+html[data-theme='liquid'] :is(.topbar, .mobile-bottom) {
+  background: var(--glass-surface);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  backdrop-filter: blur(24px) saturate(150%);
+}
+html[data-theme='liquid'] .topbar {
+  border-bottom-color: color-mix(in oklab, var(--border) 65%, transparent);
+}
+html[data-theme='liquid'] .workspace-switch {
+  border-radius: 999px;
+  border-color: var(--glass-edge);
+  background: var(--muted);
+  box-shadow: inset 0 1px 3px rgb(20 40 70 / 8%);
+}
+html[data-theme='liquid'] .workspace-switch-thumb {
+  border-radius: 999px;
+  background: var(--card);
+  box-shadow: 0 2px 6px rgb(20 40 70 / 12%);
+}
+html[data-theme='liquid'] .workspace-switch-option[data-highlighted] {
+  color: var(--foreground);
+}
+html[data-theme='liquid'] [data-slot='tabs-list'] {
+  padding: 4px;
+  background: var(--muted);
+  border-color: transparent;
+  border-radius: 14px;
+}
+html[data-theme='liquid'] [data-slot='tabs-trigger'] {
+  min-height: 36px;
+  border-radius: 10px;
+}
+html[data-theme='liquid']
+  [data-slot='tabs-trigger']:is([data-active], [aria-selected='true']) {
+  background: var(--card);
+  color: var(--foreground);
+  box-shadow: 0 2px 5px rgb(20 40 70 / 10%);
+}
+html[data-theme='liquid'] :is(.month-group, .settings-section) {
+  border-radius: var(--panel-radius);
+  box-shadow: none;
+}
+html[data-theme='liquid'] .classic-task-row {
+  background: var(--card);
+}
+html[data-theme='liquid'] .liquid-capture-heading {
+  margin: 8px 0 24px;
+}
+html[data-theme='liquid'] .liquid-capture-heading p {
+  color: var(--muted-foreground);
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0 0 6px;
+}
+html[data-theme='liquid'] .liquid-capture-heading h1 {
+  margin: 0 0 8px;
+  font-size: 34px;
+  line-height: 1.15;
+  font-weight: 750;
+}
+html[data-theme='liquid'] .liquid-capture-heading > span {
+  color: var(--muted-foreground);
+  font-size: 16px;
+}
+html[data-theme='liquid'] .capture-composer {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 26px;
+  padding: 20px;
+}
+html[data-theme='liquid'] .voice-capture-controls .microphone:not(.listening) {
+  color: var(--primary);
+  background: var(--accent);
+  border: 1px solid color-mix(in oklab, var(--primary) 24%, var(--card));
+  box-shadow:
+    inset 0 1px 0 var(--glass-edge),
+    0 6px 18px rgb(40 80 140 / 10%);
+}
+html[data-theme='liquid'] .settings-section {
+  background: var(--card);
+  padding: 24px;
+  border: 1px solid var(--border);
+}
+html[data-theme='liquid'] .settings-section h2 {
+  font-size: 21px;
+}
+html[data-theme='liquid'] .theme-option {
+  min-height: 52px;
+  background: var(--background);
+}
+html[data-theme='liquid'] .theme-option.selected {
+  color: var(--primary);
+  background: var(--accent);
+}
+
+@media (max-width: 767px), (max-width: 1023px) and (max-height: 500px) {
+  html[data-theme='liquid'] .workspace {
+    margin-right: 0;
+  }
+  html[data-theme='liquid']
+    :is(.notes-drawer, .workspace-footer, .desktop-speak-button) {
+    display: none !important;
+  }
+  html[data-theme='liquid'] .mobile-navigation-toggle {
+    display: flex !important;
+  }
+  html[data-theme='liquid'] .topbar {
+    height: calc(72px + var(--safe-top));
+    padding-inline: max(12px, var(--safe-left)) max(12px, var(--safe-right));
+    gap: 8px;
+  }
+  html[data-theme='liquid'] .topbar-left {
+    gap: 8px;
+  }
+  html[data-theme='liquid'] .workspace-switch {
+    width: min(188px, 100%);
+    min-width: 0;
+    min-height: 48px;
+    flex-shrink: 1;
+  }
+  html[data-theme='liquid'] .workspace-switch-option {
+    font-size: 14px;
+    min-height: 44px;
+  }
+  html[data-theme='liquid'] :is(.mobile-navigation-toggle, .sync-pill) {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    max-width: 44px;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border: 1px solid var(--glass-edge);
+    border-radius: 50%;
+    background: var(--card);
+    box-shadow: 0 2px 6px rgb(20 40 70 / 6%);
+  }
+  html[data-theme='liquid'] .sync-pill span {
+    display: none;
+  }
+  html[data-theme='liquid'] :is(.page, .page.capture-main) {
+    padding: 20px max(18px, var(--safe-right)) calc(112px + var(--safe-bottom))
+      max(18px, var(--safe-left));
+  }
+  html[data-theme='liquid'] .page-heading h1 {
+    font-size: 34px;
+    line-height: 1.15;
+    font-weight: 750;
+  }
+  html[data-theme='liquid'] .eyebrow {
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 13px;
+  }
+  html[data-theme='liquid'] .mobile-bottom {
+    position: fixed;
+    display: flex;
+    z-index: 30;
+    bottom: calc(10px + var(--safe-bottom));
+    left: max(12px, var(--safe-left));
+    right: max(12px, var(--safe-right));
+    max-width: 460px;
+    margin-inline: auto;
+    gap: 4px;
+    min-height: 72px;
+    padding: 6px;
+    border: 1px solid var(--glass-edge);
+    border-radius: 36px;
+    box-shadow: var(--glass-shadow);
+  }
+  html[data-theme='liquid'] .mobile-bottom button {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    color: var(--muted-foreground);
+    min-width: 0;
+    min-height: 58px;
+    justify-content: center;
+    padding: 6px 2px;
+    gap: 4px;
+    border-radius: 28px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  html[data-theme='liquid'] .mobile-bottom button.active {
+    background: var(--accent);
+    color: var(--primary);
+    box-shadow: inset 0 1px 0 var(--glass-edge);
+  }
+  html[data-theme='liquid'] .mobile-bottom svg {
+    width: 23px;
+    height: 23px;
+    stroke-width: 1.8px;
+  }
+  html[data-theme='liquid']
+    :is(.button, .pick, .icon-button, .nav-item, .theme-cycle) {
+    min-height: 44px;
+  }
+  html[data-theme='liquid'] .icon-button {
+    min-width: 44px;
+  }
+  html[data-theme='liquid']
+    :is(input:not([type='checkbox']):not([type='radio']), textarea, select) {
+    font-size: 16px;
+  }
+  html[data-theme='liquid'] .classic-title {
+    font-size: 16px;
+    line-height: 1.4;
+  }
+  html[data-theme='liquid'] .classic-task-grid {
+    grid-template-columns: 32px minmax(0, 1fr) repeat(3, 32px);
+  }
+  html[data-theme='liquid'] .summary > button {
+    min-height: 44px;
+  }
+  html[data-theme='liquid'] .settings-section {
+    padding: 20px 16px;
+  }
+  html[data-theme='liquid'] .theme-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  html[data-theme='liquid'] .theme-option {
+    min-width: 0;
+    padding: 12px 10px;
+    gap: 8px;
+    font-size: 14px;
+  }
+  html[data-theme='liquid'] .theme-swatch {
+    flex-shrink: 0;
+  }
+  html[data-theme='liquid']
+    :is(.task-create-modal, .note-editor-modal, .editor-sheet, .capture-sheet) {
+    border-radius: 26px;
+  }
+  html[data-theme='liquid'] [data-slot='sidebar'][data-mobile='true'] {
+    border-radius: 0 26px 26px 0;
+  }
+}
+
+/* Keep surfaces readable when transparency is unavailable or unwanted. */
+@supports not
+((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  html[data-theme='liquid'] :is(.topbar, .mobile-bottom) {
+    background: var(--sidebar);
+  }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  html[data-theme='liquid'] :is(.topbar, .mobile-bottom) {
+    background: var(--sidebar);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    border-color: var(--border-strong);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme='liquid'] :is(button, .workspace-switch-thumb) {
+    transition: none;
+  }
+}

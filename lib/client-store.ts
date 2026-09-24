@@ -2,7 +2,13 @@
 import { useEffect, useState } from 'react';
 import { agendaItems, agendaOrderChanges } from './agenda';
 import { uploadBlob } from './upload-blob';
-import { pendingFileIds, pendingRecord, syncRecords } from './sync-records';
+import {
+  pendingFileIds,
+  pendingRecord,
+  syncRecords,
+  separatePendingAttachments,
+  hasAttachmentChanges,
+} from './sync-records';
 import {
   captureFingerprint,
   captureReminderAt,
@@ -866,17 +872,28 @@ export class LaunchStore {
     const waitingFiles = new Set(
       this.data.uploads.map((upload) => upload.meta.id),
     );
+    const waitingAttachments = new Set<string>();
     for (const queued of this.data.queue.slice()) {
       // persist() merges and clones the shared cache after every request.
       // Work with the current operation, not a detached snapshot from the loop.
       const op = this.data.queue.find((item) => item.id === queued.id);
       if (!op) continue;
-      if (
-        op.conflict ||
-        blocked.has(op.entityId) ||
-        pendingFileIds(op).some((id) => waitingFiles.has(id))
-      ) {
+      if (op.conflict || blocked.has(op.entityId)) {
         blocked.add(op.entityId);
+        continue;
+      }
+      const [requestOp, remaining] = separatePendingAttachments(
+        op,
+        waitingFiles,
+        `${op.id}-text`,
+      );
+      if (pendingFileIds(op).some((id) => waitingFiles.has(id))) {
+        waitingAttachments.add(op.entityId);
+        if (!remaining) continue;
+      } else if (
+        waitingAttachments.has(op.entityId) &&
+        hasAttachmentChanges(op)
+      ) {
         continue;
       }
       try {
@@ -887,7 +904,7 @@ export class LaunchStore {
             signal: AbortSignal.timeout(20000),
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(op),
+            body: JSON.stringify(requestOp),
           });
           result = (await r.json()) as typeof result;
           // A simultaneous write can lose the version race without a field
@@ -908,7 +925,11 @@ export class LaunchStore {
           blocked.add(op.entityId);
         } else {
           if (!r.ok) throw new Error(result.error || 'Sync failed');
-          this.data.queue = this.data.queue.filter((item) => item.id !== op.id);
+          this.data.queue = remaining
+            ? this.data.queue.map((item) =>
+                item.id === op.id ? remaining : item,
+              )
+            : this.data.queue.filter((item) => item.id !== op.id);
           const local = this.data.records.find(
             (item) => item.id === op.entityId,
           );
