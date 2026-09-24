@@ -6648,12 +6648,35 @@ h3,
     padding: 8px 0 12px;
   }
   .voice-capture-controls .microphone {
-    width: 120px;
-    height: 120px;
-    margin: 12px 0 18px;
+    width: min(280px, 68vw);
+    max-width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+    flex-shrink: 0;
+    margin: 16px 0 24px;
+  }
+  .voice-capture-controls .microphone svg {
+    width: clamp(56px, 18vw, 80px);
+    height: clamp(56px, 18vw, 80px);
   }
   .capture-destinations .button {
     min-height: 60px;
+  }
+}
+
+.capture-main .voice-capture-controls .microphone {
+  touch-action: manipulation;
+}
+@media (max-width: 1023px) and (max-height: 500px) {
+  .voice-capture-controls .microphone {
+    width: min(200px, 42svh);
+    max-width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+  }
+  .voice-capture-controls .microphone svg {
+    width: 56px;
+    height: 56px;
   }
 }
 
