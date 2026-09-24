@@ -415,13 +415,11 @@ function TaskRow({
             Planned · {pretty(task.plannedDate)}
           </button>
         )}
-        <button className="classic-mobile-note" onClick={() => onOpen(task)}>
-          {task.notes}
-        </button>
-        <div className="classic-mobile-dates">
-          {pill('draft')}
-          {pill('final')}
-        </div>
+        {task.notes && (
+          <button className="classic-mobile-note" onClick={() => onOpen(task)}>
+            {task.notes}
+          </button>
+        )}
       </div>
       <span className="classic-divider-space" />
       <button
@@ -474,6 +472,12 @@ function TaskRow({
       >
         <Trash2 />
       </button>
+      {((!task.routine && task.draft) || task.final) && (
+        <div className="classic-mobile-dates">
+          {pill('draft')}
+          {pill('final')}
+        </div>
+      )}
     </div>
   );
 }

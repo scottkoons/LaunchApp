@@ -4774,13 +4774,19 @@ h3,
     font-size: 12px;
     max-height: 36px;
     overflow: hidden;
-    margin-bottom: 8px;
+    margin-bottom: 0;
   }
   .classic-mobile-dates {
     display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    padding-bottom: 5px;
+    grid-column: 2 / -1;
+    min-width: 0;
+    gap: 6px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 2px 0;
+  }
+  .classic-mobile-dates .date-badge {
+    flex-shrink: 0;
   }
   .mobile-pill-label {
     display: inline;
