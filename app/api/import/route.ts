@@ -1,4 +1,5 @@
 import { owner, database, json, failure, originGuard } from '@/lib/server';
+import { limitedText } from '@/lib/body-limit';
 import {
   validateEntity,
   reportEligible,
@@ -12,15 +13,17 @@ export async function POST(request: Request) {
   try {
     originGuard(request);
     const user = await owner();
-    const raw = await request.text();
-    if (raw.length > 4 * 1024 * 1024) throw new Error('Import batch too large');
+    const raw = await limitedText(request, 4 * 1024 * 1024 * 4);
+    if (raw === null || raw.length > 4 * 1024 * 1024)
+      return json({ error: 'Import batch too large' }, 413);
     const input = JSON.parse(raw);
     if (!Array.isArray(input.records) || input.records.length > 100)
       throw new Error('Import up to 100 records per batch');
     const entities = input.records.map((original: Entity) => {
       const e = migrateReportDefaults(migrateLegacyRoutine(original));
       validateEntity(e);
-      if (!e.id || e.id.length > 160) throw new Error('Invalid record ID');
+      if (typeof e.id !== 'string' || !e.id || e.id.length > 160)
+        throw new Error('Invalid record ID');
       if (e.kind === 'meeting' && e.snapshot) {
         validateReportOptions(e.snapshot.options);
         for (const list of [
@@ -55,8 +58,10 @@ export async function POST(request: Request) {
         )
         .bind(user, e.id, e.kind, JSON.stringify(e), now()),
     );
-    if (statements.length) await database().batch(statements);
-    return json({ imported: entities.length });
+    const results = statements.length ? await database().batch(statements) : [];
+    // Existing and permanently deleted IDs are skipped, so count real inserts.
+    const imported = results.filter((r) => r.meta.changes).length;
+    return json({ imported, skipped: entities.length - imported });
   } catch (e) {
     return failure(e);
   }

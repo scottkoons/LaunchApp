@@ -1,5 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { owner, database, json, failure, originGuard } from '@/lib/server';
+import { limitedText } from '@/lib/body-limit';
 import { registerPhone, removePhone, queuePhoneTest } from '@/lib/phone-alerts';
 
 export async function GET(request: Request) {
@@ -35,8 +36,9 @@ export async function POST(request: Request) {
   try {
     originGuard(request);
     const user = await owner(),
-      raw = await request.text();
-    if (raw.length > 6000) return json({ error: 'Request too large.' }, 413);
+      raw = await limitedText(request, 6000 * 4);
+    if (raw === null || raw.length > 6000)
+      return json({ error: 'Request too large.' }, 413);
     const input = JSON.parse(raw);
     if (
       !env.VAPID_PUBLIC_KEY ||

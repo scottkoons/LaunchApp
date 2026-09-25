@@ -1,4 +1,5 @@
 'use client';
+import { readLocal, writeLocal } from '@/lib/local-storage';
 import { BulkSelection } from '@/components/bulk-selection';
 /* oxlint-disable jsx-a11y/prefer-tag-over-role -- This is a focusable WAI-ARIA window-splitter control, not a static thematic hr. */
 import { useEffect, useRef, useState } from 'react';
@@ -43,28 +44,25 @@ export function NotesDrawer({
   const saving = useRef(false);
   const draftKey = `launch-drawer-draft-${store.account}-${scope}`;
   useEffect(() => {
-    setOpen(localStorage.getItem('launch-notes-drawer') === 'true');
-    if (
-      scope === 'business' &&
-      localStorage.getItem('launch-notes-tab') === 'agenda'
-    )
+    setOpen(readLocal('launch-notes-drawer') === 'true');
+    if (scope === 'business' && readLocal('launch-notes-tab') === 'agenda')
       setTab('agenda');
-    const savedWidth = Number(localStorage.getItem('launch-notes-width'));
+    const savedWidth = Number(readLocal('launch-notes-width'));
     if (savedWidth >= 250 && savedWidth <= 480) setWidth(savedWidth);
-    setText(localStorage.getItem(draftKey) || '');
+    setText(readLocal(draftKey) || '');
     setLoaded(true);
   }, [draftKey, scope]);
   useEffect(() => {
-    if (loaded) localStorage.setItem(draftKey, text);
+    if (loaded) writeLocal(draftKey, text);
   }, [text, loaded, draftKey]);
   function toggle() {
     setOpen(!open);
-    localStorage.setItem('launch-notes-drawer', String(!open));
+    writeLocal('launch-notes-drawer', String(!open));
   }
   function resize(value: number) {
     const next = Math.max(250, Math.min(480, window.innerWidth * 0.4, value));
     setWidth(next);
-    localStorage.setItem('launch-notes-width', String(next));
+    writeLocal('launch-notes-width', String(next));
   }
   async function save() {
     if (!text.trim() || saving.current) return;
@@ -147,7 +145,7 @@ export function NotesDrawer({
             value={tab}
             onValueChange={(value) => {
               setTab(value);
-              localStorage.setItem('launch-notes-tab', value);
+              writeLocal('launch-notes-tab', value);
             }}
           >
             <TabsList aria-label="Notes drawer">

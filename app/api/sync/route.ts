@@ -7,6 +7,7 @@ import {
   allRecords,
   bucket,
 } from '@/lib/server';
+import { limitedText } from '@/lib/body-limit';
 import { permanentDeletions, cleanupPurgedFiles } from '@/lib/trash-server';
 import { mergePatch, validateEntity, now, kinds } from '@/lib/model';
 import type { Entity, Operation } from '@/lib/model';
@@ -38,8 +39,9 @@ export async function POST(request: Request) {
     const user = await owner();
     if (Number(request.headers.get('content-length') || 0) > 250000)
       return json({ error: 'Record too large' }, 413);
-    const raw = await request.text();
-    if (raw.length > 250000) return json({ error: 'Record too large' }, 413);
+    const raw = await limitedText(request, 250000 * 4);
+    if (raw === null || raw.length > 250000)
+      return json({ error: 'Record too large' }, 413);
     const op = JSON.parse(raw) as Operation;
     if (
       !op ||
@@ -105,19 +107,35 @@ export async function POST(request: Request) {
     entity.version = version;
     const serialized = JSON.stringify(entity);
     // The version predicate prevents a concurrent request from overwriting a newer row.
-    const result = row
-      ? await db
-          .prepare(
-            'UPDATE records SET body=?,version=?,updated_at=? WHERE owner=? AND id=? AND version=?',
-          )
-          .bind(serialized, version, now(), user, op.entityId, row.version)
-          .run()
-      : await db
-          .prepare(
-            'INSERT OR IGNORE INTO records(owner,id,kind,body,version,updated_at) VALUES(?,?,?,?,?,?)',
-          )
-          .bind(user, op.entityId, op.kind, serialized, version, now())
-          .run();
+    // The receipt is written in the same transaction, and only when this exact
+    // record body was stored, so a retry never finds a half-finished write.
+    const [result] = await db.batch([
+      row
+        ? db
+            .prepare(
+              'UPDATE records SET body=?,version=?,updated_at=? WHERE owner=? AND id=? AND version=?',
+            )
+            .bind(serialized, version, now(), user, op.entityId, row.version)
+        : db
+            .prepare(
+              'INSERT OR IGNORE INTO records(owner,id,kind,body,version,updated_at) VALUES(?,?,?,?,?,?)',
+            )
+            .bind(user, op.entityId, op.kind, serialized, version, now()),
+      db
+        .prepare(
+          'INSERT OR IGNORE INTO operations(owner,id,result,created_at) SELECT ?,?,?,? WHERE EXISTS (SELECT 1 FROM records WHERE owner=? AND id=? AND version=? AND body=?)',
+        )
+        .bind(
+          user,
+          op.id,
+          JSON.stringify({ entity }),
+          now(),
+          user,
+          op.entityId,
+          version,
+          serialized,
+        ),
+    ]);
     if (!result.meta.changes && (await wasPurged()))
       return json(
         { error: 'This item was permanently deleted.', removedId: op.entityId },
@@ -125,12 +143,6 @@ export async function POST(request: Request) {
       );
     if (!result.meta.changes)
       return json({ error: 'Another change arrived. Retry sync.' }, 409);
-    await db
-      .prepare(
-        'INSERT OR IGNORE INTO operations(owner,id,result,created_at) VALUES(?,?,?,?)',
-      )
-      .bind(user, op.id, JSON.stringify({ entity }), now())
-      .run();
     return json({ entity });
   } catch (e) {
     if (

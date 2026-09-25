@@ -160,6 +160,21 @@ export function agendaNoteLines(notes: string) {
 export function day(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+// Workers run in UTC. Server code uses the owner's home zone for "today".
+const HOME_ZONE = 'America/Denver';
+export function zonedDay(zone = HOME_ZONE, d = new Date()) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: zone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    })
+      .formatToParts(d)
+      .map((part) => [part.type, part.value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
 export function parseDay(s: string) {
   return new Date(s + 'T12:00:00');
 }
@@ -673,6 +688,7 @@ export function validateReportOptions(options: ReportOptions) {
 export function makeReport(
   records: Entity[],
   options: ReportOptions,
+  today = day(),
 ): ReportSnapshot {
   const items = records
     .filter(
@@ -694,7 +710,7 @@ export function makeReport(
   const settings = records.find((e) => e.kind === 'settings');
   return {
     options,
-    statusDate: day(),
+    statusDate: today,
     soonDays: settings?.soonDays ?? 2,
     businessName: settings?.businessName || 'Colorado Mountain Brewery',
     createdAt: now(),

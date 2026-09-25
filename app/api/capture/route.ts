@@ -3,6 +3,7 @@ import { owner, originGuard, json, failure, database } from '@/lib/server';
 import { uid, now } from '@/lib/model';
 import { validateCapture, type CaptureState } from '@/lib/capture-intent';
 import { transcribeMedia, interpretCapture } from '@/lib/capture-ai';
+import { limitedForm, limitedText } from '@/lib/body-limit';
 
 export async function GET() {
   try {
@@ -32,15 +33,20 @@ export async function POST(request: Request) {
     let capture: CaptureState | undefined;
     let media: { id: string; file: File; type: 'voice' | 'photo' } | undefined;
     if (request.headers.get('content-type')?.startsWith('application/json')) {
-      const raw = await request.text();
-      if (raw.length > 70000)
+      const raw = await limitedText(request, 70000 * 4);
+      if (raw === null || raw.length > 70000)
         return json({ error: 'This capture is too long.' }, 413);
       capture = JSON.parse(raw);
       validateCapture(capture!);
       if (!capture?.transcript)
         return json({ error: 'Transcribe the capture first.' }, 400);
     } else {
-      const form = await request.formData();
+      const form = await limitedForm(request, 13 * 1024 * 1024);
+      if (!form)
+        return json(
+          { error: 'Use a recording or photo smaller than 12 MB.' },
+          413,
+        );
       const file = form.get('file'),
         id = form.get('id'),
         type = form.get('type');

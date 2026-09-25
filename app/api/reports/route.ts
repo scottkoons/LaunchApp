@@ -11,6 +11,7 @@ import {
   createEntity,
   defaultReport,
   validateReportOptions,
+  zonedDay,
 } from '@/lib/model';
 export async function POST(request: Request) {
   try {
@@ -27,7 +28,7 @@ export async function POST(request: Request) {
       throw new Error('Invalid report ID');
     const options = { ...defaultReport(), ...input.options };
     validateReportOptions(options);
-    const snapshot = makeReport(await allRecords(user), options);
+    const snapshot = makeReport(await allRecords(user), options, zonedDay());
     const entity = createEntity('meeting', 'business', {
       id: input.id || crypto.randomUUID(),
       title: `Marketing review · ${options.meetingDate}`,

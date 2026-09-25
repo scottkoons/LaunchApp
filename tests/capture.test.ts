@@ -166,9 +166,10 @@ void test('capture dates use the capture zone, and reject nonexistent or ambiguo
     () => reminderInstant('2026-03-08T02:30', source.timeZone),
     /clock change/,
   );
-  assert.throws(
-    () => reminderInstant('2026-11-01T01:30', source.timeZone),
-    /clock change/,
+  // A repeated fall-back time resolves to its first occurrence (MDT).
+  assert.equal(
+    reminderInstant('2026-11-01T01:30', source.timeZone),
+    '2026-11-01T07:30:00.000Z',
   );
   assert.throws(() => reminderInstant('2026-09-31T09:00', source.timeZone));
   assert.throws(() => reminderInstant('2026-09-11T25:00', source.timeZone));

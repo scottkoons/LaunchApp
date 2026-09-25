@@ -1,4 +1,5 @@
 import { database, owner, json, failure, originGuard } from '@/lib/server';
+import { limitedText } from '@/lib/body-limit';
 import { createAgentConnection } from '@/lib/agent-store';
 import { env } from 'cloudflare:workers';
 export async function GET() {
@@ -19,8 +20,8 @@ export async function POST(request: Request) {
   try {
     originGuard(request);
     const user = await owner();
-    const raw = await request.text();
-    if (raw.length > 2000)
+    const raw = await limitedText(request, 2000 * 4);
+    if (raw === null || raw.length > 2000)
       return json({ error: 'Connection name too long.' }, 413);
     const input = JSON.parse(raw);
     if (

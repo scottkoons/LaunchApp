@@ -1,4 +1,5 @@
 'use client';
+import { writeLocal } from './local-storage';
 import { useEffect, useState } from 'react';
 import { agendaItems, agendaOrderChanges } from './agenda';
 import { uploadBlob } from './upload-blob';
@@ -170,6 +171,7 @@ export class LaunchStore {
   listeners = new Set<() => void>();
   saveChain = Promise.resolve();
   private submitted: Cache = empty();
+  private latestCopy: Cache | undefined;
   private syncPromise: Promise<void> | null = null;
   private uploadController: AbortController | null = null;
   private uploadPhaseOperations = new Set<string>();
@@ -220,15 +222,16 @@ export class LaunchStore {
   }
   async persist() {
     const copy = structuredClone(this.data);
-    const base = this.submitted;
-    this.submitted = copy;
+    this.latestCopy = copy;
     this.saveChain = this.saveChain
       .catch(() => {})
       .then(async () => {
-        const merged = await writeCache(this.account, base, copy);
+        // Diff against the last snapshot that actually reached the device, so a
+        // failed write is retried by the next save instead of being dropped.
+        const merged = await writeCache(this.account, this.submitted, copy);
         this.data = mergeCache(merged, copy, this.data);
-        if (this.submitted === copy)
-          this.submitted = structuredClone(this.data);
+        this.submitted =
+          this.latestCopy === copy ? structuredClone(this.data) : copy;
       });
     await this.saveChain;
     this.forgetRemovedHistory();
@@ -239,7 +242,7 @@ export class LaunchStore {
       this.data = await readCache(this.account);
       this.submitted = structuredClone(this.data);
       this.ready = true;
-      localStorage.setItem('launch-account', this.account);
+      writeLocal('launch-account', this.account);
       this.emit();
       await this.sync();
     } catch {
@@ -823,11 +826,32 @@ export class LaunchStore {
       op.conflict = undefined;
       op.id = uid();
     } else {
-      this.data.queue = this.data.queue.filter(
-        (q) => q.entityId !== op.entityId,
+      // Discard only the conflicting fields. Other queued edits to this item,
+      // such as a newly attached photo, are still the user's work.
+      const discarded = Object.keys(op.patch).filter(
+        (key) => !['updatedAt', 'version'].includes(key),
+      ) as (keyof Entity)[];
+      this.data.queue = this.data.queue.flatMap((q) => {
+        if (q.id === op.id) return [];
+        if (q.entityId !== op.entityId) return [q];
+        const patch = { ...q.patch },
+          base = { ...q.base };
+        for (const key of discarded) {
+          delete patch[key];
+          delete base[key];
+        }
+        return Object.keys(patch).some(
+          (key) => !['updatedAt', 'version'].includes(key),
+        )
+          ? [{ ...q, patch, base }]
+          : [];
+      });
+      const remaining = this.data.queue.filter(
+        (q) => q.entityId === op.entityId,
       );
       this.data.records = this.data.records.filter((e) => e.id !== op.entityId);
-      if (current) this.data.records.push(current);
+      if (current)
+        this.data.records.push(remaining.reduce(pendingRecord, current));
     }
     await this.persist();
     await this.sync();

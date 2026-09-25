@@ -1,4 +1,5 @@
 'use client';
+import { readLocal, removeLocal, writeLocal } from '@/lib/local-storage';
 import { useEffect, useEffectEvent, useState, useRef } from 'react';
 import {
   Sheet,
@@ -73,8 +74,7 @@ export function TaskEditor({
     let saved = null;
     try {
       saved = JSON.parse(
-        localStorage.getItem(`launch-draft-${store.account}-${entity.id}`) ||
-          'null',
+        readLocal(`launch-draft-${store.account}-${entity.id}`) || 'null',
       );
     } catch {}
     setReportApply('one');
@@ -87,7 +87,7 @@ export function TaskEditor({
     const next = { ...draftRef.current, ...patch };
     draftRef.current = next;
     setDraft(next);
-    localStorage.setItem(
+    writeLocal(
       `launch-draft-${store.account}-${next.id}`,
       JSON.stringify({ draft: next, base: base.current }),
     );
@@ -146,7 +146,7 @@ export function TaskEditor({
         const latest = store.data.records.find((e) => e.id === item.id) || item;
         await store.change(latest, patch);
       }
-      localStorage.removeItem(`launch-draft-${store.account}-${d.id}`);
+      removeLocal(`launch-draft-${store.account}-${d.id}`);
       notify(
         d.status === 'completed'
           ? 'Completed. Kept in your history.'

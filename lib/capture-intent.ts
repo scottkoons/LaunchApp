@@ -80,8 +80,11 @@ export function reminderInstant(value: string, zone: string) {
   }
   const candidates = [...offsets]
     .map((offset) => new Date(nominal - offset).toISOString())
-    .filter((instant) => localTime(instant, zone) === value);
-  if (candidates.length !== 1)
+    .filter((instant) => localTime(instant, zone) === value)
+    .sort();
+  // A skipped spring-forward time has no instant. A repeated fall-back time has
+  // two; use the first, matching how browsers read datetime-local input.
+  if (!candidates.length)
     throw new Error(
       'That reminder time falls at a clock change. Choose a different time.',
     );

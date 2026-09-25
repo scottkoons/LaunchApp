@@ -1,4 +1,4 @@
-const CACHE = 'launch-shell-v23';
+const CACHE = 'launch-shell-v24';
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
@@ -62,18 +62,22 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const safeUrl = notificationUrl(event.notification.data?.url);
   event.waitUntil(
-    self.clients
-      .matchAll({ type: 'window', includeUncontrolled: true })
-      .then(async (windows) => {
-        const client = windows.find(
-          (window) => new URL(window.url).origin === self.location.origin,
-        );
-        if (client) {
-          await client.navigate(safeUrl);
-          return client.focus();
+    // Only controlled windows can be navigated; navigate() rejects for others
+    // (for example after a hard reload), so open a fresh window instead.
+    self.clients.matchAll({ type: 'window' }).then(async (windows) => {
+      const client = windows.find(
+        (window) => new URL(window.url).origin === self.location.origin,
+      );
+      if (client) {
+        try {
+          const moved = await client.navigate(safeUrl);
+          return await (moved || client).focus();
+        } catch {
+          // Fall back to a new window below.
         }
-        return self.clients.openWindow(safeUrl);
-      }),
+      }
+      return self.clients.openWindow(safeUrl);
+    }),
   );
 });
 self.addEventListener('activate', (event) =>
