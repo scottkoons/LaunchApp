@@ -2,6 +2,37 @@
 
 Notable changes to Launch, newest first. Each entry lists what changed, why, and where, so a person or coding agent can pick up the context without rereading the code.
 
+## 2026-09-25: Full read and write connector for agents (Grok Bot)
+
+Branch `claude/launch-mcp-crud`, stacked on the sync branch (pull request #2). The Launch MCP connector (`/api/mcp`) was create-only (`get_launch_context`, `add_task`, `add_note`, `add_agenda_item`), so agents could not answer "what is due today", "what is overdue" or "what is in yellow", or change or remove anything.
+
+### Added
+
+- **Read tools** (`lib/agent-crud.ts`):
+  - `list_tasks`, `list_notes`, `list_agenda_items`, `get_item` and `search_items`.
+  - They cover workspace, status, date, overdue, color and urgency, and text filters, and page with `limit` (default 50) and `next_cursor`.
+  - Every item has one shape (id, type, version, status, dates, reminder, trash state, timestamps and a `url` deep link).
+- **Write tools:**
+  - `update_task`, `update_note` and `update_agenda_item` change only the fields passed and return the saved item.
+  - `delete_item` moves an item to Trash; `restore_item` brings it back. Permanent deletion stays manual in Launch.
+  - Writes use sync validation, the optimistic version check (`expected_version` refuses stale changes) and an atomic revocation check.
+- **Colors:** `color` and `urgency` match the Launch UI exactly: red overdue, yellow soon (within the `soonDays` setting, default 2), blue future, green done, gray postponed.
+- **Context:** `get_launch_context` also returns counts for due today, overdue and each color, plus the color legend.
+- **Create results:** `add_task`, `add_note` and `add_agenda_item` receipts now include the full `item`.
+- **Error shape:** every tool error is `{"error":{"code","message"}}` with the codes `not_found`, `validation`, `conflict` and `unavailable`.
+- **Deep links:** Launch opens `/?item=<id>` (as it already did `?reminder=`) in `app/launch.tsx`.
+- **Docs:** `docs/agent-connection.md` documents every tool, field and color; `docs/grok-bot-setup.md` lists the new tools.
+
+### Tests
+
+- `tests/agent-mcp.test.ts` gains an end-to-end MCP client test over the real migration schema. It covers counts; today, overdue, yellow and this-week queries; paging; owner isolation; notes, agenda and search; mark done, due date and time changes, and moving to personal; a stale `expected_version`; reminder set and clear; note and agenda updates; error codes; trash and restore without removing the row; the full item on create; and writes refused after disconnect.
+
+### Known and not changed
+
+- **Repeating tasks:** reads return stored records. Future occurrences of repeating tasks appear after Launch plans them during its normal sync.
+- **Tags and projects:** Launch has no tags or projects, so none are exposed.
+- **Grok Bot discovery:** after deploying, refresh or reconnect the Launch connector in Grok Bot so it discovers the new tools.
+
 ## 2026-09-25: Reliable cross-device sync
 
 Goal: the cloud is the shared copy, a change on either device reaches the other automatically, and Scott only sees a conflict when the same field of the same item really was changed on both devices before either heard about the other. Design notes are in `docs/sync-reliability.md`.
