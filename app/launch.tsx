@@ -88,7 +88,8 @@ import {
   resolveAppearance,
   type Appearance,
 } from '@/lib/appearance';
-import { useLaunchStore } from '@/lib/client-store';
+import { useLaunchStore, needsAttention } from '@/lib/client-store';
+import { describeConflict, attachmentOwners } from '@/lib/sync-status';
 import {
   createEntity,
   now,
@@ -955,7 +956,12 @@ export default function Launch({
               aria-label="Sync status"
               onClick={() => setSyncOpen(true)}
             >
-              {data.error ? <CloudOff /> : <CloudCheck />}
+              {needsAttention(data.syncState) ||
+              data.syncState === 'offline' ? (
+                <CloudOff />
+              ) : (
+                <CloudCheck />
+              )}
             </button>
           </div>
         </SidebarFooter>
@@ -976,7 +982,9 @@ export default function Launch({
           <div className="topbar-right">
             <button
               aria-label={'Sync status: ' + data.status}
-              className={'sync-pill ' + (data.error ? 'warning' : '')}
+              className={
+                'sync-pill ' + (needsAttention(data.syncState) ? 'warning' : '')
+              }
               onClick={() => {
                 setSyncOpen(true);
                 void store.sync();
@@ -984,7 +992,8 @@ export default function Launch({
             >
               {data.syncing ? (
                 <RefreshCw className="spinning" />
-              ) : data.error ? (
+              ) : needsAttention(data.syncState) ||
+                data.syncState === 'offline' ? (
                 <CloudOff />
               ) : (
                 <CloudCheck />
@@ -1002,11 +1011,15 @@ export default function Launch({
             </button>
           </div>
         </header>
-        {ready && (data.error || data.queue.some((op) => op.conflict)) && (
+        {ready && needsAttention(data.syncState) && (
           <button className="sync-attention" onClick={() => setSyncOpen(true)}>
             <CloudOff />
             <span>
-              Some changes are still on this device.{' '}
+              {data.syncState === 'conflict'
+                ? 'The same item was changed on two devices.'
+                : data.syncState === 'attachment'
+                  ? 'An attachment on this device could not be uploaded.'
+                  : 'Some changes are still on this device.'}{' '}
               <strong>Review sync</strong>
             </span>
           </button>
@@ -1996,38 +2009,94 @@ export default function Launch({
             )}
             {data.queue
               .filter((q) => q.conflict)
-              .map((q) => (
-                <section className="conflict" key={q.id}>
-                  <h3>{records.find((e) => e.id === q.entityId)?.title}</h3>
-                  <p>
-                    Another device changed {q.conflict}. Your version is still
-                    kept here.
-                  </p>
-                  <div className="button-row">
-                    <button
-                      className="button"
-                      onClick={() =>
-                        void store
-                          .resolve(q.id, true)
-                          .catch((e) => notify(e.message))
-                      }
-                    >
-                      Keep this version
-                    </button>
-                    <button
-                      className="button"
-                      onClick={() =>
-                        void store
-                          .resolve(q.id, false)
-                          .catch((e) => notify(e.message))
-                      }
-                    >
-                      Use other version
-                    </button>
-                  </div>
-                </section>
-              ))}
-            {data.uploads.length > 0 && (
+              .map((q) => {
+                const item = records.find((e) => e.id === q.entityId);
+                return (
+                  <section className="conflict" key={q.id}>
+                    <h3>{item?.title || 'Untitled item'}</h3>
+                    {describeConflict(q, item).map((line) => (
+                      <p key={line}>{line}</p>
+                    ))}
+                    <p>
+                      This device still shows your change. Choose which version
+                      to keep.
+                    </p>
+                    <div className="button-row">
+                      <button
+                        className="button"
+                        onClick={() =>
+                          void store
+                            .resolve(q.id, true)
+                            .catch((e) => notify(e.message))
+                        }
+                      >
+                        Keep this device’s version
+                      </button>
+                      <button
+                        className="button"
+                        onClick={() =>
+                          void store
+                            .resolve(q.id, false)
+                            .catch((e) => notify(e.message))
+                        }
+                      >
+                        Use the other device’s version
+                      </button>
+                    </div>
+                  </section>
+                );
+              })}
+            {data.uploads
+              .filter((upload) => upload.problem)
+              .map((upload) => {
+                const owners = attachmentOwners(records, upload.meta.id);
+                return (
+                  <section className="conflict" key={upload.meta.id}>
+                    <h3>{upload.meta.name || 'Attachment'}</h3>
+                    <p>
+                      {owners.length
+                        ? `Attached to ${owners.map((title) => `“${title}”`).join(', ')}.`
+                        : 'Not attached to any saved item.'}{' '}
+                      {upload.problem}
+                    </p>
+                    <p>
+                      Everything else keeps syncing. Try again, or remove this
+                      attachment; the item itself stays.
+                    </p>
+                    <div className="button-row">
+                      <button
+                        className="button"
+                        disabled={data.syncing}
+                        onClick={() =>
+                          void store
+                            .retryAttachment(upload.meta.id)
+                            .catch((e) => notify(e.message))
+                        }
+                      >
+                        Try again
+                      </button>
+                      <button
+                        className="button"
+                        onClick={() => {
+                          if (
+                            !confirm(
+                              `Remove “${upload.meta.name || 'this attachment'}”? Its saved copy on this device cannot be read, so it cannot be recovered.`,
+                            )
+                          )
+                            return;
+                          void store
+                            .removeAttachment(upload.meta.id)
+                            .then(() => notify('Attachment removed.'))
+                            .catch((e) => notify(e.message));
+                        }}
+                      >
+                        Remove attachment
+                      </button>
+                    </div>
+                  </section>
+                );
+              })}
+            {data.uploads.some((upload) => !upload.problem) && (
               <p className="hint">
                 Task text syncs separately from attachments. Recordings waiting
                 to upload remain saved on this device.
@@ -2056,10 +2125,12 @@ export default function Launch({
                 })}
               </section>
             )}
-            <p className="hint">
-              Leave Launch open while attachments upload. Browser background
-              uploads are not guaranteed.
-            </p>
+            {data.uploads.some((upload) => !upload.problem) && (
+              <p className="hint">
+                Leave Launch open while attachments upload. Browser background
+                uploads are not guaranteed.
+              </p>
+            )}
           </div>
         </SheetContent>
       </Sheet>

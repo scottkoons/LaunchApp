@@ -46,8 +46,8 @@ export function SettingsPanel({
     try {
       const { default: JSZip } = await import('jszip');
       await store.sync();
-      if (store.data.queue.length || store.data.uploads.length || store.error)
-        throw new Error('Sync pending changes before exporting a backup.');
+      const waiting = store.unsyncedReason();
+      if (waiting) throw new Error(`${waiting} Then export the backup.`);
       const zip = new JSZip();
       zip.file(
         'launch-backup.json',
