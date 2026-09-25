@@ -5,3 +5,4 @@
 - Use `origin` for GitHub and the current branch's configured upstream. Preserve remote history; do not force-push.
 - Keep API keys, local environment files, local databases, uploaded user files, dependencies, and generated deployment archives out of Git. Preserve the existing `.gitignore` exclusions.
 - The live PWA is deployed through Sites using `.openai/hosting.json`. A Sites source push and a GitHub push are separate operations; publishing through Sites does not satisfy the instruction to push commits to GitHub.
+- Read `CHANGELOG.md` before starting work; it records recent changes, known open issues and suggested next work. Add an entry there for each notable change.
