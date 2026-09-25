@@ -2,7 +2,7 @@
 import { writeLocal } from './local-storage';
 import { useEffect, useState } from 'react';
 import { agendaItems, agendaOrderChanges } from './agenda';
-import { uploadBlob } from './upload-blob';
+import { uploadBlob, UnreadableAttachmentError } from './upload-blob';
 import {
   pendingFileIds,
   pendingRecord,
@@ -23,6 +23,12 @@ import {
   createEntity,
   uid,
   validateEntity,
+  changedFields,
+  conflictFields,
+  keepMine,
+  takeTheirs,
+  isMapField,
+  withoutConflict,
   type Entity,
   type Operation,
   type FileMeta,
@@ -32,8 +38,17 @@ type Cache = {
   records: Entity[];
   files: FileMeta[];
   queue: Operation[];
-  uploads: { meta: FileMeta; blob: Blob }[];
+  uploads: Upload[];
   removed?: { records: string[]; files: string[] };
+};
+// A locally saved original waiting to upload. After repeated failures to read
+// it from device storage (or a permanent rejection), `problem` explains why it
+// stopped retrying automatically; the user can retry or remove it.
+type Upload = {
+  meta: FileMeta;
+  blob: Blob;
+  failures?: number;
+  problem?: string;
 };
 const empty = (): Cache => ({ records: [], files: [], queue: [], uploads: [] });
 async function openCache(account: string) {
@@ -154,19 +169,36 @@ async function writeCache(account: string, base: Cache, data: Cache) {
     };
   });
 }
+// What the sync indicator shows. Only conflict, attachment and error ask for
+// attention; everything else is normal background work.
+export type SyncState =
+  | 'connecting'
+  | 'offline'
+  | 'syncing'
+  | 'pending'
+  | 'synced'
+  | 'conflict'
+  | 'attachment'
+  | 'error';
 export type StoreSnapshot = Cache & {
   ready: boolean;
   syncing: boolean;
+  syncState: SyncState;
   status: string;
   error: string;
   lastSync: string;
 };
+export const needsAttention = (state: SyncState) =>
+  state === 'conflict' || state === 'attachment' || state === 'error';
 export class LaunchStore {
   account: string;
   data: Cache = empty();
   ready = false;
   syncing = false;
+  // Actionable problems only (sign-in, storage, a change the server refused).
   error = '';
+  // The server could not be reached; changes stay on this device and retry.
+  unreachable = false;
   lastSync = '';
   listeners = new Set<() => void>();
   saveChain = Promise.resolve();
@@ -176,6 +208,8 @@ export class LaunchStore {
   private uploadController: AbortController | null = null;
   private uploadPhaseOperations = new Set<string>();
   private purging = false;
+  // Uploads that stopped retrying get one more attempt each time Launch opens.
+  private retryProblemUploads = true;
   // Session history is independent of notification lifetime. Store only the
   // lifecycle and moved-deadline fields so undo preserves later notes and attachments.
   undoHistory: {
@@ -196,26 +230,87 @@ export class LaunchStore {
     this.account = account;
   }
   snapshot(): StoreSnapshot {
+    const { syncState, status } = this.syncStatus();
     return {
       ...this.data,
       ready: this.ready,
       syncing: this.syncing,
-      status:
-        this.error ||
-        (!navigator.onLine
-          ? 'Offline · saved on this device'
-          : this.syncing
-            ? 'Syncing changes…'
-            : this.data.queue.some((q) => q.conflict)
-              ? 'A change needs your review'
-              : this.data.queue.length || this.data.uploads.length
-                ? `${this.data.queue.length + this.data.uploads.length} waiting to sync`
-                : this.lastSync
-                  ? 'All changes synced'
-                  : 'Connecting…'),
+      syncState,
+      status,
       error: this.error,
       lastSync: this.lastSync,
     };
+  }
+  // Uploads that stopped retrying and need a decision.
+  attachmentProblems() {
+    return this.data.uploads.filter((upload) => upload.problem);
+  }
+  private syncStatus(): { syncState: SyncState; status: string } {
+    const conflicts = this.data.queue.filter((op) => op.conflict).length;
+    const problems = new Set(
+      this.attachmentProblems().map((upload) => upload.meta.id),
+    );
+    const uploading = new Set(
+      this.data.uploads
+        .filter((upload) => !upload.problem)
+        .map((upload) => upload.meta.id),
+    );
+    // Changes that only wait for an attachment count as that attachment.
+    const changes = this.data.queue.filter(
+      (op) =>
+        !op.conflict &&
+        !pendingFileIds(op).some((id) => problems.has(id) || uploading.has(id)),
+    ).length;
+    const plural = (count: number, word: string) =>
+      `${count} ${word}${count === 1 ? '' : 's'}`;
+    const waiting =
+      changes && uploading.size
+        ? `${plural(changes, 'change')} and ${plural(uploading.size, 'attachment')} waiting to sync`
+        : uploading.size
+          ? `${plural(uploading.size, 'attachment')} waiting to upload`
+          : changes
+            ? `${changes} waiting to sync`
+            : '';
+    if (this.error) return { syncState: 'error', status: this.error };
+    if (conflicts)
+      return {
+        syncState: 'conflict',
+        status:
+          conflicts === 1
+            ? 'A change needs your review'
+            : `${conflicts} changes need your review`,
+      };
+    if (problems.size)
+      return {
+        syncState: 'attachment',
+        status:
+          problems.size === 1
+            ? 'An attachment could not be uploaded'
+            : `${problems.size} attachments could not be uploaded`,
+      };
+    if (!navigator.onLine)
+      return { syncState: 'offline', status: 'Offline · saved on this device' };
+    if (this.syncing)
+      return { syncState: 'syncing', status: 'Syncing changes…' };
+    if (this.unreachable)
+      return {
+        syncState: 'offline',
+        status: 'Can’t reach Launch · saved on this device',
+      };
+    if (waiting) return { syncState: 'pending', status: waiting };
+    return this.lastSync
+      ? { syncState: 'synced', status: 'All changes synced' }
+      : { syncState: 'connecting', status: 'Connecting…' };
+  }
+  // Why a backup, saved report or permanent deletion must wait, or ''.
+  unsyncedReason() {
+    if (this.attachmentProblems().length)
+      return 'An attachment on this device could not be uploaded. Open Sync status to retry or remove it.';
+    if (this.data.queue.some((op) => op.conflict))
+      return 'A change needs your review. Open Sync status to choose a version.';
+    if (this.error || this.data.queue.length || this.data.uploads.length)
+      return 'Finish syncing your changes first.';
+    return '';
   }
   emit() {
     this.listeners.forEach((fn) => fn());
@@ -388,10 +483,9 @@ export class LaunchStore {
       cleanupPending = false;
     try {
       await this.sync();
-      if (this.error || this.data.queue.length || this.data.uploads.length)
-        throw new Error(
-          'Finish syncing your changes before permanently deleting items.',
-        );
+      const waiting = this.unsyncedReason();
+      if (waiting)
+        throw new Error(`${waiting} Then permanently delete these items.`);
       const expected = new Map(items.map((item) => [item.id, item]));
       const selected = this.data.records.filter((item) => {
         const confirmed = expected.get(item.id);
@@ -822,29 +916,28 @@ export class LaunchStore {
     const remote = (await response.json()) as { records: Entity[] };
     const current = remote.records.find((e: Entity) => e.id === op.entityId);
     if (keepLocal) {
-      op.base = { ...current };
-      op.conflict = undefined;
-      op.id = uid();
+      // Re-base only the conflicting fields; a fresh ID sends it again.
+      const rebased = { ...keepMine(current, op), id: uid() };
+      this.data.queue = this.data.queue.map((q) =>
+        q.id === op.id ? rebased : q,
+      );
     } else {
-      // Discard only the conflicting fields. Other queued edits to this item,
-      // such as a newly attached photo, are still the user's work.
-      const discarded = Object.keys(op.patch).filter(
-        (key) => !['updatedAt', 'version'].includes(key),
-      ) as (keyof Entity)[];
+      // Take the other device's value for the conflicting fields only. The
+      // rest of this change and later queued edits to this item (such as a
+      // newly attached photo) are still the user's work and still sync.
+      const discarded = conflictFields(op).filter((key) => !isMapField(key));
+      const kept = { ...takeTheirs(current, op), id: uid() };
       this.data.queue = this.data.queue.flatMap((q) => {
-        if (q.id === op.id) return [];
+        if (q.id === op.id) return changedFields(kept).length ? [kept] : [];
         if (q.entityId !== op.entityId) return [q];
         const patch = { ...q.patch },
           base = { ...q.base };
         for (const key of discarded) {
-          delete patch[key];
-          delete base[key];
+          delete patch[key as keyof Entity];
+          delete base[key as keyof Entity];
         }
-        return Object.keys(patch).some(
-          (key) => !['updatedAt', 'version'].includes(key),
-        )
-          ? [{ ...q, patch, base }]
-          : [];
+        const next = { ...q, patch, base };
+        return changedFields(next).length ? [next] : [];
       });
       const remaining = this.data.queue.filter(
         (q) => q.entityId === op.entityId,
@@ -855,6 +948,85 @@ export class LaunchStore {
     }
     await this.persist();
     await this.sync();
+  }
+  // Try a stopped upload again now.
+  async retryAttachment(fileId: string) {
+    this.data.uploads = this.data.uploads.map((upload) =>
+      upload.meta.id === fileId
+        ? { ...upload, failures: 0, problem: undefined }
+        : upload,
+    );
+    await this.persist();
+    await this.sync();
+  }
+  // Remove an attachment whose saved original cannot be uploaded. Only the
+  // reference to that one file is removed; the items it was attached to and
+  // every other change stay intact and keep syncing.
+  async removeAttachment(fileId: string) {
+    const upload = this.data.uploads.find((item) => item.meta.id === fileId);
+    if (!upload?.problem)
+      throw new Error(
+        'Only an attachment that could not be uploaded can be removed here.',
+      );
+    const strip = (fields: Partial<Entity>) => {
+      const next = { ...fields };
+      if (Array.isArray(next.files))
+        next.files = next.files.filter((id) => id !== fileId);
+      if (next.portraitId === fileId) next.portraitId = '';
+      if (next.thumbnail?.type === 'image' && next.thumbnail.fileId === fileId)
+        next.thumbnail = null;
+      if (next.fileLabels && fileId in next.fileLabels) {
+        const labels = { ...next.fileLabels };
+        delete labels[fileId];
+        next.fileLabels = labels;
+      }
+      return next;
+    };
+    const references = (fields: Partial<Entity>) =>
+      (fields.files || []).includes(fileId) ||
+      fields.portraitId === fileId ||
+      (fields.thumbnail?.type === 'image' &&
+        fields.thumbnail.fileId === fileId);
+    // Items that reference the file only through a queued change never sent it
+    // to the server; items that reference it otherwise need a removal change.
+    const queuedFor = new Set(
+      this.data.queue
+        .filter((op) => references(op.patch))
+        .map((op) => op.entityId),
+    );
+    const serverReferences = this.data.records.filter(
+      (record) => references(record) && !queuedFor.has(record.id),
+    );
+    this.data.queue = this.data.queue.flatMap((op) => {
+      if (!references(op.patch) && !references(op.base)) return [op];
+      const next = { ...op, patch: strip(op.patch), base: strip(op.base) };
+      return changedFields(next).length ? [next] : [];
+    });
+    this.data.records = this.data.records.map((record) =>
+      references(record) ? { ...record, ...strip(record) } : record,
+    );
+    this.data.uploads = this.data.uploads.filter(
+      (item) => item.meta.id !== fileId,
+    );
+    this.data.files = this.data.files.filter((file) => file.id !== fileId);
+    const updatedAt = now();
+    const attachmentOnly = (fields: Partial<Entity>) =>
+      Object.fromEntries(
+        (['files', 'portraitId', 'thumbnail', 'fileLabels'] as const)
+          .filter((key) => key in fields)
+          .map((key) => [key, fields[key]]),
+      ) as Partial<Entity>;
+    for (const record of serverReferences)
+      this.data.queue.push({
+        id: uid(),
+        entityId: record.id,
+        kind: record.kind,
+        patch: { ...attachmentOnly(strip(record)), updatedAt },
+        base: attachmentOnly(record),
+        createdAt: updatedAt,
+      });
+    await this.persist();
+    void this.sync();
   }
   sync(): Promise<void> {
     if (this.syncPromise) {
@@ -887,11 +1059,18 @@ export class LaunchStore {
     return this.syncPromise;
   }
   private async pushChanges(issues: Set<string>) {
-    // Older clients labelled a retryable version race as a generic conflict.
-    // Retry that saved operation; actual field conflicts retain their names.
-    this.data.queue = this.data.queue.map((op) =>
-      op.conflict === 'Record' ? { ...op, conflict: undefined } : op,
-    );
+    // A reported conflict is not resent every pass. It is checked again once
+    // the server copy changes (the other device may have settled it), and
+    // once for conflicts saved by earlier versions of Launch.
+    this.data.queue = this.data.queue.map((op) => {
+      if (!op.conflict) return op;
+      if (op.conflict === 'Record' || op.conflictVersion === undefined)
+        return withoutConflict(op);
+      const version = this.data.records.find(
+        (e) => e.id === op.entityId,
+      )?.version;
+      return version === op.conflictVersion ? op : withoutConflict(op);
+    });
     const blocked = new Set<string>();
     const waitingFiles = new Set(
       this.data.uploads.map((upload) => upload.meta.id),
@@ -922,7 +1101,12 @@ export class LaunchStore {
       }
       try {
         let r!: Response;
-        let result!: { conflicts?: string[]; error?: string; entity: Entity };
+        let result!: {
+          conflicts?: string[];
+          error?: string;
+          entity: Entity;
+          current?: Entity;
+        };
         for (let attempt = 0; attempt < 3; attempt++) {
           r = await fetch('/api/sync', {
             signal: AbortSignal.timeout(20000),
@@ -930,7 +1114,7 @@ export class LaunchStore {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestOp),
           });
-          result = (await r.json()) as typeof result;
+          result = await readResult<typeof result>(r);
           // A simultaneous write can lose the version race without a field
           // conflict. Repeating the same idempotent operation safely re-merges it.
           if (r.status !== 409 || result.conflicts?.length) break;
@@ -941,13 +1125,32 @@ export class LaunchStore {
             removed: { records: [op.entityId], files: [] },
           });
         } else if (r.status === 409 && result.conflicts?.length) {
+          const current = result.current;
+          const conflicts = result.conflicts;
           this.data.queue = this.data.queue.map((item) =>
             item.id === op.id
-              ? { ...item, conflict: result.conflicts!.join(', ') }
+              ? {
+                  ...item,
+                  conflict: conflicts.join(', '),
+                  conflictVersion:
+                    current?.version ??
+                    this.data.records.find((e) => e.id === op.entityId)
+                      ?.version ??
+                    0,
+                  conflictRemote: current
+                    ? (Object.fromEntries(
+                        conflicts.map((key) => [
+                          key,
+                          current[key as keyof Entity],
+                        ]),
+                      ) as Partial<Entity>)
+                    : undefined,
+                }
               : item,
           );
           blocked.add(op.entityId);
         } else {
+          if (r.status === 401) throw new Error(signInMessage);
           if (!r.ok) throw new Error(result.error || 'Sync failed');
           this.data.queue = remaining
             ? this.data.queue.map((item) =>
@@ -968,30 +1171,36 @@ export class LaunchStore {
         await this.persist();
       } catch (e) {
         blocked.add(op.entityId);
-        issues.add(syncError(e));
-        // Failed validation belongs to this item. Network/auth failures will
-        // also be reported by the pull without sending every queued request.
-        if (
-          e instanceof TypeError ||
-          (e instanceof Error && e.name === 'TimeoutError')
-        )
+        // Connection or server trouble: stop this pass quietly. Everything
+        // stays queued on this device and retries on the next pass.
+        if (isTransient(e)) {
+          this.unreachable = true;
           break;
+        }
+        const message = syncError(e);
+        if (message === signInMessage) {
+          issues.add(message);
+          break;
+        }
+        // A change the server refused belongs to one item; name it.
+        const title = this.data.records.find(
+          (item) => item.id === op.entityId,
+        )?.title;
+        issues.add(
+          title ? `“${title}” could not be synced: ${message}` : message,
+        );
       }
     }
   }
   private async pullChanges() {
     const r = await fetch('/api/sync', { signal: AbortSignal.timeout(20000) });
-    if (!r.ok)
-      throw new Error(
-        r.status === 401
-          ? 'Please sign in again to sync.'
-          : 'Could not reach Launch. Your changes are saved on this device.',
-      );
-    const remote = (await r.json()) as {
+    if (r.status === 401) throw new Error(signInMessage);
+    if (!r.ok) throw new TransientSyncError();
+    const remote = await readResult<{
       records: Entity[];
       files: FileMeta[];
       removed?: Cache['removed'];
-    };
+    }>(r);
     this.data = mergeCache(this.data, this.data, {
       ...this.data,
       removed: remote.removed,
@@ -1012,9 +1221,23 @@ export class LaunchStore {
     this.lastSync = now();
     await this.persist();
   }
+  // Count a failed upload. After three failed reads (or one permanent
+  // rejection) it stops retrying automatically and asks for a decision.
+  private markUploadFailure(fileId: string, problem: string, final = false) {
+    this.data.uploads = this.data.uploads.map((upload) => {
+      if (upload.meta.id !== fileId) return upload;
+      const failures = final ? 3 : (upload.failures || 0) + 1;
+      return {
+        ...upload,
+        failures,
+        problem: failures >= 3 ? problem : upload.problem,
+      };
+    });
+  }
   private async performSync() {
     this.syncing = true;
     this.error = '';
+    this.unreachable = false;
     this.emit();
     const issues = new Set<string>();
     try {
@@ -1029,7 +1252,11 @@ export class LaunchStore {
         return; // The next immediate pass sends edits made during the refresh.
       }
       this.uploadPhaseOperations = recordIds;
-      const uploads = this.data.uploads.slice();
+      const retryProblems = this.retryProblemUploads;
+      this.retryProblemUploads = false;
+      const uploads = this.data.uploads.filter(
+        (upload) => retryProblems || !upload.problem,
+      );
       for (const item of uploads) {
         const controller = new AbortController();
         this.uploadController = controller;
@@ -1054,13 +1281,22 @@ export class LaunchStore {
               ...this.data,
               removed: { records: [], files: [item.meta.id] },
             });
+          } else if (r.status === 401) {
+            throw new Error(signInMessage);
+          } else if (!r.ok) {
+            if (r.status >= 500) throw new TransientSyncError();
+            const body = (await r.json().catch(() => ({}))) as {
+              error?: string;
+            };
+            // Safari can send an empty upload that the server refuses, so a
+            // refusal is retried; only "too large" is final straight away.
+            this.markUploadFailure(
+              item.meta.id,
+              body.error || 'The server did not accept this attachment.',
+              r.status === 413,
+            );
           } else {
-            if (!r.ok)
-              throw new Error(
-                ((await r.json()) as { error: string }).error ||
-                  'Upload failed',
-              );
-            const meta = (await r.json()) as FileMeta;
+            const meta = await readResult<FileMeta>(r);
             this.data.uploads = this.data.uploads.filter(
               (upload) => upload.meta.id !== meta.id,
             );
@@ -1073,7 +1309,17 @@ export class LaunchStore {
           // New task changes take priority. Retain the original and ID so even
           // an upload whose response was interrupted can retry idempotently.
           if (controller.signal.aborted) break;
-          issues.add('An attachment is waiting to upload. ' + syncError(e));
+          if (e instanceof UnreadableAttachmentError) {
+            this.markUploadFailure(item.meta.id, e.message);
+            await this.persist();
+            continue;
+          }
+          if (isTransient(e)) {
+            this.unreachable = true;
+            break;
+          }
+          issues.add(syncError(e));
+          if (syncError(e) === signInMessage) break;
         } finally {
           this.uploadController = null;
         }
@@ -1084,11 +1330,39 @@ export class LaunchStore {
       }
       this.error = [...issues].join(' ');
     } catch (e) {
-      this.error = syncError(e);
+      if (isTransient(e)) {
+        this.unreachable = true;
+        this.error = [...issues].join(' ');
+      } else this.error = syncError(e);
     } finally {
       this.syncing = false;
       this.emit();
     }
+  }
+}
+const signInMessage = 'Please sign in again to sync.';
+// Connection or server-side trouble that a later pass can fix by itself.
+class TransientSyncError extends Error {
+  constructor() {
+    super('Could not reach Launch. Your changes are saved on this device.');
+    this.name = 'TransientSyncError';
+  }
+}
+function isTransient(e: unknown) {
+  return (
+    e instanceof TypeError ||
+    (e instanceof Error &&
+      ['TimeoutError', 'AbortError', 'TransientSyncError'].includes(e.name))
+  );
+}
+// Server faults and non-JSON replies (for example an HTML gateway error) are
+// connection trouble, not a problem with the change itself.
+async function readResult<T>(r: Response): Promise<T> {
+  if (r.status >= 500) throw new TransientSyncError();
+  try {
+    return (await r.json()) as T;
+  } catch {
+    throw new TransientSyncError();
   }
 }
 function syncError(e: unknown) {
@@ -1104,6 +1378,7 @@ export function useLaunchStore(account: string) {
     ...empty(),
     ready: false,
     syncing: false,
+    syncState: 'connecting',
     status: 'Connecting…',
     error: '',
     lastSync: '',

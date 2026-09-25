@@ -114,7 +114,12 @@ export type Operation = {
   patch: Partial<Entity>;
   base: Partial<Entity>;
   createdAt: string;
+  // Comma-separated field names when the server reported a genuine conflict.
   conflict?: string;
+  // Server version and values at the time of the conflict, used to describe it
+  // and to re-check it automatically once the server copy changes.
+  conflictVersion?: number;
+  conflictRemote?: Partial<Entity>;
 };
 export type ReportOptions = {
   meetingDate: string;
@@ -887,27 +892,253 @@ export function spawnOccurrence(t: Entity, date: string): Entity {
     if (t[key]) copy[key] = addDays(t[key]!, delta);
   return copy;
 }
-export function mergePatch(current: Entity | undefined, op: Operation) {
-  const conflicts = Object.keys(op.patch).filter((key) => {
-    if (['updatedAt', 'version'].includes(key)) return false;
+// Field comparison for sync. Older records omit fields that newer code writes
+// as '', null, false or [], so a missing value and an empty value are the same
+// state. Only includeNotesInReport treats a missing value as true.
+const missingMeansTrue = new Set<string>(['includeNotesInReport']);
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+function isEmptyValue(value: unknown) {
+  return (
+    value === undefined ||
+    value === null ||
+    value === '' ||
+    value === false ||
+    (Array.isArray(value) && !value.length) ||
+    (isPlainObject(value) && !Object.keys(value).length)
+  );
+}
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (isPlainObject(value))
+    return `{${Object.keys(value)
+      .filter((key) => value[key] !== undefined)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`)
+      .join(',')}}`;
+  return JSON.stringify(value) ?? 'null';
+}
+function sameFieldValue(key: string, a: unknown, b: unknown) {
+  if (missingMeansTrue.has(key))
+    return (a ?? true) === (b ?? true) || canonical(a) === canonical(b);
+  if (isEmptyValue(a) || isEmptyValue(b))
+    return isEmptyValue(a) && isEmptyValue(b);
+  return canonical(a) === canonical(b);
+}
+// Unordered ID lists: additions and removals from both devices combine.
+const setFields = new Set<string>(['files', 'excludedDates']);
+// Keyed maps (month → note, file → label): merge each entry independently.
+const mapFields = new Set<string>(['monthlyNotes', 'fileLabels']);
+// Timestamps that record an action. When both devices took the same action
+// (completed, trashed, dismissed a reminder), the first recorded time stands.
+const eventFields = new Set<string>([
+  'completedAt',
+  'deletedAt',
+  'reminderAcknowledgedAt',
+]);
+// Display order only. The latest arrangement wins rather than asking.
+const lastWriterFields = new Set<string>(['order']);
+function mergeSet(current: unknown, base: unknown, patch: unknown) {
+  const list = (value: unknown) =>
+    Array.isArray(value) ? (value as unknown[]) : [];
+  const before = new Set(list(base).map(canonical));
+  const after = new Set(list(patch).map(canonical));
+  const removed = new Set([...before].filter((item) => !after.has(item)));
+  const merged = list(current).filter((item) => !removed.has(canonical(item)));
+  const present = new Set(merged.map(canonical));
+  for (const item of list(patch))
+    if (!before.has(canonical(item)) && !present.has(canonical(item))) {
+      merged.push(item);
+      present.add(canonical(item));
+    }
+  return merged;
+}
+// On an entry both devices changed differently: report a conflict (null), or
+// take this device's or the other device's value.
+type MapPreference = 'conflict' | 'mine' | 'theirs';
+function mergeMap(
+  key: string,
+  current: unknown,
+  base: unknown,
+  patch: unknown,
+  prefer: MapPreference,
+) {
+  const map = (value: unknown) => (isPlainObject(value) ? value : {});
+  const merged: Record<string, unknown> = { ...map(current) };
+  const before = map(base),
+    after = map(patch);
+  for (const entry of new Set([
+    ...Object.keys(before),
+    ...Object.keys(after),
+  ])) {
+    if (sameFieldValue(key, after[entry], before[entry])) continue;
+    if (
+      !sameFieldValue(key, merged[entry], before[entry]) &&
+      !sameFieldValue(key, merged[entry], after[entry])
+    ) {
+      if (prefer === 'conflict') return null;
+      if (prefer === 'theirs') continue;
+    }
+    if (after[entry] === undefined) delete merged[entry];
+    else merged[entry] = after[entry];
+  }
+  return merged;
+}
+// Three-way, field-level merge of one queued change into a record. A field
+// conflicts only when this device and another both changed it from the same
+// starting value to different results. A device that simply had an older copy
+// never conflicts, and fields it did not change are never overwritten.
+// With preferMine, conflicting fields take this device's value (used to show
+// pending edits locally); otherwise they are reported as conflicts.
+function mergeFields(current: Entity, op: Operation, preferMine: boolean) {
+  const creating = !Object.keys(op.base).length;
+  const applied: Record<string, unknown> = {};
+  const conflicts: string[] = [];
+  for (const key of Object.keys(op.patch)) {
+    if (['updatedAt', 'version', 'id', 'kind'].includes(key)) continue;
     const k = key as keyof Entity;
-    return (
-      current &&
-      JSON.stringify(current[k]) !== JSON.stringify(op.base[k]) &&
-      JSON.stringify(current[k]) !== JSON.stringify(op.patch[k])
-    );
-  });
+    const mine = op.patch[k],
+      theirs = current[k],
+      base = op.base[k];
+    // A replayed creation only fills gaps; it never undoes later changes.
+    if (creating) {
+      if (isEmptyValue(theirs) && !isEmptyValue(mine)) applied[key] = mine;
+      continue;
+    }
+    if (
+      sameFieldValue(key, theirs, base) ||
+      sameFieldValue(key, theirs, mine)
+    ) {
+      applied[key] = mine;
+      continue;
+    }
+    // Changed elsewhere but not here: keep the newer value.
+    if (sameFieldValue(key, mine, base)) continue;
+    if (setFields.has(key)) {
+      applied[key] = mergeSet(theirs, base, mine);
+      continue;
+    }
+    if (mapFields.has(key)) {
+      const merged = mergeMap(
+        key,
+        theirs,
+        base,
+        mine,
+        preferMine ? 'mine' : 'conflict',
+      );
+      if (merged) applied[key] = merged;
+      else conflicts.push(key);
+      continue;
+    }
+    if (eventFields.has(key) && !isEmptyValue(theirs) && !isEmptyValue(mine))
+      continue;
+    if (lastWriterFields.has(key) || preferMine) {
+      applied[key] = mine;
+      continue;
+    }
+    conflicts.push(key);
+  }
+  return { applied: applied as Partial<Entity>, conflicts };
+}
+export function mergePatch(current: Entity | undefined, op: Operation) {
+  if (!current)
+    return {
+      conflicts: [] as string[],
+      entity: {
+        ...op.patch,
+        id: op.entityId,
+        kind: op.kind,
+        updatedAt: now(),
+      } as Entity,
+    };
+  const { applied, conflicts } = mergeFields(current, op, false);
   if (conflicts.length) return { conflicts, entity: current };
   return {
-    conflicts: [],
+    conflicts,
     entity: {
       ...current,
-      ...op.patch,
+      ...applied,
       id: op.entityId,
       kind: op.kind,
       updatedAt: now(),
     } as Entity,
   };
+}
+// The fields a pending change will set on this record, with this device's
+// value shown where the two devices disagree.
+export function pendingFields(current: Entity, op: Operation) {
+  return mergeFields(current, op, true).applied;
+}
+// Fields a queued change actually changes (ignoring bookkeeping fields).
+export function changedFields(op: Operation) {
+  const creating = !Object.keys(op.base).length;
+  return Object.keys(op.patch).filter(
+    (key) =>
+      !['updatedAt', 'version', 'id', 'kind'].includes(key) &&
+      (creating ||
+        !sameFieldValue(
+          key,
+          op.patch[key as keyof Entity],
+          op.base[key as keyof Entity],
+        )),
+  );
+}
+export function conflictFields(op: Operation) {
+  return (op.conflict || '')
+    .split(',')
+    .map((key) => key.trim())
+    .filter((key) => key && key !== 'Record');
+}
+export function withoutConflict(op: Operation): Operation {
+  return {
+    ...op,
+    conflict: undefined,
+    conflictVersion: undefined,
+    conflictRemote: undefined,
+  };
+}
+// "Keep this device's version": re-base only the conflicting fields on the
+// server's current values. Other fields keep their original base, so changes
+// made elsewhere to fields this device did not touch are never overwritten.
+export function keepMine(current: Entity | undefined, op: Operation) {
+  const patch = { ...op.patch } as Record<string, unknown>,
+    base = { ...op.base } as Record<string, unknown>;
+  for (const key of conflictFields(op)) {
+    const theirs = current?.[key as keyof Entity];
+    if (mapFields.has(key))
+      patch[key] = mergeMap(key, theirs, base[key], patch[key], 'mine');
+    base[key] = theirs;
+  }
+  return withoutConflict({
+    ...op,
+    patch: patch as Partial<Entity>,
+    base: base as Partial<Entity>,
+  });
+}
+// "Use the other device's version": drop only the conflicting changes. For a
+// keyed map, entries only this device changed are still kept.
+export function takeTheirs(current: Entity | undefined, op: Operation) {
+  const patch = { ...op.patch } as Record<string, unknown>,
+    base = { ...op.base } as Record<string, unknown>;
+  for (const key of conflictFields(op)) {
+    const theirs = current?.[key as keyof Entity];
+    if (mapFields.has(key)) {
+      patch[key] = mergeMap(key, theirs, base[key], patch[key], 'theirs');
+      base[key] = theirs;
+    } else {
+      delete patch[key];
+      delete base[key];
+    }
+  }
+  return withoutConflict({
+    ...op,
+    patch: patch as Partial<Entity>,
+    base: base as Partial<Entity>,
+  });
+}
+export function isMapField(key: string) {
+  return mapFields.has(key);
 }
 export const kinds: Kind[] = [
   'task',

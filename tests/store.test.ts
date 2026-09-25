@@ -592,7 +592,10 @@ void test('offline note and photo survive restart, sync once, and retain conflic
   online = true;
   await restarted.sync();
   assert.equal(restarted.syncing, false);
-  assert.match(restarted.error, /timed out/i);
+  // A timeout is connection trouble, not a warning: it retries quietly.
+  assert.equal(restarted.error, '');
+  assert.equal(restarted.snapshot().syncState, 'offline');
+  assert.match(restarted.snapshot().status, /reach Launch/);
   assert.equal(restarted.data.queue.length, 1);
   assert.equal(restarted.data.records[0].notes, 'Retain this during a timeout');
   globalThis.fetch = fetchSuccess;

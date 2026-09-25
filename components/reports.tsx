@@ -137,9 +137,10 @@ export function Reports({
     setSaving(true);
     setError('');
     try {
-      if (store.data.queue.length || store.data.uploads.length || store.error)
+      const waiting = store.unsyncedReason();
+      if (waiting)
         throw new Error(
-          'Finish syncing before saving a copy online. You can still print or download this preview.',
+          `${waiting} You can still print or download this preview.`,
         );
       saveId.current ||= preview.savedId || uid();
       const r = await fetch('/api/reports', {
