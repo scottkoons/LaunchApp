@@ -2,6 +2,71 @@
 
 Notable changes to Launch, newest first. Each entry lists what changed, why, and where, so a person or coding agent can pick up the context without rereading the code.
 
+## 2026-09-25: Reliable cross-device sync
+
+Goal: the cloud is the shared copy, a change on either device reaches the other automatically, and Scott only sees a conflict when the same field of the same item really was changed on both devices before either heard about the other. Design notes are in `docs/sync-reliability.md`.
+
+### Root causes found
+
+- **Missing versus empty values.** `mergePatch` compared fields with `JSON.stringify`, so a field that was never set (`undefined`) and the same field written as `''`, `null`, `false` or `[]` (by undo, restore, migrations or defaults) looked like two different edits. A device with an older copy then raised false conflicts, most visibly on `completedAt`.
+- **The same action on both devices.** Completing, trashing or dismissing a reminder on both devices recorded two timestamps and was reported as a conflict.
+- **Whole-field lists and maps.** `files` and `monthlyNotes` (and `fileLabels`) were compared as a single value, so adding different attachments, or editing different months' notes, on two devices always conflicted. Applying one side could also overwrite the other month's note.
+- **Conflicts never cleared.** A flagged change stayed until resolved by hand, even after the other device settled it.
+- **"Keep this version" replaced the whole base.** It re-based every field on the server copy, which could overwrite the other device's newer values for fields this device did not change, and for list and map fields.
+- **One unreadable attachment made the app look permanently unsynced.** A saved original that iPhone storage could no longer read (`The saved attachment could not be read`) retried on every pass and wrote into the single global sync error. That error outranked every other status and also blocked backups, saving reports online and permanent deletion.
+- **Internal field names in the UI** ("Another device changed completedAt, status").
+
+### Behavior changes
+
+- **Field-level three-way merge** (`lib/model.ts`, `mergePatch` and the shared `mergeFields`):
+  - A field conflicts only when both devices changed it from the same starting value to different values.
+  - Missing and empty values are the same state; `includeNotesInReport` is the one field where missing means true.
+  - Object comparison ignores key order.
+  - `files` and `excludedDates` merge as sets, so additions and removals from both devices combine.
+  - `monthlyNotes` and `fileLabels` merge per entry and conflict only on the same entry.
+  - `completedAt`, `deletedAt` and `reminderAcknowledgedAt` keep the first recorded time when both devices took the same action.
+  - `order` is last-writer-wins.
+  - A replayed creation only fills empty fields and never undoes later changes.
+  - Fields a change did not modify are never overwritten.
+- **Local display uses the same merge.** `pendingRecord` (`lib/sync-records.ts`) overlays only fields this device actually changed, combined the way the server will combine them. The existing protections are unchanged.
+- **Conflicts re-check themselves** (`lib/client-store.ts`, `pushChanges`):
+  - Each conflict saves the server version and the other device's values.
+  - It is not resent every pass. It is checked again once the server copy changes, and conflicts saved by the previous version of Launch are re-checked once.
+  - Conflicts the new merge no longer considers conflicts clear without any prompt.
+- **Safer resolution** (`keepMine` and `takeTheirs` in `lib/model.ts`):
+  - "Keep this device's version" re-bases only the conflicting fields, and keeps map entries only this device changed.
+  - "Use the other device's version" drops only the conflicting changes. The rest of the same edit, and later queued edits to the item, still sync.
+- **Attachment recovery** (`lib/client-store.ts`, `lib/upload-blob.ts`):
+  - A read failure raises `UnreadableAttachmentError`, distinct from network trouble. A missing blob is treated the same way.
+  - After three failed reads, or a "too large" refusal, the upload stops retrying and is marked with a plain-language `problem`. Other server refusals are retried, because Safari can send an empty upload.
+  - A stopped upload gets one more attempt each time Launch opens, or on "Try again".
+  - "Remove attachment" removes only that file's reference, from queued changes, local records and (when needed) the server copy. The item and every other change are kept.
+  - One bad attachment no longer sets the global error or blocks unrelated items.
+- **Sync status** (`SyncState` in `lib/client-store.ts`) distinguishes connecting, offline, syncing, pending, synced, conflict, attachment and error:
+  - Only conflict, attachment and error show the "Review sync" banner.
+  - Timeouts, network failures, 5xx replies and non-JSON replies are quiet connection trouble ("Can't reach Launch · saved on this device"), retried automatically.
+  - A change the server refuses names the item.
+  - Waiting attachments are described as attachments.
+- **Plain-language review UI** (`lib/sync-status.ts`, `app/launch.tsx`):
+  - Conflicts read like "This task was marked complete on your other device." or "It was renamed “…” on your other device."
+  - An attachment problem names the file and the items it belongs to, with Try again and Remove attachment actions.
+  - Buttons read "Keep this device's version" and "Use the other device's version".
+  - The upload hint appears only while something is uploading.
+- **Pending-work checks** use `store.unsyncedReason()` for backup, saving a report online and permanent deletion, which explains what to fix.
+
+### Tests
+
+- `tests/sync-devices.test.ts` (new, in `npm test`) runs two independent device stores through a fake server that applies the real merge, validation, versions and receipts. It covers create, edit and edit back; completion and deletion in both directions and on both devices at once; a stale completion after a reopen; stale edits to different fields, attachments and month notes; genuine same-field conflicts, their wording and both resolutions; a conflict that clears itself; offline edit then reconnect; attachment upload; unreadable and missing attachments, including recovery and the startup retry; reminder fields; and old saved conflicts.
+  - Against the previous merge, tests 4, 4b, 5, 6 and the saved-conflict re-check fail. They pass with this change.
+- `tests/sync-api.test.ts` gains a second test running the same Mac and iPhone scenarios against the real Worker with local D1 and R2, including attachments, an unreadable attachment and reminders.
+- `tests/store.test.ts`: a timeout now reports the quiet `offline` state instead of an error.
+
+### Known and not changed
+
+- **Attachments on the same item wait together.** A good attachment added in the same change as a bad one uploads, but its reference on that item waits until the bad one is removed. Other items are unaffected.
+- **Settings records.** A device that saves a setting before its first sync can create a second settings record, because settings use a random ID.
+- **Banner styling.** The "Review sync" banner text has low contrast in the dark theme; its styling was not changed here.
+
 ## 2026-09-25: Code review fixes
 
 Branch `claude/codebase-review-wzqyia`, pull request #1. A full review found no cross-account data exposure; the fixes below address offline data safety, time zones, error handling and request limits.
