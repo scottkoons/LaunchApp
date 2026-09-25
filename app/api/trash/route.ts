@@ -6,6 +6,7 @@ import {
   failure,
   originGuard,
 } from '@/lib/server';
+import { limitedText } from '@/lib/body-limit';
 import {
   purgeTrash,
   cleanupPurgedFiles,
@@ -16,8 +17,8 @@ export async function DELETE(request: Request) {
   try {
     originGuard(request);
     const user = await owner();
-    const raw = await request.text();
-    if (raw.length > 100000)
+    const raw = await limitedText(request, 100000 * 4);
+    if (raw === null || raw.length > 100000)
       return json({ error: 'Selection too large.' }, 413);
     const input = JSON.parse(raw);
     if (

@@ -1,5 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { owner, originGuard, database, json, failure } from '@/lib/server';
+import { limitedText } from '@/lib/body-limit';
 import { now, uid } from '@/lib/model';
 import {
   publicReader,
@@ -14,9 +15,15 @@ export async function POST(request: Request) {
   try {
     originGuard(request);
     const user = await owner();
-    const raw = await request.text();
-    if (raw.length > 8000)
-      return json({ error: 'Keep the command under 2,000 characters.' }, 413);
+    const raw = await limitedText(request, 8000 * 4);
+    if (raw === null || raw.length > 8000)
+      return json(
+        {
+          error:
+            'This request is too large. Shorten the command and try again.',
+        },
+        413,
+      );
     const input = JSON.parse(raw);
     if (!input || typeof input !== 'object')
       return json({ error: 'Enter a website and a command.' }, 400);

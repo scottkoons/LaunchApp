@@ -97,8 +97,14 @@ def convert(source, output):
         if root:
             anchor = root['draft_due'] or root['final_due']
             config = json.loads(root['repeat_config'] or '{}')
+            # Only derive the weekday when it is missing; a root with no due date has no anchor.
+            weekday = config.get('dayOfWeek')
+            if weekday is None:
+                weekday = dt.date.fromisoformat(anchor or today).isoweekday() % 7
+            if not anchor:
+                adjustments.append(dict(record=e['id'], reason='Recurring root has no due date; weekday taken from import date'))
             e.update(seriesId=eid('tasks', root['id']), occurrence=r['draft_due'] or r['final_due'] or '',
-                     repeatAnchor=anchor, repeat=root['repeat'], repeatDays=[config.get('dayOfWeek', dt.date.fromisoformat(anchor).isoweekday() % 7)],
+                     repeatAnchor=anchor, repeat=root['repeat'], repeatDays=[weekday],
                      repeatFrom=today, repeatUntil=root.get('repeat_until') or '', excludedDates=json.loads(root.get('excluded_dates') or '[]'))
         e['legacy']['campaigns'] = [campaign_names[x['campaign_id']] for x in data.get('task_campaigns', []) if x['task_id'] == r['id']]
 

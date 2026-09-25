@@ -4,7 +4,7 @@ import {
   type VapidKeys,
 } from '@block65/webcrypto-web-push';
 import { reminderPending } from './reminders';
-import type { Entity } from './model';
+import { zonedDay, type Entity } from './model';
 
 export type PhonePush = {
   title: string;
@@ -229,9 +229,23 @@ export async function dispatchPhoneAlerts(
                 .run();
               return;
             }
+            const dueZone = item.dueZone || item.reminderZone || 'UTC';
+            // Name the day when the item is scheduled for a different day
+            // than the alert, so "9:00 AM" is not read as today.
+            const otherDay =
+              item.dueAt &&
+              zonedDay(dueZone, new Date(item.dueAt)) !==
+                zonedDay(dueZone, new Date(job.reminder_at));
             const dueTime = item.dueAt
               ? new Intl.DateTimeFormat('en-US', {
-                  timeZone: item.dueZone || item.reminderZone || 'UTC',
+                  timeZone: dueZone,
+                  ...(otherDay
+                    ? {
+                        weekday: 'short' as const,
+                        month: 'short' as const,
+                        day: 'numeric' as const,
+                      }
+                    : {}),
                   hour: 'numeric',
                   minute: '2-digit',
                 }).format(new Date(item.dueAt))

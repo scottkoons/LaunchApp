@@ -2,11 +2,13 @@ import {
   owner,
   database,
   bucket,
+  keepStoredFile,
   json,
   failure,
   originGuard,
 } from '@/lib/server';
 import { now } from '@/lib/model';
+import { limitedBody } from '@/lib/body-limit';
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -27,16 +29,13 @@ export async function POST(
       .bind(user, key)
       .first();
     if (prior) return json({ id: key });
-    const bytes = await request.arrayBuffer();
-    if (
-      bytes.byteLength > 20 * 1024 * 1024 ||
-      new TextDecoder().decode(bytes.slice(0, 5)) !== '%PDF-'
-    )
+    const bytes = await limitedBody(request, 20 * 1024 * 1024);
+    if (!bytes || new TextDecoder().decode(bytes.slice(0, 5)) !== '%PDF-')
       throw new Error('Invalid report PDF');
     await bucket().put(`${user}/${key}`, bytes, {
       httpMetadata: { contentType: 'application/pdf' },
     });
-    await database()
+    const inserted = await database()
       .prepare(
         'INSERT OR IGNORE INTO files(owner,id,name,type,size,created_at) VALUES(?,?,?,?,?,?)',
       )
@@ -49,6 +48,8 @@ export async function POST(
         now(),
       )
       .run();
+    if (!(await keepStoredFile(user, key, inserted.meta.changes)))
+      return json({ error: 'This report was permanently deleted.' }, 410);
     return json({ id: key });
   } catch (e) {
     return failure(e);

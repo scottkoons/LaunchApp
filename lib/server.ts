@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { getChatGPTUser } from '@/app/chatgpt-auth';
 import {
-  day,
+  zonedDay,
   recurrenceDates,
   spawnOccurrence,
   planningMonths,
@@ -16,6 +16,22 @@ export function database() {
 export function bucket() {
   return env.FILES as R2Bucket;
 }
+// Files are stored before their row. When the insert was skipped because the
+// ID was purged meanwhile, remove the object so it does not linger unowned.
+export async function keepStoredFile(
+  user: string,
+  id: string,
+  changes: number,
+) {
+  if (changes) return true;
+  const row = await database()
+    .prepare('SELECT id FROM files WHERE owner=? AND id=?')
+    .bind(user, id)
+    .first();
+  if (row) return true;
+  await bucket().delete(`${user}/${id}`);
+  return false;
+}
 export async function owner() {
   const user = await getChatGPTUser();
   if (!user) throw new Error('SIGN_IN');
@@ -28,19 +44,32 @@ export function originGuard(request: Request) {
 }
 export const json = (data: unknown, status = 200) =>
   Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
+// Storage and runtime faults are ours, not the caller's. Report them as 500 so
+// clients retry, and keep internal messages out of the response.
+function serverFault(e: unknown) {
+  return (
+    e instanceof Error &&
+    (/^(D1_|SQLITE_)/.test(e.message) ||
+      /internal error|network connection lost/i.test(e.message) ||
+      e instanceof ReferenceError)
+  );
+}
 export function failure(e: unknown) {
   const msg = e instanceof Error ? e.message : 'Something went wrong';
-  return json(
-    {
-      error:
-        msg === 'SIGN_IN'
-          ? 'Please sign in again.'
-          : msg === 'BAD_ORIGIN'
-            ? 'Request origin rejected.'
-            : msg,
-    },
-    msg === 'SIGN_IN' ? 401 : msg === 'BAD_ORIGIN' ? 403 : 400,
-  );
+  if (msg === 'SIGN_IN') return json({ error: 'Please sign in again.' }, 401);
+  if (msg === 'BAD_ORIGIN')
+    return json({ error: 'Request origin rejected.' }, 403);
+  if (serverFault(e) || !(e instanceof Error)) {
+    console.error(e);
+    return json({ error: 'Launch had a server problem. Try again.' }, 500);
+  }
+  // Malformed JSON or missing fields surface as parser/runtime errors whose
+  // text describes our code, not the request.
+  if (e instanceof SyntaxError || e instanceof TypeError) {
+    console.error(e);
+    return json({ error: 'Invalid request.' }, 400);
+  }
+  return json({ error: msg }, 400);
 }
 export async function allRecords(user: string) {
   const rows = await database()
@@ -73,7 +102,7 @@ export async function allRecords(user: string) {
   }
   const months = planningMonths(
     list.filter((e) => e.kind === 'task'),
-    day(),
+    zonedDay(),
     list.find((e) => e.kind === 'settings' && !e.deletedAt)?.monthlyNotes,
   );
   const ids = new Set(list.map((e) => e.id));

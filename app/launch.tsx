@@ -1,4 +1,5 @@
 'use client';
+import { readLocal, removeLocal, writeLocal } from '@/lib/local-storage';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { PersonalTodos } from '@/components/personal-todos';
 import { TodoEditor } from '@/components/todo-editor';
@@ -236,7 +237,7 @@ export default function Launch({
     };
   }, []);
   useEffect(() => {
-    if (ready) localStorage.setItem('launch-task-sort-v2', sort);
+    if (ready) writeLocal('launch-task-sort-v2', sort);
   }, [sort, ready]);
   const previousTasks = useRef<Entity[] | null>(null);
   useEffect(() => {
@@ -262,11 +263,11 @@ export default function Launch({
     setIsApple(/Mac|iPhone|iPad|iPod/.test(navigator.platform));
     let savedTheme = null;
     try {
-      setSidebarOpen(localStorage.getItem('launch-sidebar-open') !== 'false');
-      const savedRatio = Number(localStorage.getItem('launch-column-ratio'));
+      setSidebarOpen(readLocal('launch-sidebar-open') !== 'false');
+      const savedRatio = Number(readLocal('launch-column-ratio'));
       if (savedRatio >= 0.1 && savedRatio <= 0.9) setColumnRatio(savedRatio);
-      setSort(localStorage.getItem('launch-task-sort-v2') || 'next');
-      savedTheme = localStorage.getItem(appearanceKey(navigator.userAgent));
+      setSort(readLocal('launch-task-sort-v2') || 'next');
+      savedTheme = readLocal(appearanceKey(navigator.userAgent));
     } catch {}
     const t = resolveAppearance(navigator.userAgent, savedTheme);
     setTheme(t);
@@ -307,7 +308,7 @@ export default function Launch({
     setTheme(t);
     document.documentElement.dataset.theme = t;
     try {
-      localStorage.setItem(appearanceKey(navigator.userAgent), t);
+      writeLocal(appearanceKey(navigator.userAgent), t);
     } catch {}
   }
   const appearance = APPEARANCES.find(({ value }) => value === theme)!;
@@ -323,9 +324,10 @@ export default function Launch({
     setQuery('');
     setFilter('all');
   }
-  const addTaskFromShortcut = useEffectEvent(() => {
-    if (!editorOpen && !captureOpen && !syncOpen) add('task');
-  });
+  const dialogOpen = useEffectEvent(
+    () => editorOpen || captureOpen || syncOpen,
+  );
+  const addTaskFromShortcut = useEffectEvent(() => add('task'));
   useEffect(() => {
     const handle = (e: KeyboardEvent) => {
       const editing = e
@@ -343,6 +345,8 @@ export default function Launch({
         !e.altKey &&
         e.key.toLowerCase() === 't'
       ) {
+        // Leave the browser's own shortcut alone when no task will be added.
+        if (dialogOpen()) return;
         e.preventDefault();
         if (!e.repeat) addTaskFromShortcut();
         return;
@@ -363,7 +367,14 @@ export default function Launch({
         e.preventDefault();
         searchRef.current?.focus();
       }
-      if (!editing && e.key === 'n') {
+      if (
+        !editing &&
+        e.key === 'n' &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        !dialogOpen()
+      ) {
         e.preventDefault();
         setCaptureOpen(true);
       }
@@ -682,7 +693,7 @@ export default function Launch({
       ratio={columnRatio}
       setRatio={(ratio) => {
         setColumnRatio(ratio);
-        localStorage.setItem('launch-column-ratio', String(ratio));
+        writeLocal('launch-column-ratio', String(ratio));
       }}
       onSort={sortBy}
       onOpen={open}
@@ -808,7 +819,7 @@ export default function Launch({
       open={sidebarOpen}
       onOpenChange={(open) => {
         setSidebarOpen(open);
-        localStorage.setItem('launch-sidebar-open', String(open));
+        writeLocal('launch-sidebar-open', String(open));
       }}
       style={
         {
@@ -1789,9 +1800,9 @@ export default function Launch({
               const key = `launch-capture-${account}-${scope}`;
               let draft: { text?: string; ids?: string[] } = {};
               try {
-                draft = JSON.parse(localStorage.getItem(key) || '{}');
+                draft = JSON.parse(readLocal(key) || '{}');
               } catch {}
-              localStorage.setItem(
+              writeLocal(
                 key,
                 JSON.stringify({
                   ...draft,
@@ -2199,7 +2210,7 @@ function MonthlyNote({
     };
   }, []);
   useEffect(() => {
-    const draft = localStorage.getItem(key);
+    const draft = readLocal(key);
     if (draft !== null) {
       setText(draft);
       latest.current = draft;
@@ -2236,7 +2247,7 @@ function MonthlyNote({
       baseline.current = value;
       if (latest.current === value) {
         dirty.current = false;
-        localStorage.removeItem(key);
+        removeLocal(key);
         setMessage('Saved on this device · sync status above');
       }
     } catch {
@@ -2265,7 +2276,7 @@ function MonthlyNote({
           setText(value);
           latest.current = value;
           dirty.current = true;
-          localStorage.setItem(key, value);
+          writeLocal(key, value);
           setMessage('Saving…');
           if (timer.current) clearTimeout(timer.current);
           timer.current = setTimeout(() => void save(value), 600);
