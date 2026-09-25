@@ -1,4 +1,4 @@
-import type { Entity, Operation } from './model';
+import { pendingFields, type Entity, type Operation } from './model';
 
 const attachmentFields = [
   'files',
@@ -50,7 +50,9 @@ export function hasAttachmentChanges(op: Operation) {
 }
 
 export function pendingRecord(record: Entity, op: Operation): Entity {
-  const patch = { ...op.patch };
+  // Only fields this device actually changed overlay the incoming record, and
+  // they combine with it the same way the server will merge them.
+  const patch = pendingFields(record, op);
   // A stale create/edit must not visually restore an item completed or trashed
   // elsewhere. An explicit undo based on that state still appears immediately.
   for (const key of [
