@@ -486,17 +486,19 @@ export default function Launch({
   }
   useEffect(() => {
     if (!ready) return;
+    // ?reminder= comes from phone alerts; ?item= from agent links.
     const url = new URL(location.href),
-      id = url.searchParams.get('reminder');
+      id = url.searchParams.get('item') || url.searchParams.get('reminder');
     if (!id) return;
     const item = records.find(
       (record) => record.id === id && !record.deletedAt,
     );
     if (!item) return;
     setScope(item.scope);
-    setView('tasks');
+    if (item.kind === 'task') setView('tasks');
     setEditor(item);
     setEditorOpen(true);
+    url.searchParams.delete('item');
     url.searchParams.delete('reminder');
     history.replaceState(null, '', url.pathname + url.search + url.hash);
   }, [ready, records]);

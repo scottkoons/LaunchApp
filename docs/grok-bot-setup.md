@@ -13,7 +13,13 @@ after moving the proxy into durable storage. No test tasks or notes were added.
 - Command: `python3`.
 - Arguments: `["/home/box/agent-data/launch-mcp/run_from_box_secrets.py"]`.
 - Remote endpoint: `https://launch-scott-planner.scottkoons.chatgpt.site/api/mcp`.
-- Tools: `get_launch_context`, `add_task`, `add_note`, `add_agenda_item`.
+- Tools (originally four): `get_launch_context`, `add_task`, `add_note`,
+  `add_agenda_item`. Since the full read and write release, also `list_tasks`,
+  `list_notes`, `list_agenda_items`, `get_item`, `search_items`,
+  `update_task`, `update_note`, `update_agenda_item`, `delete_item` and
+  `restore_item` (see [the API notes](agent-connection.md)). The proxy passes
+  tools through unchanged; after deploying, refresh or reconnect the Launch
+  connector in Grok Bot so it discovers the new tools.
 
 The connector is registered to Scott's account and can be used by his other
 agents. The proxy lives under `/home/box/agent-data`, outside temporary
@@ -64,4 +70,4 @@ After reinstalling or changing the connector, verify tool discovery and call
 `get_launch_context` before reporting it connected. Only create records when
 the user requests them. See [the API notes](agent-connection.md) for permissions,
 idempotency, reminders, and revocation. Disconnecting the connection in Launch
-Settings revokes its ability to create more items.
+Settings revokes its ability to read or change items.
