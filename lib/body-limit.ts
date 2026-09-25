@@ -1,8 +1,8 @@
 // Read a request body without trusting Content-Length. Chunked uploads have no
-// declared size, so count bytes as they arrive and stop once over the limit.
+// declared size, so count bytes as they arrive and keep only what fits. An
+// oversized body is drained rather than cancelled: abandoning a body midway
+// breaks the connection for the next request.
 export async function limitedBody(request: Request, limit: number) {
-  const declared = request.headers.get('content-length');
-  if (declared && Number(declared) > limit) return null;
   if (!request.body) return new Uint8Array();
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -11,12 +11,10 @@ export async function limitedBody(request: Request, limit: number) {
     const { done, value } = await reader.read();
     if (done) break;
     total += value.byteLength;
-    if (total > limit) {
-      await reader.cancel();
-      return null;
-    }
-    chunks.push(value);
+    if (total <= limit) chunks.push(value);
+    else chunks.length = 0;
   }
+  if (total > limit) return null;
   const bytes = new Uint8Array(total);
   let offset = 0;
   for (const chunk of chunks) {

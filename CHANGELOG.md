@@ -21,7 +21,7 @@ Branch `claude/codebase-review-wzqyia`, pull request #1. A full review found no 
 
 ### Hardening and user experience
 
-- **Streaming body limits** (`lib/body-limit.ts`). Request bodies are counted while they stream, so a chunked upload with no `Content-Length` cannot exhaust Worker memory. Every upload and JSON route uses `limitedBody`, `limitedForm` or `limitedText`. Import now returns 413 for an oversized batch.
+- **Streaming body limits** (`lib/body-limit.ts`). Request bodies are counted while they stream, so a chunked upload with no `Content-Length` cannot exhaust Worker memory. Every upload and JSON route uses `limitedBody`, `limitedForm` or `limitedText`. An oversized body is drained, not cancelled, because cancelling midway broke the next request on the local Workers runtime. Import now returns 413 for an oversized batch.
 - **Keyboard shortcuts** (`app/launch.tsx`). "n" ignores Cmd, Ctrl and Alt and does nothing while a dialog is open. Ctrl/Cmd+T is intercepted only when a task will be added.
 - **Notification taps** (`public/sw.js`). Only controlled windows are navigated; otherwise a new window opens. Shell cache bumped to `launch-shell-v24`.
 - **Safe storage and error boundary** (`lib/local-storage.ts`, `app/error.tsx`). `localStorage` access goes through `readLocal`, `writeLocal` and `removeLocal`, which never throw. A new app error boundary offers Try again and Reload.
@@ -35,7 +35,9 @@ Branch `claude/codebase-review-wzqyia`, pull request #1. A full review found no 
 
 - `tests/review-fixes.test.ts` adds regression tests for the lost save, discard mine, Denver dates and streaming limits. The first two fail on the previous code.
 - `tests/capture.test.ts` now expects the first occurrence for 1:30am on 2026-11-01.
-- `npm test`: 142 of 142 pass. The production build and live API tests (`test:api`, `test:sync:api`) were not run.
+- `npm test`: 142 of 142 pass.
+- `npm run build` succeeds. The live suites `test:api` (7 of 7), `test:sync:api` and `test:playback` pass against local D1 and the built Worker.
+- Manual checks on the built Worker: malformed JSON returns 400 `Invalid request.`; 23 MB chunked and declared uploads return 413, and the next upload still succeeds; a 15 MB upload is accepted.
 
 ### Known and not changed
 
