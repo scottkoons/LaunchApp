@@ -17,6 +17,8 @@ export function SettingsPanel({
   notify,
   theme,
   changeTheme,
+  celebrations,
+  changeCelebrations,
 }: {
   store: LaunchStore;
   records: Entity[];
@@ -25,6 +27,8 @@ export function SettingsPanel({
   notify: (s: string) => void;
   theme: Appearance;
   changeTheme: (s: Appearance) => void;
+  celebrations: boolean;
+  changeCelebrations: (on: boolean) => void;
 }) {
   const [busy, setBusy] = useState('');
   const upload = useRef<HTMLInputElement>(null);
@@ -159,6 +163,19 @@ export function SettingsPanel({
             </button>
           ))}
         </div>
+        <label className="setting-row">
+          <span>
+            Confetti and points
+            <small>
+              Celebrate completed tasks and keep score. Saved on this device.
+            </small>
+          </span>
+          <input
+            type="checkbox"
+            checked={celebrations}
+            onChange={(e) => changeCelebrations(e.target.checked)}
+          />
+        </label>
       </section>
       <section className="settings-section">
         <h2>Tasks & meetings</h2>
