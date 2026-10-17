@@ -2,6 +2,29 @@
 
 Notable changes to Launch, newest first. Each entry lists what changed, why, and where, so a person or coding agent can pick up the context without rereading the code.
 
+## 2026-10-17: Confetti and points
+
+Branch `claude/launch-confetti-points`. Completing a task now feels like progress.
+
+### Added
+
+- **Confetti** (`lib/confetti.ts`, no new dependency): a short burst from the checkbox when a task or Personal to-do is completed from the list, a reminder alert or the editor. A bigger burst, with side cannons, comes for clearing everything due today in that workspace, or finishing something overdue. It is skipped when the device asks for reduced motion.
+- **Messages:** the completion message names the points and the day's count, for example "Nice work. · +15 points · 3 today · 4 day streak". Undo works as before.
+- **Points** (`lib/achievements.ts`):
+  - 10 per completed task (both workspaces) or Personal to-do.
+  - A 5 point bonus for finishing on or before the Final date (or a to-do's due time).
+  - Agenda items marked discussed do not count.
+- **Streaks:** consecutive days with at least one completion, alive until midnight. The best streak is also kept.
+- **Derived, not stored:** everything is worked out from completed tasks (`status` and `completedAt`) in the device's time zone. Points therefore sync with the tasks, Undo takes them back, and past completions count from day one.
+- **Progress badge and sheet** (`app/launch.tsx`):
+  - The top bar shows the streak and total points; phones show the streak only.
+  - Tapping it opens "Your progress": today, this week (from Monday), streak and best, and all time.
+- **Switch:** Settings, Appearance, "Confetti and points" turns it all off on that device. With it off, the badge and confetti are hidden and messages are the original "Task completed."
+
+### Tests
+
+- `tests/achievements.test.ts` covers base points and the on-time bonus, including Denver late evening and to-do due times. It also covers today, week and all-time totals; exclusion of deleted, undone, agenda and business-note items; streaks, including the grace day, gaps and best streak; and when a celebration is big.
+
 ## 2026-09-25: Full read and write connector for agents (Grok Bot)
 
 Branch `claude/launch-mcp-crud`, stacked on the sync branch (pull request #2). The Launch MCP connector (`/api/mcp`) was create-only (`get_launch_context`, `add_task`, `add_note`, `add_agenda_item`), so agents could not answer "what is due today", "what is overdue" or "what is in yellow", or change or remove anything.

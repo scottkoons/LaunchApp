@@ -11,6 +11,7 @@ import {
   useEffect,
   useEffectEvent,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -81,7 +82,16 @@ import {
   X,
   FileText,
   Droplets,
+  Flame,
+  Trophy,
 } from 'lucide-react';
+import {
+  celebration,
+  progress,
+  ON_TIME_BONUS,
+  POINTS_PER_TASK,
+} from '@/lib/achievements';
+import { confetti } from '@/lib/confetti';
 import {
   APPEARANCES,
   appearanceKey,
@@ -181,6 +191,9 @@ export default function Launch({
       null,
     ),
     [syncOpen, setSyncOpen] = useState(false),
+    [progressOpen, setProgressOpen] = useState(false),
+    // Confetti and points, on unless turned off in Settings on this device.
+    [celebrations, setCelebrations] = useState(true),
     [completedFrom, setCompletedFrom] = useState(''),
     [completedTo, setCompletedTo] = useState(day()),
     [completedPeriod, setCompletedPeriod] = useState<CompletedPeriod>('all'),
@@ -255,6 +268,37 @@ export default function Launch({
   const searchRef = useRef<HTMLInputElement>(null);
   const settings = records.find((e) => e.kind === 'settings' && !e.deletedAt);
   const soon = settings?.soonDays ?? 2;
+  // Where the last tap or click happened, so confetti starts from the checkbox.
+  const lastPointer = useRef<{ x: number; y: number; t: number } | null>(null);
+  useEffect(() => {
+    const remember = (e: PointerEvent) => {
+      lastPointer.current = { x: e.clientX, y: e.clientY, t: Date.now() };
+    };
+    window.addEventListener('pointerdown', remember, { passive: true });
+    return () => window.removeEventListener('pointerdown', remember);
+  }, []);
+  const zone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const stats = useMemo(
+    () => (ready && celebrations ? progress(records, zone()) : null),
+    [ready, celebrations, records],
+  );
+  // Confetti for a task just completed here, and the message to show.
+  function celebrate(before: Entity, plain: string) {
+    if (!celebrations) return plain;
+    const result = celebration(before, store.data.records, zone(), soon);
+    const pointer = lastPointer.current;
+    confetti(
+      pointer && Date.now() - pointer.t < 2000
+        ? pointer
+        : { x: innerWidth / 2, y: innerHeight * 0.4 },
+      result.big,
+    );
+    return result.message;
+  }
+  function changeCelebrations(on: boolean) {
+    setCelebrations(on);
+    writeLocal('launch-celebrations', on ? 'on' : 'off');
+  }
   function notify(text: string, undo?: () => void) {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast({ text, undo });
@@ -268,6 +312,7 @@ export default function Launch({
       const savedRatio = Number(readLocal('launch-column-ratio'));
       if (savedRatio >= 0.1 && savedRatio <= 0.9) setColumnRatio(savedRatio);
       setSort(readLocal('launch-task-sort-v2') || 'next');
+      setCelebrations(readLocal('launch-celebrations') !== 'off');
       savedTheme = readLocal(appearanceKey(navigator.userAgent));
     } catch {}
     const t = resolveAppearance(navigator.userAgent, savedTheme);
@@ -530,7 +575,10 @@ export default function Launch({
             },
       );
       notify(
-        t.scope === 'personal' ? 'To-do completed.' : 'Task completed.',
+        celebrate(
+          t,
+          t.scope === 'personal' ? 'To-do completed.' : 'Task completed.',
+        ),
         () => void undoLast(),
       );
     } catch (error) {
@@ -982,6 +1030,18 @@ export default function Launch({
             />
           </div>
           <div className="topbar-right">
+            {stats && (
+              <button
+                className="progress-pill"
+                aria-label={`Your progress: ${stats.streak} day streak, ${stats.totalPoints} points`}
+                onClick={() => setProgressOpen(true)}
+              >
+                <Flame aria-hidden="true" />
+                <span>{stats.streak}</span>
+                <Trophy aria-hidden="true" />
+                <span>{stats.totalPoints.toLocaleString()}</span>
+              </button>
+            )}
             <button
               aria-label={'Sync status: ' + data.status}
               className={
@@ -1791,6 +1851,8 @@ export default function Launch({
                   notify={notify}
                   theme={theme}
                   changeTheme={changeTheme}
+                  celebrations={celebrations}
+                  changeCelebrations={changeCelebrations}
                 />
               )}
             </>
@@ -1951,7 +2013,10 @@ export default function Launch({
             editor?.status !== 'completed'
           ) {
             if (editor) animateCompletion(editor);
-            notify('Task completed.', () => void undoLast());
+            notify(
+              editor ? celebrate(editor, 'Task completed.') : 'Task completed.',
+              () => void undoLast(),
+            );
           }
         }}
       />
@@ -1973,6 +2038,59 @@ export default function Launch({
             notify={notify}
             deleteNote={trash}
           />
+        </SheetContent>
+      </Sheet>
+      <Sheet open={progressOpen} onOpenChange={setProgressOpen}>
+        <SheetContent className="editor-sheet">
+          <SheetHeader>
+            <SheetTitle>Your progress</SheetTitle>
+            <SheetDescription>
+              Every completed task earns {POINTS_PER_TASK} points, plus{' '}
+              {ON_TIME_BONUS} for finishing by its deadline. A streak counts
+              days in a row with at least one task done.
+            </SheetDescription>
+          </SheetHeader>
+          {stats && (
+            <div className="editor-body">
+              <dl className="progress-stats">
+                <div>
+                  <dt>Today</dt>
+                  <dd>
+                    {stats.todayPoints} points
+                    <small>
+                      {stats.todayCount} task{stats.todayCount === 1 ? '' : 's'}{' '}
+                      done
+                    </small>
+                  </dd>
+                </div>
+                <div>
+                  <dt>This week</dt>
+                  <dd>{stats.weekPoints} points</dd>
+                </div>
+                <div>
+                  <dt>Streak</dt>
+                  <dd>
+                    {stats.streak} day{stats.streak === 1 ? '' : 's'}
+                    <small>Best: {stats.bestStreak}</small>
+                  </dd>
+                </div>
+                <div>
+                  <dt>All time</dt>
+                  <dd>
+                    {stats.totalPoints.toLocaleString()} points
+                    <small>
+                      {stats.totalCount.toLocaleString()} tasks done
+                    </small>
+                  </dd>
+                </div>
+              </dl>
+              <p className="hint">
+                Points follow your completed tasks, so they match on every
+                device and Undo takes them back. Turn confetti and points off in
+                Settings.
+              </p>
+            </div>
+          )}
         </SheetContent>
       </Sheet>
       <Sheet open={syncOpen} onOpenChange={setSyncOpen}>
